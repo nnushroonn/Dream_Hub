@@ -1,0 +1,41 @@
+# =========================================
+# Environment variables (secrets - NEVER commit)
+# =========================================
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.local.example
+
+# =========================================
+# Backend (Python / FastAPI)
+# =========================================
+backend/venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local/one-off DB or cache files (Postgres/Redis run in Docker volumes, not here)
+*.sqlite3
+*.db
+*.rdb
+
+# =========================================
+# Frontend (Next.js)
+# 상세 규칙은 frontend/.gitignore 참고 (node_modules, .next, next-env.d.ts 등)
+# =========================================
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# =========================================
+# OS / editor
+# =========================================
+.DS_Store
+Thumbs.db
+*.swp
