@@ -4,7 +4,7 @@ from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
 from database import engine, get_settings, redis_client
-from routers import auth
+from routers import auth, community, diary, home, lucid, mypage
 
 settings = get_settings()
 
@@ -25,6 +25,11 @@ app.add_middleware(
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret_key)
 
 app.include_router(auth.router)
+app.include_router(home.router)
+app.include_router(diary.router)
+app.include_router(community.router)
+app.include_router(mypage.router)
+app.include_router(lucid.router)
 
 
 @app.get("/")
