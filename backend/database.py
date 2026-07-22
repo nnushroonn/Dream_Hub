@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/auth/google/callback"
 
+    # AI 꿈 해몽 (Anthropic)
+    anthropic_api_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

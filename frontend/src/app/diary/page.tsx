@@ -3,25 +3,25 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { requestAiInterpretation, type AiInterpretation } from "@/api/dream";
+import { requestAiInterpretation, type AiInterpretation, type DreamMood, type DreamSurvey } from "@/api/dream";
 import DiaryCalendarPanel from "@/components/DiaryCalendarPanel";
 import DreamWizard from "@/components/DreamWizard";
 import NavBar from "@/components/NavBar";
+import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 
 interface MoodOption {
   emoji: string;
   label: string;
+  bucket: DreamMood;
 }
 
 const MOODS: MoodOption[] = [
-  { emoji: "😱", label: "무서움" },
-  { emoji: "🤩", label: "신남" },
-  { emoji: "😢", label: "슬픔" },
-  { emoji: "😌", label: "평온" },
-  { emoji: "🤔", label: "혼란" },
+  { emoji: "😱", label: "무서움", bucket: "nightmare" },
+  { emoji: "🤩", label: "신남", bucket: "good" },
+  { emoji: "😢", label: "슬픔", bucket: "nightmare" },
+  { emoji: "😌", label: "평온", bucket: "good" },
+  { emoji: "🤔", label: "혼란", bucket: "neutral" },
 ];
-
-const LOADING_DURATION_MS = 1500;
 
 function todayDateInputValue(): string {
   const now = new Date();
@@ -41,6 +41,10 @@ export default function DiaryPage() {
   const [interpretation, setInterpretation] = useState<AiInterpretation | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [wizardKey, setWizardKey] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastSurvey, setLastSurvey] = useState<DreamSurvey | null>(null);
+
+  const addSavedDream = useSavedDreamsStore((state) => state.addEntry);
 
   useEffect(() => {
     setSelectedDate(todayDateInputValue());
@@ -55,19 +59,21 @@ export default function DiaryPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isModalOpen]);
 
-  const handleWizardComplete = (composedContent: string) => {
+  const handleWizardComplete = async (survey: DreamSurvey) => {
     if (isLoading) return;
 
+    setLastSurvey(survey);
+    setErrorMessage(null);
     setIsLoading(true);
-    window.setTimeout(() => {
-      requestAiInterpretation({ date: selectedDate, emotion: mood, content: composedContent, is_public: isPublic })
-        .then((result) => {
-          setInterpretation(result);
-          setIsModalOpen(true);
-        })
-        .catch(() => {})
-        .finally(() => setIsLoading(false));
-    }, LOADING_DURATION_MS);
+    try {
+      const result = await requestAiInterpretation({ date: selectedDate, emotion: mood, is_public: isPublic, survey });
+      setInterpretation(result);
+      setIsModalOpen(true);
+    } catch {
+      setErrorMessage("AI 해몽 요청에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -163,6 +169,12 @@ export default function DiaryPage() {
 
             {/* 단계별 무의식 문답 위저드 */}
             <DreamWizard key={wizardKey} onComplete={handleWizardComplete} isSubmitting={isLoading} />
+
+            {errorMessage && (
+              <p className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-300">
+                {errorMessage}
+              </p>
+            )}
           </div>
         </div>
       </main>
@@ -207,17 +219,17 @@ export default function DiaryPage() {
             </div>
 
             <div className="mt-5 flex flex-wrap justify-center gap-2">
-              {interpretation.keywords.map((keyword) => (
+              {interpretation.tags.map((tag) => (
                 <span
-                  key={keyword}
+                  key={tag}
                   className="rounded-full border border-violet-400/30 bg-violet-500/15 px-3 py-1 text-xs text-violet-200"
                 >
-                  #{keyword}
+                  {tag.startsWith("#") ? tag : `#${tag}`}
                 </span>
               ))}
             </div>
 
-            <p className="mt-5 text-sm leading-relaxed text-slate-300">{interpretation.meaning}</p>
+            <p className="mt-5 text-sm leading-relaxed text-slate-300">{interpretation.description}</p>
 
             <div className="mt-6 grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
@@ -234,6 +246,14 @@ export default function DiaryPage() {
               <button
                 type="button"
                 onClick={() => {
+                  if (lastSurvey && selectedDate) {
+                    const moodBucket = MOODS.find((option) => option.emoji === mood)?.bucket ?? "neutral";
+                    addSavedDream({
+                      date: selectedDate,
+                      mood: moodBucket,
+                      title: lastSurvey.title,
+                    });
+                  }
                   setIsModalOpen(false);
                   setWizardKey((key) => key + 1);
                 }}

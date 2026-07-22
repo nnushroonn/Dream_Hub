@@ -83,49 +83,37 @@ export async function getBestDreams(): Promise<BestDream[]> {
   return data.dreams;
 }
 
-export interface DiaryCalendarDay {
-  date: string;
-  mood: DreamMood;
+export interface DreamSurvey {
   title: string;
-}
-
-export interface DiaryCalendar {
-  month: string;
-  days_in_month: number;
-  days: DiaryCalendarDay[];
-}
-
-export async function getDiaryCalendar(): Promise<DiaryCalendar> {
-  const { data } = await api.get<DiaryCalendar>("/diary/calendar");
-  return data;
-}
-
-export interface DiaryStreak {
-  streak_days: number;
-  checked_in_today: boolean;
-}
-
-export async function getDiaryStreak(): Promise<DiaryStreak> {
-  const { data } = await api.get<DiaryStreak>("/diary/streak");
-  return data;
+  brightness: string;
+  space_depth: string;
+  space_detail: string;
+  identity_factor: string;
+  identity_detail: string;
+  action_physics: string;
+  action_detail: string;
+  reality_link: string;
+  reality_detail: string;
+  vividness: number;
+  is_lucid: boolean;
 }
 
 export interface DreamEntryInput {
   date: string;
   emotion: string;
-  content: string;
   is_public: boolean;
+  survey: DreamSurvey;
 }
 
 export interface AiInterpretation {
-  keywords: string[];
-  meaning: string;
+  tags: string[];
+  description: string;
   lucky_item: string;
   lucky_number: number;
 }
 
 export async function requestAiInterpretation(payload: DreamEntryInput): Promise<AiInterpretation> {
-  const { data } = await api.post<AiInterpretation>("/diary/interpret", payload);
+  const { data } = await api.post<AiInterpretation>("/api/dream-interpretation", payload);
   return data;
 }
 
