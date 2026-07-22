@@ -1,148 +1,253 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
-import { getDiaryEntries, interpretDreamEntry, type DiaryEntry, type DreamInterpretation } from "@/api/dream";
+import { requestAiInterpretation, type AiInterpretation } from "@/api/dream";
+import DiaryCalendarPanel from "@/components/DiaryCalendarPanel";
+import DreamWizard from "@/components/DreamWizard";
 import NavBar from "@/components/NavBar";
 
-const EMOTIONS = ["😊", "😨", "😢", "😴", "😡", "😌"];
+interface MoodOption {
+  emoji: string;
+  label: string;
+}
+
+const MOODS: MoodOption[] = [
+  { emoji: "😱", label: "무서움" },
+  { emoji: "🤩", label: "신남" },
+  { emoji: "😢", label: "슬픔" },
+  { emoji: "😌", label: "평온" },
+  { emoji: "🤔", label: "혼란" },
+];
+
+const LOADING_DURATION_MS = 1500;
+
+function todayDateInputValue(): string {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 export default function DiaryPage() {
-  const [entries, setEntries] = useState<DiaryEntry[]>([]);
-
-  // 꿈 작성 폼 상태 (감정 / 내용 / 공개여부)
-  const [emotion, setEmotion] = useState(EMOTIONS[0]);
-  const [content, setContent] = useState("");
+  // 날짜는 서버/클라이언트 렌더 결과가 달라지는 걸 피하려고 마운트 이후에만 오늘 날짜로 채운다.
+  const [selectedDate, setSelectedDate] = useState("");
+  const [mood, setMood] = useState(MOODS[3].emoji);
   const [isPublic, setIsPublic] = useState(false);
 
-  // AI 해몽 모달 상태
-  const [interpretation, setInterpretation] = useState<DreamInterpretation | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [interpretation, setInterpretation] = useState<AiInterpretation | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [wizardKey, setWizardKey] = useState(0);
 
   useEffect(() => {
-    getDiaryEntries().then(setEntries).catch(() => {});
+    setSelectedDate(todayDateInputValue());
   }, []);
 
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    // TODO: 실제 구현 시 POST /diary/entries 로 { content, emotion, is_public } 전송 후 목록 갱신
-    setContent("");
-  };
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsModalOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isModalOpen]);
 
-  const openInterpretation = async (entryId: number) => {
-    // TODO: 실제 구현 시 AI 해몽 API(LLM 연동) 응답으로 대체
-    const result = await interpretDreamEntry(entryId);
-    setInterpretation(result);
-    setIsModalOpen(true);
+  const handleWizardComplete = (composedContent: string) => {
+    if (isLoading) return;
+
+    setIsLoading(true);
+    window.setTimeout(() => {
+      requestAiInterpretation({ date: selectedDate, emotion: mood, content: composedContent, is_public: isPublic })
+        .then((result) => {
+          setInterpretation(result);
+          setIsModalOpen(true);
+        })
+        .catch(() => {})
+        .finally(() => setIsLoading(false));
+    }, LOADING_DURATION_MS);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0b0518] via-[#170b2e] to-black text-indigo-50">
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+      {/* 오로라 블러 배경 (홈 화면과 동일한 무드) */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-violet-700/30 blur-[110px] animate-aurora" />
+        <div
+          className="absolute top-1/4 -right-32 h-80 w-80 rounded-full bg-indigo-600/25 blur-[110px] animate-aurora"
+          style={{ animationDelay: "4s" }}
+        />
+        <div
+          className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-fuchsia-700/20 blur-[110px] animate-aurora"
+          style={{ animationDelay: "8s" }}
+        />
+      </div>
+
       <NavBar />
 
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold">꿈 기록소</h1>
-        <p className="mt-1 text-sm text-indigo-300/70">오늘 꾼 꿈을 기록하고 AI 해몽을 받아보세요.</p>
+      <main className="relative mx-auto max-w-5xl px-6 py-12">
+        <h1 className="text-2xl font-semibold text-white">꿈 기록소</h1>
+        <p className="mt-1 text-sm text-slate-400">지난밤의 꿈을 기록하고, AI에게 해몽을 받아보세요.</p>
 
-        {/* 꿈 작성 폼: 감정 / 내용 / 공개여부 */}
-        <form
-          onSubmit={handleSubmit}
-          className="mt-8 rounded-2xl border border-indigo-900/60 bg-indigo-950/40 p-6"
-        >
-          <div className="flex gap-2">
-            {EMOTIONS.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setEmotion(item)}
-                className={`rounded-full px-3 py-2 text-lg transition-transform ${
-                  emotion === item ? "scale-110 bg-violet-600/40" : "hover:scale-105"
-                }`}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
+        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,360px)_1fr] lg:items-start">
+          {/* 좌측: 꿈 별자리 캘린더 & 출석 체크 */}
+          <DiaryCalendarPanel />
 
-          <textarea
-            value={content}
-            onChange={(event) => setContent(event.target.value)}
-            placeholder="어떤 꿈을 꾸셨나요?"
-            rows={4}
-            className="mt-4 w-full rounded-xl border border-indigo-800 bg-black/30 p-3 text-sm text-indigo-50 placeholder:text-indigo-400/50 focus:border-violet-500 focus:outline-none"
-          />
-
-          <div className="mt-4 flex items-center justify-between">
-            <label className="flex items-center gap-2 text-sm text-indigo-300">
-              <input
-                type="checkbox"
-                checked={isPublic}
-                onChange={(event) => setIsPublic(event.target.checked)}
-                className="accent-violet-500"
-              />
-              커뮤니티에 공개하기
-            </label>
-            <button
-              type="submit"
-              className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2 text-sm font-medium text-white"
-            >
-              꿈 기록하기
-            </button>
-          </div>
-        </form>
-
-        {/* 내 꿈 기록 목록 */}
-        <div className="mt-10 space-y-4">
-          {entries.map((entry) => (
-            <div key={entry.id} className="rounded-2xl border border-indigo-900/60 bg-indigo-950/30 p-5">
-              <div className="flex items-center justify-between text-sm text-indigo-400">
-                <span>
-                  {entry.emotion} {entry.is_lucid && <span className="ml-1 text-violet-300">#자각몽</span>}
-                </span>
-                <span>{entry.is_public ? "공개" : "비공개"}</span>
+          {/* 우측: 꿈 작성 에디터 */}
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md sm:p-8">
+            {/* 고정형 메타 정보: 날짜 · 감정 · 공개 범위 */}
+            <div className="space-y-5">
+              <div>
+                <label className="text-xs text-indigo-300/70">날짜</label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(event) => setSelectedDate(event.target.value)}
+                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-2.5 text-sm text-slate-100 [color-scheme:dark] focus:border-violet-400/60 focus:outline-none"
+                />
               </div>
-              <p className="mt-2 text-indigo-100">{entry.content}</p>
-              <button
-                type="button"
-                onClick={() => openInterpretation(entry.id)}
-                className="mt-3 text-sm text-violet-300 hover:text-violet-200"
-              >
-                AI 해몽 보기 →
-              </button>
+
+              <div>
+                <label className="text-xs text-indigo-300/70">꿈의 분위기</label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {MOODS.map((option) => (
+                    <button
+                      key={option.emoji}
+                      type="button"
+                      onClick={() => setMood(option.emoji)}
+                      className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm backdrop-blur-md transition-all duration-200 ${
+                        mood === option.emoji
+                          ? "border-violet-400/70 bg-violet-500/25 text-white shadow-[0_0_16px_rgba(167,139,250,0.35)]"
+                          : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
+                      }`}
+                    >
+                      <span className="text-base">{option.emoji}</span>
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-indigo-300/70">공개 범위</label>
+                <div className="mt-2 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-white/5 p-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsPublic(false)}
+                    className={`rounded-xl px-3 py-2.5 text-xs font-medium transition-all duration-200 ${
+                      !isPublic
+                        ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    🔒 나만 보기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsPublic(true)}
+                    className={`rounded-xl px-3 py-2.5 text-xs font-medium transition-all duration-200 ${
+                      isPublic
+                        ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    🌐 커뮤니티에 익명으로 공유
+                  </button>
+                </div>
+              </div>
             </div>
-          ))}
+
+            <div className="my-7 h-px bg-white/10" />
+
+            {/* 단계별 무의식 문답 위저드 */}
+            <DreamWizard key={wizardKey} onComplete={handleWizardComplete} isSubmitting={isLoading} />
+          </div>
         </div>
       </main>
 
-      {/* AI 해몽 모달 */}
-      {isModalOpen && interpretation && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-md rounded-2xl border border-violet-800/60 bg-[#140a29] p-6">
-            <h2 className="text-lg font-semibold text-violet-200">🔮 AI 해몽 결과</h2>
-            <p className="mt-3 text-sm text-indigo-100">{interpretation.meaning}</p>
+      {/* AI 해몽 로딩 오버레이 */}
+      {isLoading && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-slate-950/80 backdrop-blur-md">
+          <div className="relative h-20 w-20">
+            <div className="absolute inset-0 animate-spin rounded-full bg-[conic-gradient(from_0deg,rgba(167,139,250,0.05),rgba(167,139,250,0.9),rgba(99,102,241,0.05))] blur-[2px]" />
+            <div className="absolute inset-2 rounded-full bg-slate-950" />
+          </div>
+          <p className="text-sm text-violet-200">AI가 무의식의 파동을 읽어내는 중...</p>
+        </div>
+      )}
 
-            <div className="mt-4">
-              <p className="text-xs text-indigo-400">상징 키워드</p>
-              <div className="mt-1 flex flex-wrap gap-2">
-                {interpretation.symbols.map((symbol) => (
-                  <span key={symbol} className="rounded-full bg-violet-900/40 px-3 py-1 text-xs text-violet-200">
-                    {symbol}
-                  </span>
-                ))}
-              </div>
-            </div>
+      {/* AI 해몽 결과 모달 */}
+      {interpretation && (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center px-4 transition-opacity duration-300 ${
+            isModalOpen ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+        >
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
 
-            <div className="mt-4 rounded-xl bg-amber-900/20 p-3 text-sm text-amber-200">
-              🍀 {interpretation.lucky_element}
-            </div>
-
+          <div
+            className={`relative w-full max-w-lg rounded-3xl border border-violet-400/30 bg-white/10 p-8 shadow-[0_0_60px_rgba(139,92,246,0.35)] backdrop-blur-2xl transition-all duration-500 ease-out ${
+              isModalOpen ? "translate-y-0 opacity-100" : "translate-y-12 opacity-0"
+            }`}
+          >
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="mt-5 w-full rounded-full border border-indigo-700 py-2 text-sm text-indigo-200 hover:bg-indigo-900/40"
+              aria-label="닫기"
+              className="absolute right-5 top-5 text-slate-400 transition-colors hover:text-white"
             >
-              닫기
+              ✕
             </button>
+
+            <div className="text-center">
+              <p className="text-xs tracking-widest text-indigo-300/70 uppercase">AI Dream Interpretation</p>
+              <h3 className="mt-1 text-2xl font-semibold text-white">🔮 무의식이 전하는 메시지</h3>
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              {interpretation.keywords.map((keyword) => (
+                <span
+                  key={keyword}
+                  className="rounded-full border border-violet-400/30 bg-violet-500/15 px-3 py-1 text-xs text-violet-200"
+                >
+                  #{keyword}
+                </span>
+              ))}
+            </div>
+
+            <p className="mt-5 text-sm leading-relaxed text-slate-300">{interpretation.meaning}</p>
+
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
+                <p className="text-xs text-indigo-300/70">행운의 아이템</p>
+                <p className="mt-1.5 font-medium text-white">{interpretation.lucky_item}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
+                <p className="text-xs text-indigo-300/70">행운의 숫자</p>
+                <p className="mt-1.5 font-medium text-white">{interpretation.lucky_number}</p>
+              </div>
+            </div>
+
+            <div className="mt-7 flex flex-col gap-2.5 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setWizardKey((key) => key + 1);
+                }}
+                className="flex-1 rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5"
+              >
+                캘린더에 저장하고 확인
+              </button>
+              <Link
+                href="/community"
+                className="flex-1 rounded-full border border-white/10 px-5 py-2.5 text-center text-sm text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200"
+              >
+                커뮤니티로 이동
+              </Link>
+            </div>
           </div>
         </div>
       )}

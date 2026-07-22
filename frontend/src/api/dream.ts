@@ -40,6 +40,30 @@ export async function getLiveTicker(): Promise<LiveTickerEntry[]> {
   return data.entries;
 }
 
+export async function getExplorerCount(): Promise<number> {
+  const { data } = await api.get<{ count: number }>("/api/home/explorer-count");
+  return data.count;
+}
+
+export type DreamMood = "good" | "neutral" | "nightmare";
+
+export interface DreamCalendarDay {
+  date: string;
+  mood: DreamMood;
+  summary: string;
+}
+
+export interface DreamCalendar {
+  month: string;
+  days_in_month: number;
+  days: DreamCalendarDay[];
+}
+
+export async function getDreamCalendar(): Promise<DreamCalendar> {
+  const { data } = await api.get<DreamCalendar>("/api/home/dream-calendar");
+  return data;
+}
+
 export interface BestDream {
   id: number;
   title: string;
@@ -59,29 +83,49 @@ export async function getBestDreams(): Promise<BestDream[]> {
   return data.dreams;
 }
 
-export interface DiaryEntry {
-  id: number;
-  content: string;
+export interface DiaryCalendarDay {
+  date: string;
+  mood: DreamMood;
+  title: string;
+}
+
+export interface DiaryCalendar {
+  month: string;
+  days_in_month: number;
+  days: DiaryCalendarDay[];
+}
+
+export async function getDiaryCalendar(): Promise<DiaryCalendar> {
+  const { data } = await api.get<DiaryCalendar>("/diary/calendar");
+  return data;
+}
+
+export interface DiaryStreak {
+  streak_days: number;
+  checked_in_today: boolean;
+}
+
+export async function getDiaryStreak(): Promise<DiaryStreak> {
+  const { data } = await api.get<DiaryStreak>("/diary/streak");
+  return data;
+}
+
+export interface DreamEntryInput {
+  date: string;
   emotion: string;
+  content: string;
   is_public: boolean;
-  is_lucid: boolean;
-  created_at: string;
 }
 
-export async function getDiaryEntries(): Promise<DiaryEntry[]> {
-  const { data } = await api.get<{ entries: DiaryEntry[] }>("/diary/entries");
-  return data.entries;
-}
-
-export interface DreamInterpretation {
-  entry_id: number;
+export interface AiInterpretation {
+  keywords: string[];
   meaning: string;
-  symbols: string[];
-  lucky_element: string;
+  lucky_item: string;
+  lucky_number: number;
 }
 
-export async function interpretDreamEntry(entryId: number): Promise<DreamInterpretation> {
-  const { data } = await api.post<DreamInterpretation>(`/diary/entries/${entryId}/interpret`);
+export async function requestAiInterpretation(payload: DreamEntryInput): Promise<AiInterpretation> {
+  const { data } = await api.post<AiInterpretation>("/diary/interpret", payload);
   return data;
 }
 

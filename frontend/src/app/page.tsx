@@ -4,11 +4,22 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { decodeAccessToken } from "@/api/auth";
-import { getBestDreams, getMoonPhase, getTrends, type BestDream, type MoonPhase, type Trend } from "@/api/dream";
+import {
+  getBestDreams,
+  getExplorerCount,
+  getMoonPhase,
+  getTrends,
+  type BestDream,
+  type MoonPhase,
+  type Trend,
+} from "@/api/dream";
+import DreamCalendarWidget from "@/components/DreamCalendarWidget";
 import LiveTicker from "@/components/LiveTicker";
 import MoonIcon from "@/components/MoonIcon";
 import NavBar from "@/components/NavBar";
 import { useAuthStore } from "@/store/useAuthStore";
+
+const EXPLORER_COUNT_POLL_MS = 5000;
 
 interface Star {
   id: number;
@@ -60,6 +71,7 @@ export default function HomePage() {
   const [stars, setStars] = useState<Star[]>([]);
   const [moonPhase, setMoonPhase] = useState<MoonPhase | null>(null);
   const [isMoonModalOpen, setIsMoonModalOpen] = useState(false);
+  const [explorerCount, setExplorerCount] = useState<number | null>(null);
 
   // 구글 로그인 콜백이 ?token=...으로 리다이렉트해서 돌아왔을 때 처리
   useEffect(() => {
@@ -80,6 +92,24 @@ export default function HomePage() {
     getTrends().then(setTrends).catch(() => {});
     getBestDreams().then(setBestDreams).catch(() => {});
     getMoonPhase().then(setMoonPhase).catch(() => {});
+  }, []);
+
+  // 무의식 탐험가 실시간 카운터: 주기적으로 다시 조회해 자연스러운 흔들림을 보여준다.
+  useEffect(() => {
+    let cancelled = false;
+    const poll = () => {
+      getExplorerCount()
+        .then((count) => {
+          if (!cancelled) setExplorerCount(count);
+        })
+        .catch(() => {});
+    };
+    poll();
+    const timer = setInterval(poll, EXPLORER_COUNT_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, []);
 
   // 별 입자는 서버/클라이언트 렌더 결과가 달라지는 걸 피하려고 마운트 이후에만 생성한다.
@@ -165,7 +195,17 @@ export default function HomePage() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
             </span>
-            ✨ 현재 전 세계 수많은 무의식이 기록되고 있어요
+            {explorerCount !== null ? (
+              <span>
+                지금{" "}
+                <span className="font-semibold tabular-nums text-emerald-300">
+                  {explorerCount.toLocaleString()}
+                </span>
+                명의 탐험가가 무의식을 기록 중
+              </span>
+            ) : (
+              <span>✨ 현재 전 세계 수많은 무의식이 기록되고 있어요</span>
+            )}
           </div>
 
           {/* 오늘의 달 기운 캡슐: 프리미엄 존재감을 주는 확대된 배너, 히어로 타이틀 바로 위에 배치 */}
@@ -216,8 +256,10 @@ export default function HomePage() {
       <div className="relative mx-auto h-px w-full max-w-3xl bg-gradient-to-r from-transparent via-indigo-400/30 to-transparent" />
 
       <main className="relative mx-auto max-w-5xl px-6 py-16">
+        <DreamCalendarWidget />
+
         {/* 실시간 트렌드 키워드: 세로형 랭킹 리스트 (완전 중앙 정렬) */}
-        <section className="mx-auto max-w-2xl">
+        <section className="mx-auto mt-16 max-w-2xl">
           <h2 className="text-center text-lg font-semibold text-slate-100">✨ 실시간 트렌드 키워드</h2>
           <div className="mt-5 flex flex-col gap-3">
             {trends.map((trend, index) => {

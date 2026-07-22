@@ -1,5 +1,7 @@
 """메인 홈: 히어로 섹션 / 실시간 트렌드 키워드 / 오늘의 베스트 꿈 추천 (더미 데이터) / 달 위상 위젯."""
 
+import calendar as calendar_module
+import math
 from datetime import date, datetime, time, timedelta, timezone
 
 import ephem
@@ -340,4 +342,50 @@ def get_live_ticker():
             {"keyword": "길을 잃는 꿈"},
             {"keyword": "돈을 줍는 꿈"},
         ]
+    }
+
+
+_EXPLORER_BASE_COUNT = 3421
+
+
+@router.get("/explorer-count")
+def get_explorer_count():
+    """무의식 탐험가 실시간 카운터: 폴링할 때마다 자연스럽게 흔들리는 더미 라이브 인원수."""
+    t = datetime.now(timezone.utc).timestamp()
+    wave = int(180 * math.sin(t / 45) + 60 * math.sin(t / 11))
+    return {"count": max(0, _EXPLORER_BASE_COUNT + wave)}
+
+
+# 나의 지난밤 꿈 캘린더 미니 위젯용 더미 기록 (day -> (기분, 한 줄 요약).
+_DREAM_CALENDAR_ENTRIES: dict[int, tuple[str, str]] = {
+    3: ("good", "구름 위를 사뿐히 걷던, 유난히 몸이 가벼운 꿈"),
+    6: ("neutral", "낯선 골목을 하염없이 걷기만 하던 꿈"),
+    9: ("nightmare", "누군가에게 쫓기며 계속 넘어지던 꿈"),
+    12: ("good", "오래된 친구와 바닷가에서 재회한 꿈"),
+    15: ("neutral", "시험지를 앞에 두고 멍하니 앉아있던 꿈"),
+    18: ("nightmare", "이가 후두둑 빠지는 꿈"),
+    20: ("good", "하늘을 나는 듯 자유로웠던 꿈"),
+}
+
+
+@router.get("/dream-calendar")
+def get_dream_calendar():
+    """나의 지난밤 꿈 캘린더 미니 위젯: 이번 달 날짜별 꿈 기록(더미 데이터).
+
+    mood는 good(길몽)/neutral(일반)/nightmare(악몽) 중 하나이며, 기록이 없는 날짜는 목록에서 생략한다.
+    """
+    today = datetime.now(KST).date()
+    year, month = today.year, today.month
+    days_in_month = calendar_module.monthrange(year, month)[1]
+
+    days = [
+        {"date": date(year, month, day).isoformat(), "mood": mood, "summary": summary}
+        for day, (mood, summary) in _DREAM_CALENDAR_ENTRIES.items()
+        if day <= days_in_month
+    ]
+
+    return {
+        "month": f"{year:04d}-{month:02d}",
+        "days_in_month": days_in_month,
+        "days": days,
     }
