@@ -167,7 +167,7 @@ export default function DictionaryPage() {
     return () => cancelAnimationFrame(raf1);
   }, [selectedKeyword]);
 
-  const openKeywordDetail = async (keyword: string, context: string = "") => {
+  const openKeywordDetail = async (keyword: string, context: string = "", record: boolean = true) => {
     const trimmed = keyword.trim();
     if (!trimmed || isLoadingDetail) return;
 
@@ -180,7 +180,7 @@ export default function DictionaryPage() {
     setIsLoadingDetail(true);
     try {
       const [entryResult, scenarioResult] = await Promise.all([
-        searchDictionary(trimmed),
+        searchDictionary(trimmed, record),
         getDictionaryScenarios(trimmed, context),
       ]);
       setEssence(entryResult);
@@ -208,8 +208,12 @@ export default function DictionaryPage() {
 
     setIsParsingQuery(true);
     try {
+      // parseSearchQuery가 이미 원문 구절("하늘을 나는 꿈") 자체를 트렌드로 기록하므로,
+      // 뒤이은 openKeywordDetail은 record=false로 호출해 파싱된 대표 키워드("하늘")가
+      // 트렌드를 중복/축소 집계하지 않게 한다 - 이게 트렌드 목록이 "#하늘"처럼 단어로
+      // 쪼개져 보이던 원인이었다.
       const parsed = await parseSearchQuery(trimmed);
-      await openKeywordDetail(parsed.keyword || trimmed, parsed.context);
+      await openKeywordDetail(parsed.keyword || trimmed, parsed.context, false);
       // openKeywordDetail은 검색창을 파싱된 대표 키워드로 채우지만, 검색창에는 유저가
       // 실제로 입력했던(또는 트렌드에서 넘어온) 구절 원문을 그대로 남겨야 한다.
       setQuery(trimmed);

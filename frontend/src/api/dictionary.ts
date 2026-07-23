@@ -27,8 +27,8 @@ export interface ParsedQuery {
   context: string;
 }
 
-export async function parseSearchQuery(query: string): Promise<ParsedQuery> {
-  const { data } = await api.post<ParsedQuery>("/api/dictionary/parse-query", { query });
+export async function parseSearchQuery(query: string, record: boolean = true): Promise<ParsedQuery> {
+  const { data } = await api.post<ParsedQuery>("/api/dictionary/parse-query", { query, record });
   return data;
 }
 

@@ -22,6 +22,8 @@ import { DICTIONARY_CATEGORIES } from "@/lib/dictionaryCategories";
 import { useAuthStore } from "@/store/useAuthStore";
 
 const EXPLORER_COUNT_POLL_MS = 5000;
+// 우측 사이드바 높이가 좌측 캘린더 영역과 균형을 이루도록 베스트 꿈은 2개까지만 노출한다.
+const BEST_DREAMS_DISPLAY_LIMIT = 2;
 
 interface Star {
   id: number;
@@ -333,13 +335,14 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* 광고 Slot B: 좌측 인피드 가로 배너 (728x90) - 포털 보드와 캘린더 사이 */}
+            {/* 광고 Slot B: 좌측 인피드 가로 배너 (728x90) - 포털 보드와 캘린더 사이.
+                주변 보드보다 한 톤 더 은은하게(white/[0.03]) 마감해 프리미엄 스폰서 자리처럼 보이게 한다. */}
             <div
               role="complementary"
               aria-label="광고 영역"
-              className="my-6 flex max-h-[90px] w-full items-center justify-center rounded-xl border border-white/10 bg-white/5 py-6 text-xs text-slate-500"
+              className="my-6 flex h-[90px] w-full items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03]"
             >
-              AD · 728×90
+              <span className="text-[11px] tracking-wide text-slate-600">Sponsored</span>
             </div>
 
             <DreamCalendarWidget />
@@ -393,11 +396,17 @@ export default function HomePage() {
               </div>
             </section>
 
-            {/* 오늘의 베스트 꿈: 사이드바 폭에 맞춘 컴팩트 리스트 카드 */}
+            {/* 오늘의 베스트 꿈: 사이드바 폭에 맞춘 컴팩트 리스트 카드 - 좌측 캘린더와 높이
+                균형이 깨지지 않도록 최대 2개만 노출하고, 나머지는 커뮤니티에서 보게 안내한다. */}
             <section className="mt-10">
-              <h2 className="text-lg font-semibold text-slate-100">🌠 오늘의 베스트 꿈</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-slate-100">🌠 오늘의 베스트 꿈</h2>
+                <Link href="/community" className="text-xs text-violet-300/70 underline-offset-2 hover:text-violet-200 hover:underline">
+                  더 보기 →
+                </Link>
+              </div>
               <div className="mt-4 flex flex-col gap-3">
-                {bestDreams.map((dream, index) => {
+                {bestDreams.slice(0, BEST_DREAMS_DISPLAY_LIMIT).map((dream, index) => {
                   const isLiked = likedIds.has(dream.id);
                   return (
                     <article

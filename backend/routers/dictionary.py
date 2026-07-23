@@ -311,6 +311,9 @@ class RecentDreamTitle(BaseModel):
 
 class QueryParseRequest(BaseModel):
     query: str
+    # 트렌드 집계는 AI가 뽑아낸 대표 키워드가 아니라 유저가 실제로 입력한 구절 원문을
+    # 기준으로 남겨야 "#하늘을_나는_꿈"처럼 온전한 구절로 트렌드에 잡힌다.
+    record: bool = True
 
 
 class QueryParseResponse(BaseModel):
@@ -494,10 +497,12 @@ def search_dictionary(payload: SearchRequest, db: Session = Depends(get_db)) -> 
 
 
 @router.post("/parse-query", response_model=QueryParseResponse)
-def parse_dictionary_query(payload: QueryParseRequest) -> dict:
+def parse_dictionary_query(payload: QueryParseRequest, db: Session = Depends(get_db)) -> dict:
     query = payload.query.strip()
     if not query:
         return {"keyword": "", "context": ""}
+    if payload.record:
+        _record_search(db, query)
     return _parse_query(query)
 
 
