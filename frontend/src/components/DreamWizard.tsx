@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 
 import type { DreamSurvey } from "@/api/dream";
 
@@ -106,6 +106,9 @@ interface DreamWizardProps {
    * DYNAMICS_OPTIONS 라벨과 일치해야 한다 (initialData가 있으면 무시됨) */
   initialDynamicsChip?: string;
   initialDynamicsOther?: string;
+  /** 입력값이 하나라도 바뀔 때마다 현재까지의 응답을 통째로 올려보낸다. 부모(꿈 기록소 페이지)가
+   * 이걸로 이탈 방지 가드의 "작성 중" 여부를 판단하고, 자동 임시 저장(localStorage)에도 쓴다. */
+  onDraftChange?: (draft: DreamSurvey) => void;
   /** 최종 제출 버튼 라벨. 수정 모드에서는 "💾 수정 완료 및 재분석"으로 바뀐다 */
   submitLabel?: string;
 }
@@ -184,6 +187,7 @@ export default function DreamWizard({
   initialTargetOther,
   initialDynamicsChip,
   initialDynamicsOther,
+  onDraftChange,
   submitLabel = "✨ AI 무의식 해몽 요청하기",
 }: DreamWizardProps) {
   const [step, setStep] = useState(1);
@@ -227,6 +231,46 @@ export default function DreamWizard({
   const [isLucid, setIsLucid] = useState(initialData?.is_lucid ?? false);
   const [finalMemo, setFinalMemo] = useState(initialData?.final_memo ?? "");
   const [sketchPreview, setSketchPreview] = useState<string | null>(null);
+
+  // 입력값이 바뀔 때마다 지금까지의 응답 전체를 부모에게 올려보낸다 - 이탈 방지 가드의
+  // "작성 중" 판단과 자동 임시 저장(디바운스는 부모 쪽에서 건다)의 데이터 소스가 된다.
+  useEffect(() => {
+    onDraftChange?.({
+      title: title.trim(),
+      brightness: (light === OTHER_LABEL ? lightOther.trim() : light) ?? "",
+      space_depth: (space === OTHER_LABEL ? spaceOther.trim() : space) ?? "",
+      space_detail: spaceDetail.trim(),
+      identity_factor: (projection === OTHER_LABEL ? projectionOther.trim() : projection) ?? "",
+      target_detail: targetDetail.trim(),
+      action_physics: (dynamics === OTHER_LABEL ? dynamicsOther.trim() : dynamics) ?? "",
+      action_detail: actionDetail.trim(),
+      reality_link: (reality === OTHER_LABEL ? realityOther.trim() : reality) ?? "",
+      reality_detail: realityDetail.trim(),
+      vividness,
+      is_lucid: isLucid,
+      final_memo: finalMemo.trim(),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    title,
+    light,
+    lightOther,
+    space,
+    spaceOther,
+    spaceDetail,
+    projection,
+    projectionOther,
+    targetDetail,
+    dynamics,
+    dynamicsOther,
+    actionDetail,
+    reality,
+    realityOther,
+    realityDetail,
+    vividness,
+    isLucid,
+    finalMemo,
+  ]);
 
   const goToStep = (nextStep: number, dir: 1 | -1) => {
     setDirection(dir);

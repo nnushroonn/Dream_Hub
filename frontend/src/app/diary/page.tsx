@@ -22,6 +22,7 @@ import NavBar from "@/components/NavBar";
 import { emojiForMoodBucket, MOOD_OPTIONS } from "@/lib/moodBucket";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
+import { useUnsavedChangesStore } from "@/store/useUnsavedChangesStore";
 
 function todayDateInputValue(): string {
   const now = new Date();
@@ -29,6 +30,37 @@ function todayDateInputValue(): string {
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+// 실시간 자동 임시 저장(Auto-Save)이 쓰는 localStorage 키와 디바운스 간격.
+const DRAFT_STORAGE_KEY = "dream_hub_draft";
+const AUTOSAVE_DEBOUNCE_MS = 600;
+
+interface DreamDraft {
+  savedAt: number;
+  recordMode: "quick" | "precise";
+  quickTitle: string;
+  quickText: string;
+  precise: DreamSurvey | null;
+  meta: { selectedDate: string; mood: string; isPublic: boolean };
+}
+
+// 6단계 위저드 초안에 실제로 뭔가 채워졌는지 - 전부 빈 값이면 "작성 중"으로 치지 않는다.
+function isWizardDraftDirty(draft: DreamSurvey | null): boolean {
+  if (!draft) return false;
+  return Boolean(
+    draft.title ||
+      draft.brightness ||
+      draft.space_depth ||
+      draft.space_detail ||
+      draft.identity_factor ||
+      draft.target_detail ||
+      draft.action_physics ||
+      draft.action_detail ||
+      draft.reality_link ||
+      draft.reality_detail ||
+      draft.final_memo
+  );
 }
 
 export default function DiaryPage() {
@@ -83,9 +115,107 @@ export default function DiaryPage() {
   const [quickTitle, setQuickTitle] = useState("");
   const [quickText, setQuickText] = useState("");
 
+  // 6단계 위저드가 onDraftChange로 매번 올려보내는 "지금까지 입력한 값 전체" 스냅샷.
+  // 이탈 방지 가드의 dirty 판단과 자동 임시 저장 둘 다 이 값을 데이터 소스로 쓴다.
+  const [wizardDraft, setWizardDraft] = useState<DreamSurvey | null>(null);
+  // localStorage에서 "불러오기"로 복원한 6단계 응답 - DreamWizard의 initialData로 그대로 흘려보낸다.
+  const [restoredWizardDraft, setRestoredWizardDraft] = useState<DreamSurvey | undefined>(undefined);
+  // 마운트 시 복원 가능한 임시 저장 기록이 있으면 켜지는 알림 배너 표시 여부.
+  const [hasSavedDraft, setHasSavedDraft] = useState(false);
+
+  const setGlobalDirty = useUnsavedChangesStore((state) => state.setDirty);
+
+  // 새로 작성 중인 내용이 있는지 - 이미 저장된 기록을 다듬는 수정 모드는 별도 흐름이라 제외한다.
+  const isDirty =
+    !editingEntry && (quickTitle.trim() !== "" || quickText.trim() !== "" || isWizardDraftDirty(wizardDraft));
+
   useEffect(() => {
     setSelectedDate(todayDateInputValue());
   }, []);
+
+  // 마운트 시 localStorage에 복원할 만한 임시 저장 초안이 있는지 한 번만 확인한다.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as DreamDraft;
+      const hasContent = Boolean(draft.quickTitle?.trim() || draft.quickText?.trim()) || isWizardDraftDirty(draft.precise);
+      if (hasContent) setHasSavedDraft(true);
+    } catch {
+      // 손상된 초안은 조용히 무시한다.
+    }
+  }, []);
+
+  // 브라우저 새로고침/탭 닫기 시도를 막는 기본 이탈 경고창. 실제 화면에 남길 문구는
+  // 최신 브라우저 대부분이 자체 문구로 대체하므로 returnValue는 형식적으로만 채운다.
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
+
+  // 헤더 내비게이션(NavBar)이 앱 내부 이동을 가로챌 수 있도록 dirty 여부를 전역 상태로 공유한다.
+  // 페이지를 벗어나면(정상적인 언마운트) 가드가 계속 살아있지 않도록 함께 정리한다.
+  useEffect(() => {
+    setGlobalDirty(isDirty);
+  }, [isDirty, setGlobalDirty]);
+
+  useEffect(() => {
+    return () => setGlobalDirty(false);
+  }, [setGlobalDirty]);
+
+  // 실시간 자동 임시 저장: 입력이 바뀔 때마다 곧바로 쓰지 않고, 타이핑이 잠시 멈춘 뒤
+  // (디바운스) localStorage에 반영해 매 키 입력마다 쓰기 I/O가 발생하지 않게 한다.
+  useEffect(() => {
+    if (!isDirty) return;
+    const timer = window.setTimeout(() => {
+      const draft: DreamDraft = {
+        savedAt: Date.now(),
+        recordMode,
+        quickTitle,
+        quickText,
+        precise: wizardDraft,
+        meta: { selectedDate, mood, isPublic },
+      };
+      try {
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      } catch {
+        // 저장 공간 부족 등은 조용히 무시한다 - 자동 저장은 부가 기능이라 화면 흐름을 막지 않는다.
+      }
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [isDirty, recordMode, quickTitle, quickText, wizardDraft, selectedDate, mood, isPublic]);
+
+  const restoreDraft = () => {
+    try {
+      const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as DreamDraft;
+      setEditingEntry(null);
+      setDictionaryBridge(null);
+      setCameFromDictionary(false);
+      setSelectedDate(draft.meta?.selectedDate || todayDateInputValue());
+      setMood(draft.meta?.mood || MOOD_OPTIONS[3].emoji);
+      setIsPublic(draft.meta?.isPublic ?? false);
+      setRecordMode(draft.recordMode ?? "quick");
+      setQuickTitle(draft.quickTitle ?? "");
+      setQuickText(draft.quickText ?? "");
+      setRestoredWizardDraft(draft.precise ?? undefined);
+      setWizardKey((key) => key + 1);
+      setHasSavedDraft(false);
+    } catch {
+      setHasSavedDraft(false);
+    }
+  };
+
+  const discardDraft = () => {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    setHasSavedDraft(false);
+  };
 
   // 꿈해몽 사전의 "🔮 내 꿈일기에 이 상징 기록하기"에서 title(+mood/badge/expert/targetChip/dynamicsChip)이
   // 함께 넘어온 경우, 미니멀/정밀 모드 양쪽을 모두 프리필해 유저가 어느 모드로 진입해도 이어서 쓸 수 있게 한다.
@@ -217,6 +347,11 @@ export default function DiaryPage() {
     setInitialDynamicsChip(undefined);
     setDictionaryBridge(null);
     setCameFromDictionary(false);
+    // 저장이 끝났으니 더 이상 "작성 중"이 아니다 - 임시 저장 초안도 함께 정리한다.
+    setWizardDraft(null);
+    setRestoredWizardDraft(undefined);
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    setHasSavedDraft(false);
   };
 
   const handleSave = async () => {
@@ -235,6 +370,11 @@ export default function DiaryPage() {
       };
       const saved = editingEntry ? await updateDream(editingEntry.id, payload) : await createDream(payload);
       upsertEntry(saved);
+      // 저장이 끝났으니 더 이상 "작성 중"이 아니다 - 임시 저장 초안도 함께 정리한다.
+      setWizardDraft(null);
+      setRestoredWizardDraft(undefined);
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      setHasSavedDraft(false);
       // 사전에서 넘어온 기록은 저장과 동시에 홈으로 돌아가, 오늘 날짜 노드가 캘린더에
       // 실시간으로 점등되는 것을 바로 보여준다. 그 외에는 계속 기록소에 머문다(연속 기록용).
       if (cameFromDictionary) {
@@ -264,6 +404,8 @@ export default function DiaryPage() {
     setRecordMode("precise");
     setDictionaryBridge(null);
     setCameFromDictionary(false);
+    setWizardDraft(null);
+    setRestoredWizardDraft(undefined);
   };
 
   // 수정 모드 취소, 그리고 "오늘 다른 꿈 추가 기록" 버튼이 공유하는 초기화 로직 -
@@ -286,6 +428,11 @@ export default function DiaryPage() {
     setInitialDynamicsChip(undefined);
     setDictionaryBridge(null);
     setCameFromDictionary(false);
+    // 새로 시작하기로 한 것이므로, 남아있던 임시 저장 초안도 함께 정리한다.
+    setWizardDraft(null);
+    setRestoredWizardDraft(undefined);
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    setHasSavedDraft(false);
   };
 
   const handleSelectDay = (dayEntries: DreamEntryRecord[]) => {
@@ -374,6 +521,29 @@ export default function DiaryPage() {
                 ➕ 오늘 다른 꿈 추가 기록
               </button>
             </div>
+
+            {/* 자동 임시 저장 복원 배너: 이전에 쓰다 만 기록이 있으면 은은하게 펄스하며 안내한다 */}
+            {hasSavedDraft && !editingEntry && (
+              <div className="mb-5 flex animate-pulse items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200">
+                <span>💡 작성 중이던 임시 저장된 기록이 있습니다.</span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={restoreDraft}
+                    className="rounded-full border border-amber-400/40 bg-amber-500/15 px-3 py-1 font-medium text-amber-100 transition-colors hover:bg-amber-500/25"
+                  >
+                    불러오기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={discardDraft}
+                    className="rounded-full border border-white/10 px-3 py-1 text-slate-300 transition-colors hover:border-red-400/40 hover:text-red-200"
+                  >
+                    삭제
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* 고정형 메타 정보: 날짜 · 감정 · 공개 범위 */}
             <div className="space-y-5">
@@ -518,12 +688,13 @@ export default function DiaryPage() {
                 key={wizardKey}
                 onComplete={handleWizardComplete}
                 isSubmitting={isLoading}
-                initialData={editingEntry?.survey}
+                initialData={editingEntry?.survey ?? restoredWizardDraft}
                 initialTitle={editingEntry ? undefined : initialTitle}
                 initialActionDetail={editingEntry ? undefined : initialActionDetail}
                 initialTargetChip={editingEntry ? undefined : initialTargetChip}
                 initialTargetOther={editingEntry ? undefined : initialTargetOther}
                 initialDynamicsChip={editingEntry ? undefined : initialDynamicsChip}
+                onDraftChange={editingEntry ? undefined : setWizardDraft}
                 submitLabel={editingEntry ? "💾 수정 완료 및 재분석" : "✨ AI 무의식 해몽 요청하기"}
               />
             )}
