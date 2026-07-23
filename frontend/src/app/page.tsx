@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { decodeAccessToken } from "@/api/auth";
+import { searchDictionary } from "@/api/dictionary";
 import {
   getBestDreams,
   getExplorerCount,
@@ -18,7 +19,19 @@ import DreamCalendarWidget from "@/components/DreamCalendarWidget";
 import LiveTicker from "@/components/LiveTicker";
 import MoonIcon from "@/components/MoonIcon";
 import NavBar from "@/components/NavBar";
+import { ALL_DICTIONARY_WORDS, DICTIONARY_CATEGORIES } from "@/lib/dictionaryCategories";
 import { useAuthStore } from "@/store/useAuthStore";
+
+// 홈 '오늘의 상징' 카드는 날짜가 바뀌기 전까지 같은 결과를 보여주면 되므로,
+// 방문할 때마다 AI를 다시 호출하지 않도록 하루 단위로 로컬에 캐싱한다.
+const SYMBOL_OF_DAY_CACHE_KEY = "dream_hub_symbol_of_day";
+
+interface SymbolOfDay {
+  date: string;
+  keyword: string;
+  emoji: string;
+  summary: string;
+}
 
 const EXPLORER_COUNT_POLL_MS = 5000;
 
@@ -88,6 +101,9 @@ export default function HomePage() {
   const [moonPhase, setMoonPhase] = useState<MoonPhase | null>(null);
   const [isMoonModalOpen, setIsMoonModalOpen] = useState(false);
   const [explorerCount, setExplorerCount] = useState<number | null>(null);
+  const [heroSearchQuery, setHeroSearchQuery] = useState("");
+  const [symbolOfDay, setSymbolOfDay] = useState<SymbolOfDay | null>(null);
+  const [isLoadingSymbol, setIsLoadingSymbol] = useState(false);
 
   // 구글 로그인 콜백이 ?token=...으로 리다이렉트해서 돌아왔을 때 처리
   useEffect(() => {
@@ -140,6 +156,51 @@ export default function HomePage() {
       }))
     );
   }, []);
+
+  // 오늘의 상징: 날짜 시드로 큐레이션 단어를 정하고, 그 단어의 실제 한 줄 요약을 사전 API로
+  // 가져온다(record=false라 인기 검색어 집계는 건드리지 않음). 같은 날 재방문 시 캐시를 재사용.
+  useEffect(() => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const dayOfYear = Math.floor(
+      (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000
+    );
+    const keyword = ALL_DICTIONARY_WORDS[dayOfYear % ALL_DICTIONARY_WORDS.length];
+    const emoji = DICTIONARY_CATEGORIES.find((category) => category.words.includes(keyword))?.emoji ?? "🔮";
+
+    try {
+      const cachedRaw = window.localStorage.getItem(SYMBOL_OF_DAY_CACHE_KEY);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw) as SymbolOfDay;
+        if (cached.date === todayKey && cached.keyword === keyword) {
+          setSymbolOfDay(cached);
+          return;
+        }
+      }
+    } catch {
+      // 캐시가 깨져 있으면 무시하고 새로 조회한다.
+    }
+
+    setIsLoadingSymbol(true);
+    searchDictionary(keyword, false)
+      .then((entry) => {
+        const payload: SymbolOfDay = { date: todayKey, keyword, emoji, summary: entry.summary };
+        setSymbolOfDay(payload);
+        try {
+          window.localStorage.setItem(SYMBOL_OF_DAY_CACHE_KEY, JSON.stringify(payload));
+        } catch {
+          // 저장 실패(프라이빗 모드 등)는 무시 - 다음 방문 때 다시 조회하면 된다.
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingSymbol(false));
+  }, []);
+
+  const handleHeroSearchSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    const trimmed = heroSearchQuery.trim();
+    if (!trimmed) return;
+    router.push(`/dictionary?search=${encodeURIComponent(trimmed)}`);
+  };
 
   // 모달이 열려 있을 때 Esc로도 닫을 수 있도록 처리
   useEffect(() => {
@@ -266,6 +327,48 @@ export default function HomePage() {
               오늘의 꿈 기록하기
             </Link>
           </div>
+
+          {/* 빠른 꿈해몽 검색바: 기록 없이 단어만 찾아보고 싶은 라이트 유저를 위한 최상단 접점 */}
+          <form onSubmit={handleHeroSearchSubmit} className="relative mt-8 w-full max-w-md">
+            <div className="absolute inset-0 rounded-full bg-violet-500/20 opacity-60 blur-lg" />
+            <div className="relative flex items-center gap-2 rounded-full border border-violet-400/30 bg-white/5 px-5 py-3 backdrop-blur-md transition-colors focus-within:border-violet-400/60">
+              <span className="text-base">🔍</span>
+              <input
+                type="text"
+                value={heroSearchQuery}
+                onChange={(event) => setHeroSearchQuery(event.target.value)}
+                placeholder="지난밤 꾼 꿈 단어를 바로 검색해보세요 (예: 뱀, 비행, 이빨)"
+                className="flex-1 bg-transparent text-sm text-white placeholder:text-slate-500/80 focus:outline-none"
+              />
+            </div>
+          </form>
+
+          {/* 오늘의 상징: 타로 카드 느낌의 큐레이션 컴포넌트, 클릭하면 사전 상세 뷰로 이동 */}
+          <div className="group relative mt-4 w-full max-w-md">
+            <div className="absolute inset-0 rounded-3xl bg-fuchsia-500/20 opacity-50 blur-xl transition-all duration-500 ease-out group-hover:opacity-90 group-hover:blur-2xl" />
+            <button
+              type="button"
+              disabled={!symbolOfDay}
+              onClick={() => symbolOfDay && router.push(`/dictionary?search=${encodeURIComponent(symbolOfDay.keyword)}`)}
+              className="relative flex w-full items-center gap-4 rounded-3xl border border-purple-400/30 bg-white/5 px-6 py-4 text-left backdrop-blur-md transition-all duration-300 group-hover:-translate-y-0.5 group-hover:border-purple-300/60 disabled:cursor-wait"
+            >
+              <span className="text-3xl">{symbolOfDay?.emoji ?? "🔮"}</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs tracking-widest text-purple-300/70 uppercase">🔮 오늘의 상징</p>
+                {symbolOfDay ? (
+                  <>
+                    <p className="mt-1 font-semibold text-white">{symbolOfDay.keyword}</p>
+                    <p className="mt-0.5 truncate text-sm text-slate-300">{symbolOfDay.summary}</p>
+                  </>
+                ) : (
+                  <p className="mt-1 text-sm text-slate-400">
+                    {isLoadingSymbol ? "오늘의 무의식 상징을 불러오는 중..." : "오늘의 상징을 준비하고 있어요..."}
+                  </p>
+                )}
+              </div>
+              <span className="shrink-0 text-purple-300/60">➔</span>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -273,6 +376,23 @@ export default function HomePage() {
 
       <main className="relative mx-auto max-w-5xl px-6 py-16">
         <DreamCalendarWidget />
+
+        {/* 카테고리 퀵 숏컷: 사전의 대분류를 홈에서 바로 필터링해 진입 */}
+        <section className="mx-auto mt-14 max-w-3xl">
+          <div className="flex flex-wrap items-center justify-center gap-2.5">
+            {DICTIONARY_CATEGORIES.map((category) => (
+              <button
+                key={category.label}
+                type="button"
+                onClick={() => router.push(`/dictionary?category=${encodeURIComponent(category.label)}`)}
+                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:border-purple-400/40 hover:bg-purple-500/10 hover:text-purple-200"
+              >
+                <span>{category.emoji}</span>
+                {category.label}
+              </button>
+            ))}
+          </div>
+        </section>
 
         {/* 실시간 트렌드 키워드: 세로형 랭킹 리스트 (완전 중앙 정렬) */}
         <section className="mx-auto mt-16 max-w-2xl">

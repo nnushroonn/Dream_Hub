@@ -158,6 +158,9 @@ SCENARIO_DETAIL_FALLBACK = {
 
 class SearchRequest(BaseModel):
     keyword: str
+    # 홈 화면 '오늘의 상징' 카드처럼 유저가 직접 검색한 게 아닌 자동 조회에서는
+    # False로 넘겨 인기 검색어 집계(search_count)를 오염시키지 않는다.
+    record: bool = True
 
 
 class DictionaryEntry(BaseModel):
@@ -309,7 +312,8 @@ def search_dictionary(payload: SearchRequest, db: Session = Depends(get_db)) -> 
         return {"keyword": "", **FALLBACK_RESULT}
 
     entry = _request_entry(keyword)
-    _record_search(db, keyword)
+    if payload.record:
+        _record_search(db, keyword)
     return entry
 
 

@@ -12,8 +12,8 @@ export interface DictionaryEntry {
   related_keywords: string[];
 }
 
-export async function searchDictionary(keyword: string): Promise<DictionaryEntry> {
-  const { data } = await api.post<DictionaryEntry>("/api/dictionary/search", { keyword });
+export async function searchDictionary(keyword: string, record: boolean = true): Promise<DictionaryEntry> {
+  const { data } = await api.post<DictionaryEntry>("/api/dictionary/search", { keyword, record });
   return data;
 }
 

@@ -70,6 +70,7 @@ export default function DictionaryPage() {
 
   const [query, setQuery] = useState("");
   const [activeChoseong, setActiveChoseong] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
 
   // 상세 상황별 꿈 아카이브 뷰 - 단어를 클릭하면 브라우즈 화면이 이 뷰로 교체된다.
   const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
@@ -98,14 +99,24 @@ export default function DictionaryPage() {
     setDailyPicks(pickDailyWords(ALL_DICTIONARY_WORDS, 3, dayOfYear));
   }, []);
 
-  // 홈 화면 '실시간 트렌드 키워드'에서 ?search=하늘 형태로 넘어온 경우,
-  // 검색창을 채우고 상세 리스트 뷰를 곧바로 자동 실행한다.
+  // 홈 화면 '실시간 트렌드 키워드'/'오늘의 상징'/'빠른 검색바'에서 ?search=하늘 형태로
+  // 넘어온 경우, 검색창을 채우고 상세 리스트 뷰를 곧바로 자동 실행한다.
+  // 홈의 '카테고리 퀵 숏컷'에서 ?category=자연/장소 형태로 넘어온 경우엔
+  // 브라우즈 화면을 그 카테고리 하나만 보이는 필터 상태로 연다.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const searchParam = params.get("search");
-    if (!searchParam) return;
+    const categoryParam = params.get("category");
+    if (!searchParam && !categoryParam) return;
     window.history.replaceState({}, "", window.location.pathname);
-    openKeywordDetail(searchParam);
+
+    if (searchParam) {
+      openKeywordDetail(searchParam);
+      return;
+    }
+    if (categoryParam && DICTIONARY_CATEGORIES.some((category) => category.label === categoryParam)) {
+      setCategoryFilter(categoryParam);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -264,9 +275,25 @@ export default function DictionaryPage() {
               </div>
             )}
 
-            {/* 2차 카테고리 칩 그리드 */}
+            {/* 2차 카테고리 칩 그리드 - 홈에서 특정 카테고리로 진입한 경우 그 카테고리만 보여준다 */}
             <section className="mt-10 space-y-4">
-              {DICTIONARY_CATEGORIES.map((category) => (
+              {categoryFilter && (
+                <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
+                  <span>
+                    <span className="text-purple-300">{categoryFilter}</span> 카테고리만 보고 있어요
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryFilter(null)}
+                    className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-slate-300 transition-colors hover:border-purple-400/40 hover:text-white"
+                  >
+                    ✕ 필터 해제
+                  </button>
+                </div>
+              )}
+              {DICTIONARY_CATEGORIES.filter(
+                (category) => !categoryFilter || category.label === categoryFilter
+              ).map((category) => (
                 <div
                   key={category.label}
                   className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md sm:flex-row sm:items-center"
