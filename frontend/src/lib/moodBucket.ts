@@ -19,3 +19,14 @@ export const MOOD_OPTIONS: MoodOption[] = [
 export function moodBucketForEmoji(emoji: string): DreamMood {
   return MOOD_OPTIONS.find((option) => option.emoji === emoji)?.bucket ?? "neutral";
 }
+
+const BUCKET_TO_EMOJI: Record<DreamMood, string> = {
+  good: "🤩",
+  neutral: "🤔",
+  nightmare: "😱",
+};
+
+// 꿈해몽 사전에서 넘어온 상징의 mood(good/neutral/nightmare)를 기록실의 감정 이모지로 되돌린다.
+export function emojiForMoodBucket(bucket: DreamMood): string {
+  return BUCKET_TO_EMOJI[bucket];
+}

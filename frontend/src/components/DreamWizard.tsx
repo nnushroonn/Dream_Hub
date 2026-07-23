@@ -77,6 +77,15 @@ interface DreamWizardProps {
   initialTitle?: string;
   /** ⚡ 10초 미니멀 빠른 기록에서 "정밀 분석으로 전환"한 경우, 적어둔 서술을 Step 4(행동 묘사)에 미리 채운다 (initialData가 있으면 무시됨) */
   initialActionDetail?: string;
+  /** 꿈해몽 사전의 "내 꿈일기에 이 상징 기록하기"에서 넘어온 경우, 상징의 카테고리로 유추한
+   * Step 3(대상) 칩을 미리 선택한다. PROJECTION_OPTIONS 라벨과 일치해야 하며, "기타"일 때만
+   * initialTargetOther가 커스텀 입력값으로 함께 쓰인다 (initialData가 있으면 무시됨) */
+  initialTargetChip?: string;
+  initialTargetOther?: string;
+  /** 같은 브릿지에서, 시나리오 제목/무드로 유추한 Step 4(역동성) 칩을 미리 선택한다.
+   * DYNAMICS_OPTIONS 라벨과 일치해야 한다 (initialData가 있으면 무시됨) */
+  initialDynamicsChip?: string;
+  initialDynamicsOther?: string;
   /** 최종 제출 버튼 라벨. 수정 모드에서는 "💾 수정 완료 및 재분석"으로 바뀐다 */
   submitLabel?: string;
 }
@@ -151,6 +160,10 @@ export default function DreamWizard({
   initialData,
   initialTitle,
   initialActionDetail,
+  initialTargetChip,
+  initialTargetOther,
+  initialDynamicsChip,
+  initialDynamicsOther,
   submitLabel = "✨ AI 무의식 해몽 요청하기",
 }: DreamWizardProps) {
   const [step, setStep] = useState(1);
@@ -168,13 +181,13 @@ export default function DreamWizard({
   const [spaceDetail, setSpaceDetail] = useState(initialData?.space_detail ?? "");
 
   const projectionInit = initialData ? resolveChipState(PROJECTION_OPTIONS, initialData.identity_factor) : null;
-  const [projection, setProjection] = useState<string | null>(projectionInit?.chip ?? null);
-  const [projectionOther, setProjectionOther] = useState(projectionInit?.other ?? "");
+  const [projection, setProjection] = useState<string | null>(projectionInit?.chip ?? initialTargetChip ?? null);
+  const [projectionOther, setProjectionOther] = useState(projectionInit?.other ?? initialTargetOther ?? "");
   const [targetDetail, setTargetDetail] = useState(initialData?.target_detail ?? "");
 
   const dynamicsInit = initialData ? resolveChipState(DYNAMICS_OPTIONS, initialData.action_physics) : null;
-  const [dynamics, setDynamics] = useState<string | null>(dynamicsInit?.chip ?? null);
-  const [dynamicsOther, setDynamicsOther] = useState(dynamicsInit?.other ?? "");
+  const [dynamics, setDynamics] = useState<string | null>(dynamicsInit?.chip ?? initialDynamicsChip ?? null);
+  const [dynamicsOther, setDynamicsOther] = useState(dynamicsInit?.other ?? initialDynamicsOther ?? "");
   const [actionDetail, setActionDetail] = useState(initialData?.action_detail ?? initialActionDetail ?? "");
 
   const realityInit = initialData ? resolveChipState(REALITY_OPTIONS, initialData.reality_link) : null;

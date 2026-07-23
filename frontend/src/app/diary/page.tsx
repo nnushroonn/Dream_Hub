@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { getAuthErrorMessage } from "@/api/auth";
 import {
@@ -12,12 +13,13 @@ import {
   updateDream,
   type AiInterpretation,
   type DreamEntryRecord,
+  type DreamMood,
   type DreamSurvey,
 } from "@/api/dream";
 import DiaryCalendarPanel from "@/components/DiaryCalendarPanel";
 import DreamWizard from "@/components/DreamWizard";
 import NavBar from "@/components/NavBar";
-import { MOOD_OPTIONS } from "@/lib/moodBucket";
+import { emojiForMoodBucket, MOOD_OPTIONS } from "@/lib/moodBucket";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 
@@ -30,6 +32,7 @@ function todayDateInputValue(): string {
 }
 
 export default function DiaryPage() {
+  const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const upsertEntry = useSavedDreamsStore((state) => state.upsertEntry);
   const removeEntry = useSavedDreamsStore((state) => state.removeEntry);
@@ -66,6 +69,14 @@ export default function DiaryPage() {
   // Step 1 제목을 미리 채워 넣는다. ⚡ 빠른 기록에서 정밀 모드로 업그레이드할 때도 재사용한다.
   const [initialTitle, setInitialTitle] = useState<string | undefined>(undefined);
   const [initialActionDetail, setInitialActionDetail] = useState<string | undefined>(undefined);
+  const [initialTargetChip, setInitialTargetChip] = useState<string | undefined>(undefined);
+  const [initialTargetOther, setInitialTargetOther] = useState<string | undefined>(undefined);
+  const [initialDynamicsChip, setInitialDynamicsChip] = useState<string | undefined>(undefined);
+
+  // 사전의 "내 꿈일기에 이 상징 기록하기"에서 넘어온 경우에만 채워지는 배지 정보(배너 표시용)와,
+  // 저장 완료 후 홈으로 리다이렉트할지 여부를 함께 추적한다.
+  const [dictionaryBridge, setDictionaryBridge] = useState<{ badge: string; expert: string } | null>(null);
+  const [cameFromDictionary, setCameFromDictionary] = useState(false);
 
   // 투트랙 기록 모드: 기본값은 진입 장벽이 낮은 ⚡ 10초 미니멀 빠른 기록.
   const [recordMode, setRecordMode] = useState<"quick" | "precise">("quick");
@@ -88,12 +99,37 @@ export default function DiaryPage() {
     setSpeechSupported(Boolean(win.SpeechRecognition ?? win.webkitSpeechRecognition));
   }, []);
 
+  // 꿈해몽 사전의 "🔮 내 꿈일기에 이 상징 기록하기"에서 title(+mood/badge/expert/targetChip/dynamicsChip)이
+  // 함께 넘어온 경우, 미니멀/정밀 모드 양쪽을 모두 프리필해 유저가 어느 모드로 진입해도 이어서 쓸 수 있게 한다.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const titleParam = params.get("title");
     if (!titleParam) return;
+
     setInitialTitle(titleParam);
     setWizardKey((key) => key + 1);
+
+    const moodParam = params.get("mood");
+    const badgeParam = params.get("badge");
+    const expertParam = params.get("expert");
+    const targetChipParam = params.get("targetChip");
+    const targetOtherParam = params.get("targetOther");
+    const dynamicsChipParam = params.get("dynamicsChip");
+
+    if (targetChipParam || dynamicsChipParam) {
+      setQuickTitle(titleParam);
+      setQuickText(`[사전 기반 기록] ${titleParam}`);
+      setInitialActionDetail(titleParam);
+      if (targetChipParam) setInitialTargetChip(targetChipParam);
+      if (targetOtherParam) setInitialTargetOther(targetOtherParam);
+      if (dynamicsChipParam) setInitialDynamicsChip(dynamicsChipParam);
+      if (badgeParam && expertParam) setDictionaryBridge({ badge: badgeParam, expert: expertParam });
+      if (moodParam === "good" || moodParam === "neutral" || moodParam === "nightmare") {
+        setMood(emojiForMoodBucket(moodParam as DreamMood));
+      }
+      setCameFromDictionary(true);
+    }
+
     window.history.replaceState({}, "", window.location.pathname);
   }, []);
 
@@ -216,6 +252,11 @@ export default function DiaryPage() {
     setQuickTitle("");
     setQuickText("");
     setInitialActionDetail(undefined);
+    setInitialTargetChip(undefined);
+    setInitialTargetOther(undefined);
+    setInitialDynamicsChip(undefined);
+    setDictionaryBridge(null);
+    setCameFromDictionary(false);
   };
 
   const handleSave = async () => {
@@ -234,6 +275,13 @@ export default function DiaryPage() {
       };
       const saved = editingEntry ? await updateDream(editingEntry.id, payload) : await createDream(payload);
       upsertEntry(saved);
+      // 사전에서 넘어온 기록은 저장과 동시에 홈으로 돌아가, 오늘 날짜 노드가 캘린더에
+      // 실시간으로 점등되는 것을 바로 보여준다. 그 외에는 계속 기록소에 머문다(연속 기록용).
+      if (cameFromDictionary) {
+        setIsModalOpen(false);
+        router.push("/");
+        return;
+      }
       resetWizard();
     } catch (error) {
       setSaveError(getAuthErrorMessage(error));
@@ -254,6 +302,8 @@ export default function DiaryPage() {
     setWizardKey((key) => key + 1);
     // 이미 저장된 6단계 응답을 다시 다듬는 작업이라 항상 정밀 위저드로 연다.
     setRecordMode("precise");
+    setDictionaryBridge(null);
+    setCameFromDictionary(false);
   };
 
   // 수정 모드 취소, 그리고 "오늘 다른 꿈 추가 기록" 버튼이 공유하는 초기화 로직 -
@@ -271,6 +321,11 @@ export default function DiaryPage() {
     setQuickTitle("");
     setQuickText("");
     setInitialActionDetail(undefined);
+    setInitialTargetChip(undefined);
+    setInitialTargetOther(undefined);
+    setInitialDynamicsChip(undefined);
+    setDictionaryBridge(null);
+    setCameFromDictionary(false);
   };
 
   const handleSelectDay = (dayEntries: DreamEntryRecord[]) => {
@@ -340,6 +395,13 @@ export default function DiaryPage() {
                   <button type="button" onClick={startNewToday} className="text-violet-300/70 underline-offset-2 hover:text-white hover:underline">
                     수정 취소
                   </button>
+                </div>
+              ) : dictionaryBridge ? (
+                <div className="flex flex-1 items-center gap-2 rounded-xl border border-purple-400/30 bg-purple-500/10 px-4 py-2.5 text-xs text-purple-200">
+                  <span className="shrink-0 rounded-full border border-purple-400/40 bg-purple-500/15 px-2 py-0.5 text-[10px] font-medium">
+                    {dictionaryBridge.badge}
+                  </span>
+                  <span>🔮 사전에서 {dictionaryBridge.expert}의 시선으로 살펴본 상징을 기록하는 중이에요</span>
                 </div>
               ) : (
                 <span className="text-xs text-slate-500">오늘의 무의식을 하나씩 기록해 보세요.</span>
@@ -515,6 +577,9 @@ export default function DiaryPage() {
                 initialData={editingEntry?.survey}
                 initialTitle={editingEntry ? undefined : initialTitle}
                 initialActionDetail={editingEntry ? undefined : initialActionDetail}
+                initialTargetChip={editingEntry ? undefined : initialTargetChip}
+                initialTargetOther={editingEntry ? undefined : initialTargetOther}
+                initialDynamicsChip={editingEntry ? undefined : initialDynamicsChip}
                 submitLabel={editingEntry ? "💾 수정 완료 및 재분석" : "✨ AI 무의식 해몽 요청하기"}
               />
             )}

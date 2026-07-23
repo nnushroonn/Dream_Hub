@@ -50,6 +50,37 @@ function findCategoryLabel(word: string): string {
   return found ? found.label : "자유 검색";
 }
 
+/** "내 꿈일기에 이 상징 기록하기" 브릿지용: 사전 카테고리를 꿈 기록소 6단계 위저드
+ * Step 3(대상) 칩 라벨로 매핑한다. 매칭되는 카테고리가 없으면 "기타" + 키워드 자체를 커스텀값으로 쓴다. */
+function mapCategoryToTargetChip(categoryLabel: string, keyword: string): { chip: string; other?: string } {
+  switch (categoryLabel) {
+    case "사람/인물":
+      return { chip: "인연(가족/지인)" };
+    case "동물/식물":
+      return { chip: "영물(동물)" };
+    case "사물/음식":
+      return { chip: "성물(특이한 사물)" };
+    default:
+      return { chip: "기타", other: keyword };
+  }
+}
+
+// 시나리오 제목에 등장하는 동작 단서로 Step 4(역동성) 칩을 추정하고, 단서가 없으면 mood로 보수적으로 대체한다.
+const DYNAMICS_KEYWORD_RULES: [RegExp, string][] = [
+  [/날아|비행|하늘을 나는/, "중력 초월(비행)"],
+  [/쫓기는|도망|추격당하는|쫓아오는/, "억압과 지체(도망)"],
+  [/쫓는|추적|찾아다니는|뒤쫓는/, "추적과 탐색"],
+  [/대화|말을 거는|이야기를 나누는|속삭이는/, "교감과 대화"],
+];
+
+function mapScenarioToDynamicsChip(scenarioTitle: string, mood: DreamMood): { chip: string } {
+  const matched = DYNAMICS_KEYWORD_RULES.find(([pattern]) => pattern.test(scenarioTitle));
+  if (matched) return { chip: matched[1] };
+  if (mood === "nightmare") return { chip: "억압과 지체(도망)" };
+  if (mood === "good") return { chip: "중력 초월(비행)" };
+  return { chip: "방관적 응시" };
+}
+
 /** 시나리오 제목 안에서 검색 키워드 부분만 포인트 컬러로 하이라이트한다. */
 function HighlightedTitle({ title, keyword }: { title: string; keyword: string }) {
   if (!keyword) return <>{title}</>;
@@ -591,10 +622,24 @@ export default function DictionaryPage() {
 
                 <button
                   type="button"
-                  onClick={() => router.push(`/diary?title=${encodeURIComponent(scenarioModal.title)}`)}
+                  onClick={() => {
+                    const keyword = selectedKeyword ?? "";
+                    const target = mapCategoryToTargetChip(findCategoryLabel(keyword), keyword);
+                    const dynamics = mapScenarioToDynamicsChip(scenarioModal.title, scenarioModal.mood);
+                    const params = new URLSearchParams({
+                      title: scenarioModal.title,
+                      mood: scenarioModal.mood,
+                      badge: scenarioModal.expert_badge,
+                      expert: scenarioModal.selected_expert,
+                      targetChip: target.chip,
+                      dynamicsChip: dynamics.chip,
+                    });
+                    if (target.other) params.set("targetOther", target.other);
+                    router.push(`/diary?${params.toString()}`);
+                  }}
                   className="mt-6 w-full rounded-full border border-violet-400/40 bg-violet-500/15 px-5 py-2.5 text-sm font-semibold text-violet-100 transition-transform hover:-translate-y-0.5"
                 >
-                  📝 이 세부 상황으로 꿈 기록소 이동하기
+                  🔮 내 꿈일기에 이 상징 기록하기
                 </button>
               </div>
             )}
