@@ -200,7 +200,7 @@ export default function DiaryPage() {
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
 
           <div
-            className={`relative w-full max-w-lg rounded-3xl border border-violet-400/30 bg-white/10 p-8 shadow-[0_0_60px_rgba(139,92,246,0.35)] backdrop-blur-2xl transition-all duration-500 ease-out ${
+            className={`relative max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-violet-400/30 bg-white/10 p-8 shadow-[0_0_60px_rgba(139,92,246,0.35)] backdrop-blur-2xl transition-all duration-500 ease-out ${
               isModalOpen ? "translate-y-0 opacity-100" : "translate-y-12 opacity-0"
             }`}
           >
@@ -229,16 +229,18 @@ export default function DiaryPage() {
               ))}
             </div>
 
-            <p className="mt-5 text-sm leading-relaxed text-slate-300">{interpretation.description}</p>
+            <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-300">{interpretation.description}</p>
 
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-                <p className="text-xs text-indigo-300/70">행운의 아이템</p>
-                <p className="mt-1.5 font-medium text-white">{interpretation.lucky_item}</p>
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <p className="text-center text-xs text-indigo-300/70">행운의 아이템</p>
+                <p className="mt-1.5 text-center font-medium text-white">{interpretation.lucky_item}</p>
+                <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{interpretation.lucky_item_reason}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-                <p className="text-xs text-indigo-300/70">행운의 숫자</p>
-                <p className="mt-1.5 font-medium text-white">{interpretation.lucky_number}</p>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <p className="text-center text-xs text-indigo-300/70">행운의 숫자</p>
+                <p className="mt-1.5 text-center font-medium text-white">{interpretation.lucky_number}</p>
+                <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{interpretation.lucky_number_reason}</p>
               </div>
             </div>
 

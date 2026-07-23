@@ -109,7 +109,9 @@ export interface AiInterpretation {
   tags: string[];
   description: string;
   lucky_item: string;
+  lucky_item_reason: string;
   lucky_number: number;
+  lucky_number_reason: string;
 }
 
 export async function requestAiInterpretation(payload: DreamEntryInput): Promise<AiInterpretation> {
