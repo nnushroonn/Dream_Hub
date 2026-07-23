@@ -178,7 +178,10 @@ export default function HomePage() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+    // overflow-hidden을 여기 두면 어떤 자식이든 position: sticky가 조용히 깨진다(사이드바 광고
+    // 포함). 배경의 오로라 블러/별 입자는 아래의 fixed 배경 레이어 자체가 이미 overflow-hidden으로
+    // 스스로를 클리핑하고 있어, 이 바깥쪽 wrapper에는 더 이상 필요 없다.
+    <div className="relative min-h-screen bg-slate-950 text-slate-100">
       {/* 오로라 블러 + 별 입자 배경 (화면 전체 고정) */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-violet-700/30 blur-[110px] animate-aurora" />
@@ -435,14 +438,14 @@ export default function HomePage() {
               </div>
             </section>
 
-            {/* 광고 Slot A: 우측 사이드바 하단 고정석 (300x250/600) */}
+            {/* 광고 Slot A: 우측 사이드바 하단 고정석 (300x250/600) - 좌측이 더 길어 스크롤될 때
+                lg:sticky로 뷰포트에 붙어 따라오다가, 사이드바(우측 컬럼) 하단에 닿으면 자연스럽게 멈춘다. */}
             <div
               role="complementary"
               aria-label="광고 영역"
-              className="my-6 flex min-h-[250px] w-full flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 text-xs text-slate-500"
+              className="my-6 flex w-full min-h-[250px] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 p-4 lg:sticky lg:top-6 lg:min-h-[450px]"
             >
-              <span>AD</span>
-              <span className="text-[10px] text-slate-600">Sponsored</span>
+              <span className="text-xs text-slate-500">Sponsored</span>
             </div>
           </div>
         </div>
