@@ -70,6 +70,7 @@ export default function DiaryPage() {
   const [initialTitle, setInitialTitle] = useState<string | undefined>(undefined);
   const [initialActionDetail, setInitialActionDetail] = useState<string | undefined>(undefined);
   const [initialTargetChip, setInitialTargetChip] = useState<string | undefined>(undefined);
+  const [initialTargetOther, setInitialTargetOther] = useState<string | undefined>(undefined);
   const [initialDynamicsChip, setInitialDynamicsChip] = useState<string | undefined>(undefined);
 
   // 사전의 "내 꿈일기에 이 상징 기록하기"에서 넘어온 경우에만 채워지는 배지 정보(배너 표시용)와,
@@ -100,6 +101,7 @@ export default function DiaryPage() {
     const badgeParam = params.get("badge");
     const expertParam = params.get("expert");
     const targetChipParam = params.get("targetChip");
+    const targetOtherParam = params.get("targetOther");
     const dynamicsChipParam = params.get("dynamicsChip");
 
     if (targetChipParam || dynamicsChipParam) {
@@ -107,6 +109,7 @@ export default function DiaryPage() {
       setQuickText(`[사전 기반 기록] ${titleParam}`);
       setInitialActionDetail(titleParam);
       if (targetChipParam) setInitialTargetChip(targetChipParam);
+      if (targetOtherParam) setInitialTargetOther(targetOtherParam);
       if (dynamicsChipParam) setInitialDynamicsChip(dynamicsChipParam);
       if (badgeParam && expertParam) setDictionaryBridge({ badge: badgeParam, expert: expertParam });
       if (moodParam === "good" || moodParam === "neutral" || moodParam === "nightmare") {
@@ -210,6 +213,7 @@ export default function DiaryPage() {
     setQuickText("");
     setInitialActionDetail(undefined);
     setInitialTargetChip(undefined);
+    setInitialTargetOther(undefined);
     setInitialDynamicsChip(undefined);
     setDictionaryBridge(null);
     setCameFromDictionary(false);
@@ -278,6 +282,7 @@ export default function DiaryPage() {
     setQuickText("");
     setInitialActionDetail(undefined);
     setInitialTargetChip(undefined);
+    setInitialTargetOther(undefined);
     setInitialDynamicsChip(undefined);
     setDictionaryBridge(null);
     setCameFromDictionary(false);
@@ -517,6 +522,7 @@ export default function DiaryPage() {
                 initialTitle={editingEntry ? undefined : initialTitle}
                 initialActionDetail={editingEntry ? undefined : initialActionDetail}
                 initialTargetChip={editingEntry ? undefined : initialTargetChip}
+                initialTargetOther={editingEntry ? undefined : initialTargetOther}
                 initialDynamicsChip={editingEntry ? undefined : initialDynamicsChip}
                 submitLabel={editingEntry ? "💾 수정 완료 및 재분석" : "✨ AI 무의식 해몽 요청하기"}
               />
