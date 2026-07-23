@@ -1,3 +1,4 @@
+import type { DreamMood } from "./dream";
 import api from "./axios";
 
 // 꿈 기록소(dream.ts)와는 완전히 별개의 API 모듈. 꿈해몽 사전 검색 결과는
@@ -13,6 +14,33 @@ export interface DictionaryEntry {
 
 export async function searchDictionary(keyword: string): Promise<DictionaryEntry> {
   const { data } = await api.post<DictionaryEntry>("/api/dictionary/search", { keyword });
+  return data;
+}
+
+export interface DreamScenario {
+  title: string;
+  mood: DreamMood;
+}
+
+export async function getDictionaryScenarios(keyword: string): Promise<DreamScenario[]> {
+  const { data } = await api.post<{ keyword: string; scenarios: DreamScenario[] }>("/api/dictionary/scenarios", {
+    keyword,
+  });
+  return data.scenarios;
+}
+
+export interface ScenarioDetail {
+  title: string;
+  mood: DreamMood;
+  interpretation: string;
+  advice: string;
+}
+
+export async function getScenarioDetail(keyword: string, scenarioTitle: string): Promise<ScenarioDetail> {
+  const { data } = await api.post<ScenarioDetail>("/api/dictionary/scenario-detail", {
+    keyword,
+    scenario_title: scenarioTitle,
+  });
   return data;
 }
 
