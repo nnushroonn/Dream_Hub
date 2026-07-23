@@ -12,9 +12,9 @@ interface ChipOption {
 const TOTAL_STEPS = 6;
 
 const STEP_META = [
-  { key: "light", label: "조도" },
+  { key: "light", label: "조도 및 제목" },
   { key: "space", label: "공간" },
-  { key: "projection", label: "투사" },
+  { key: "target", label: "대상" },
   { key: "dynamics", label: "역동성" },
   { key: "reality", label: "현실 공명" },
   { key: "dimension", label: "차원 제어" },
@@ -94,12 +94,13 @@ function chipClass(selected: boolean): string {
   }`;
 }
 
+// 다크 모드 가독성: 실제 입력 글자는 선명한 화이트, placeholder는 은은한 서브 톤으로 구분한다.
 function otherInputClass(): string {
-  return "mt-3 w-full rounded-xl border border-violet-400/30 bg-black/30 px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-violet-400/60 focus:outline-none";
+  return "mt-3 w-full rounded-xl border border-violet-400/30 bg-black/30 px-4 py-2.5 text-sm text-white placeholder:text-slate-500/80 focus:border-violet-400/60 focus:outline-none";
 }
 
-// 칩을 고르는 순간, 그 아래로 '꿈일기 작성 7가지 팁'을 반영한 가이드 질문과 단답형 주관식 폼이
-// 슬라이드다운 + 페이드인으로 나타난다. 별도 컴포넌트로 분리해 5개 단계에서 반복 없이 재사용한다.
+// 칩을 고르는 순간, 그 아래로 이 단계 전용 가이드 질문과 단답형 주관식 폼이
+// 슬라이드다운 + 페이드인으로 나타난다. 별도 컴포넌트로 분리해 각 단계에서 반복 없이 재사용한다.
 interface SubjectiveGuideFieldProps {
   visible: boolean;
   guide: string;
@@ -117,7 +118,7 @@ function SubjectiveGuideField({ visible, guide, value, onChange, placeholder, as
       }`}
     >
       <div className="rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4 backdrop-blur-md">
-        <p className="text-xs leading-relaxed text-violet-300/80">💡 {guide}</p>
+        <p className="text-xs leading-relaxed text-violet-300/80">{guide}</p>
         {as === "input" ? (
           <input
             type="text"
@@ -163,7 +164,7 @@ export default function DreamWizard({
   const projectionInit = initialData ? resolveChipState(PROJECTION_OPTIONS, initialData.identity_factor) : null;
   const [projection, setProjection] = useState<string | null>(projectionInit?.chip ?? null);
   const [projectionOther, setProjectionOther] = useState(projectionInit?.other ?? "");
-  const [identityDetail, setIdentityDetail] = useState(initialData?.identity_detail ?? "");
+  const [targetDetail, setTargetDetail] = useState(initialData?.target_detail ?? "");
 
   const dynamicsInit = initialData ? resolveChipState(DYNAMICS_OPTIONS, initialData.action_physics) : null;
   const [dynamics, setDynamics] = useState<string | null>(dynamicsInit?.chip ?? null);
@@ -177,6 +178,7 @@ export default function DreamWizard({
 
   const [vividness, setVividness] = useState(initialData?.vividness ?? 50);
   const [isLucid, setIsLucid] = useState(initialData?.is_lucid ?? false);
+  const [finalMemo, setFinalMemo] = useState(initialData?.final_memo ?? "");
   const [sketchPreview, setSketchPreview] = useState<string | null>(null);
 
   const goToStep = (nextStep: number, dir: 1 | -1) => {
@@ -202,7 +204,7 @@ export default function DreamWizard({
   const step1Ready = light !== null && (light !== OTHER_LABEL || lightOther.trim() !== "") && title.trim() !== "";
   const step2Ready = space !== null && (space !== OTHER_LABEL || spaceOther.trim() !== "") && spaceDetail.trim() !== "";
   const step3Ready =
-    projection !== null && (projection !== OTHER_LABEL || projectionOther.trim() !== "") && identityDetail.trim() !== "";
+    projection !== null && (projection !== OTHER_LABEL || projectionOther.trim() !== "") && targetDetail.trim() !== "";
   const step4Ready =
     dynamics !== null && (dynamics !== OTHER_LABEL || dynamicsOther.trim() !== "") && actionDetail.trim() !== "";
   const step5Ready =
@@ -230,13 +232,14 @@ export default function DreamWizard({
       space_depth: (space === OTHER_LABEL ? spaceOther.trim() : space) ?? "",
       space_detail: spaceDetail.trim(),
       identity_factor: (projection === OTHER_LABEL ? projectionOther.trim() : projection) ?? "",
-      identity_detail: identityDetail.trim(),
+      target_detail: targetDetail.trim(),
       action_physics: (dynamics === OTHER_LABEL ? dynamicsOther.trim() : dynamics) ?? "",
       action_detail: actionDetail.trim(),
       reality_link: (reality === OTHER_LABEL ? realityOther.trim() : reality) ?? "",
       reality_detail: realityDetail.trim(),
       vividness,
       is_lucid: isLucid,
+      final_memo: finalMemo.trim(),
     };
     onComplete(survey);
   };
@@ -316,10 +319,10 @@ export default function DreamWizard({
               )}
               <SubjectiveGuideField
                 visible={light !== null}
-                guide="이 꿈에 중요한 소재를 중심으로 신비로운 [꿈 제목]을 붙여주세요."
+                guide="💡 이 꿈에 등장한 가장 중요한 소재를 중심으로 신비로운 [꿈 제목]을 붙여주세요."
                 value={title}
                 onChange={setTitle}
-                placeholder="예: 흑백 도시에서 만난 새벽의 목소리"
+                placeholder="예: 황금빛 고래와 함께한 하늘 비행 (나중에 쉽게 찾아볼 수 있도록 핵심 소재를 넣어 짧게 적어보세요.)"
                 as="input"
               />
             </div>
@@ -328,7 +331,7 @@ export default function DreamWizard({
           {step === 2 && (
             <div>
               <h3 className="text-base font-medium text-white">
-                공간의 밀도: 영혼이 머물던 장소의 깊이를 고르세요.
+                공간의 밀도: 꿈속 장소의 특징을 선택하고, 그 풍경을 들려주세요.
               </h3>
               <div className="mt-4 flex flex-wrap gap-2">
                 {SPACE_OPTIONS.map((opt) => (
@@ -355,10 +358,10 @@ export default function DreamWizard({
               )}
               <SubjectiveGuideField
                 visible={space !== null}
-                guide={"꿈의 상황을 생생하게 재현하기 위해, 당시 공간의 풍경을 '~했다'가 아닌 '~하고 있다' 같은 [현재형으로 상세히] 묘사해 주세요."}
+                guide={"🏙️ 그 장소는 구체적으로 어떤 모습이었나요? 마치 지금 그곳에 있는 것처럼 '현재형(~하고 있다)'으로 상세히 적어보세요."}
                 value={spaceDetail}
                 onChange={setSpaceDetail}
-                placeholder="예: 좁은 골목 사이로 안개가 스며들고 있다..."
+                placeholder="예: 끝이 보이지 않는 거대한 회색 미로 복도를 헤매고 있다. 사방이 꽉 막혀 있어 숨이 막히는 기분이다."
               />
             </div>
           )}
@@ -366,7 +369,7 @@ export default function DreamWizard({
           {step === 3 && (
             <div>
               <h3 className="text-base font-medium text-white">
-                무의식의 투사: 시선을 사로잡은 존재는 누구였나요?
+                무의식의 투사: 꿈속에서 당신의 시선을 가장 강렬하게 사로잡은 존재는 누구인가요?
               </h3>
               <div className="mt-4 flex flex-wrap gap-2">
                 {PROJECTION_OPTIONS.map((opt) => (
@@ -393,10 +396,10 @@ export default function DreamWizard({
               )}
               <SubjectiveGuideField
                 visible={projection !== null}
-                guide="그 인물이나 사물은 구체적으로 어떤 모습이었거나 누구와 닮았었나요?"
-                value={identityDetail}
-                onChange={setIdentityDetail}
-                placeholder="예: 표정이 없었고, 예전 담임 선생님과 닮아 있었다..."
+                guide="👥 그 인물이나 사물은 구체적으로 어떤 외형이나 분위기를 풍겼나요? 느낀 감정을 형용사 위주로 표현해 보세요."
+                value={targetDetail}
+                onChange={setTargetDetail}
+                placeholder="예: 초등학교 때 친구인데 얼굴이 안개처럼 흐릿하다. 나를 보고 온화하게 웃고 있지만 왠지 모르게 서글픈 분위기가 난다."
               />
             </div>
           )}
@@ -404,7 +407,7 @@ export default function DreamWizard({
           {step === 4 && (
             <div>
               <h3 className="text-base font-medium text-white">
-                정신적 역동: 그곳에서 당신이 행한 본능적인 움직임은 무엇인가요?
+                정신적 역동: 그곳에서 당신이 행한 본능적인 움직임이나 사건은 무엇인가요?
               </h3>
               <div className="mt-4 flex flex-wrap gap-2">
                 {DYNAMICS_OPTIONS.map((opt) => (
@@ -431,10 +434,10 @@ export default function DreamWizard({
               )}
               <SubjectiveGuideField
                 visible={dynamics !== null}
-                guide="그 행동이나 사건이 일어날 때 주변 분위기나 결정적인 조각이 있다면 적어주세요."
+                guide="🏃 어떤 행동을 했고 어떤 사건이 일어났나요? 꿈의 스토리가 이어지도록 생생하게 묘사해 주세요."
                 value={actionDetail}
                 onChange={setActionDetail}
-                placeholder="예: 사이렌 소리가 멀리서 들렸고, 발밑이 계속 꺼지는 느낌이었다..."
+                placeholder="예: 검은 그림자를 피해 필사적으로 달리고 있다. 발이 진흙 속에 빠진 것처럼 무거워 앞으로 잘 나아가지지 않는다."
               />
             </div>
           )}
@@ -442,7 +445,7 @@ export default function DreamWizard({
           {step === 5 && (
             <div>
               <h3 className="text-base font-medium text-white">
-                현실과의 관련성: 이 꿈은 최근 당신의 삶과 어떻게 연결되어 있나요?
+                현실과의 관련성: 이 꿈은 최근 당신의 일상이나 마음 상태와 어떻게 연결되어 있나요?
               </h3>
               <div className="mt-4 flex flex-wrap gap-2">
                 {REALITY_OPTIONS.map((opt) => (
@@ -469,10 +472,10 @@ export default function DreamWizard({
               )}
               <SubjectiveGuideField
                 visible={reality !== null}
-                guide="꿈을 꾼 날 전후 1~2일간 있었던 외부 사건들이나 마음의 풍경들을 떠올리며 깨달음을 적어보세요."
+                guide="🧘 꿈을 꾼 전후 1~2일간 현실에서 있었던 일이나 당신의 '마음의 풍경'을 떠올리며 꿈이 주는 깨달음을 적어보세요."
                 value={realityDetail}
                 onChange={setRealityDetail}
-                placeholder="예: 요즘 이직 문제로 마음이 복잡했던 게 떠올랐다..."
+                placeholder="예: 내일 있을 중요한 프로젝트 발표 기한 때문에 엄청난 스트레스를 받고 있었는데, 도망치고 싶던 심리가 투사된 것 같다."
               />
             </div>
           )}
@@ -480,7 +483,7 @@ export default function DreamWizard({
           {step === 6 && (
             <div>
               <h3 className="text-base font-medium text-white">
-                차원 제어 지수: 현실 자아가 개입한 정도를 설정하세요.
+                차원 제어 지수: 현실의 자아가 꿈에 개입한 정도와 선명도를 설정하세요.
               </h3>
 
               <div className="mt-5">
@@ -519,9 +522,17 @@ export default function DreamWizard({
                 </button>
               </div>
 
-              <div className="mt-6 rounded-2xl border border-dashed border-white/15 bg-white/5 p-4">
-                <p className="text-sm text-white">🖼️ 꿈의 장면 스케치 (선택)</p>
-                <p className="mt-0.5 text-xs text-slate-500">기억에 남는 이미지가 있다면 그림이나 사진을 첨부해 보세요.</p>
+              <div className="mt-6 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4 backdrop-blur-md">
+                <p className="text-xs leading-relaxed text-violet-300/80">
+                  🎨 글 외에 뇌리에 스친 시각적인 잔상이나 스케치, 이미지가 있다면 함께 첨부해 주세요.
+                </p>
+                <textarea
+                  value={finalMemo}
+                  onChange={(event) => setFinalMemo(event.target.value)}
+                  placeholder="그림/스케치 파일 업로드 또는 추가적인 무의식의 잔상을 자유롭게 메모하세요."
+                  rows={2}
+                  className={`${otherInputClass()} resize-none`}
+                />
                 <div className="mt-3 flex items-center gap-3">
                   <label className="cursor-pointer rounded-full border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-xs text-violet-200 transition-colors hover:border-violet-400/60 hover:bg-violet-500/20">
                     📎 파일 선택

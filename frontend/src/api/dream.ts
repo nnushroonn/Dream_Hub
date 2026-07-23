@@ -72,13 +72,14 @@ export interface DreamSurvey {
   space_depth: string;
   space_detail: string;
   identity_factor: string;
-  identity_detail: string;
+  target_detail: string;
   action_physics: string;
   action_detail: string;
   reality_link: string;
   reality_detail: string;
   vividness: number;
   is_lucid: boolean;
+  final_memo: string;
 }
 
 export interface DreamEntryInput {

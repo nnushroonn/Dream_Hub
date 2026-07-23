@@ -71,14 +71,14 @@ SYSTEM_PROMPT_TEMPLATE = """당신은 깊은 통찰력과 감성적인 언어 �
 0. 꿈의 제목: {title}
 1. 배경의 조도 (Atmosphere & Light): {brightness}
 2. 공간의 밀도와 장소 (Space Depth): {space_depth} — 상세 묘사: {space_detail}
-3. 시선을 끈 핵심 존재 (Identity Factor): {identity_factor} — 상세 묘사: {identity_detail}
+3. 시선을 끈 핵심 대상 (Target Factor): {identity_factor} — 상세 묘사: {target_detail}
 4. 무의식 속 핵심 행동 (Action & Physics): {action_physics} — 상세 묘사: {action_detail}
 5. 현실과의 공명 (Reality Resonance): {reality_link} — 상세 서술: {reality_detail}
-6. 차원 제어 지수 (Vividness & Lucid): 선명도 {vividness}%, 자각몽 여부 {is_lucid}
+6. 차원 제어 지수 (Vividness & Lucid): 선명도 {vividness}%, 자각몽 여부 {is_lucid}, 추가 잔상 메모: {final_memo}
 
 [수행 지시사항]
 1. 분석적 신뢰성: 뻔한 미신적 해몽이 아닌, 유저가 서술한 공간·인물·행동·현실 공명 묘사 간의 연결 고리를 짚어내며 심리학적으로 위로와 통찰을 주는 본문을 작성하세요.
-2. 본문 구조: description은 반드시 '무의식 상태 → 상징 분석 → 자아의 메시지' 3개 문단으로 구성하고, 문단 사이는 빈 줄로 구분하세요. 6가지 데이터(제목·조도·공간·존재·행동·현실 공명)가 최소 하나 이상의 문단에 유기적으로 녹아들어야 하며, 전체 5~6문장 이상의 풍부한 분량으로 작성해 "내 꿈을 정말 정밀하게 읽어내는구나"라는 신뢰를 주세요.
+2. 본문 구조: description은 반드시 '무의식 상태 → 상징 분석 → 자아의 메시지' 3개 문단으로 구성하고, 문단 사이는 빈 줄로 구분하세요. 6가지 데이터(제목·조도·공간·대상·행동·현실 공명)가 최소 하나 이상의 문단에 유기적으로 녹아들어야 하며, 전체 5~6문장 이상의 풍부한 분량으로 작성해 "내 꿈을 정말 정밀하게 읽어내는구나"라는 신뢰를 주세요.
 3. 행운의 요소 근거: lucky_item_reason과 lucky_number_reason은 단순 부연이 아니라, 유저의 구체적인 입력값(조도·행동·선명도·자각몽 여부 등)을 직접 인용하며 왜 지금 이 아이템/숫자가 필요한지 설득력 있게 설명하세요. 막연한 미사여구는 금지합니다.
 4. 톤앤매너: 'Dream_Hub' 서비스의 정체성에 맞게 신비롭고 몽환적이면서도, 내면을 꿰뚫어 보는 듯한 차분하고 세련된 어조를 유지하세요.
 5. 다양성과 동적 생성: 고정된 결과는 절대 금지합니다. 입력값들의 상호작용을 계산하여 매번 유니크한 키워드 태그와 행운의 요소를 실시간으로 창작하세요.
@@ -106,13 +106,14 @@ class DreamSurveyInput(BaseModel):
     space_depth: str
     space_detail: str
     identity_factor: str
-    identity_detail: str
+    target_detail: str
     action_physics: str
     action_detail: str
     reality_link: str
     reality_detail: str
     vividness: int
     is_lucid: bool
+    final_memo: str
 
 
 class DreamInterpretationRequest(BaseModel):
@@ -133,13 +134,14 @@ def build_system_prompt(survey: DreamSurveyInput) -> str:
         space_depth=survey.space_depth,
         space_detail=survey.space_detail,
         identity_factor=survey.identity_factor,
-        identity_detail=survey.identity_detail,
+        target_detail=survey.target_detail,
         action_physics=survey.action_physics,
         action_detail=survey.action_detail,
         reality_link=survey.reality_link,
         reality_detail=survey.reality_detail,
         vividness=survey.vividness,
         is_lucid="True" if survey.is_lucid else "False",
+        final_memo=survey.final_memo or "(없음)",
     )
 
 
