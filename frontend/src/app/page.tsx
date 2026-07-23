@@ -272,148 +272,180 @@ export default function HomePage() {
               오늘의 꿈 기록하기
             </Link>
           </div>
-
-          {/* 꿈해몽 사전 포털 보드: 검색 + 사전 바로가기 + 카테고리 숏컷을 하나의 보드로 통합 */}
-          <div className="group relative mt-8 w-full max-w-xl">
-            <div className="absolute inset-0 rounded-3xl bg-purple-500/20 opacity-40 blur-2xl transition-all duration-300 ease-out group-hover:opacity-80 group-hover:blur-[48px]" />
-            <div className="relative overflow-hidden rounded-3xl border border-purple-400/20 bg-white/5 p-6 text-left backdrop-blur-md transition-all duration-300 group-hover:-translate-y-0.5 group-hover:border-purple-400/50 group-hover:shadow-[0_0_45px_rgba(168,85,247,0.3)]">
-              <p className="text-xs tracking-widest text-purple-300/70 uppercase">🔮 Dream Dictionary</p>
-
-              <form onSubmit={handleHeroSearchSubmit} className="mt-3">
-                <div className="flex items-center gap-2 rounded-full border border-violet-400/30 bg-black/20 px-5 py-3 transition-colors focus-within:border-violet-400/60">
-                  <span className="text-base">🔍</span>
-                  <input
-                    type="text"
-                    value={heroSearchQuery}
-                    onChange={(event) => setHeroSearchQuery(event.target.value)}
-                    placeholder="🔍 '하늘을 나는 꿈', '뱀에게 물리는 꿈'처럼 떠오르는 구절을 편하게 검색해 보세요."
-                    className="flex-1 bg-transparent text-sm text-white placeholder:text-slate-500/80 focus:outline-none"
-                  />
-                </div>
-              </form>
-
-              <div className="mt-4">
-                <Link
-                  href="/dictionary"
-                  className="inline-block rounded-full border border-purple-400/30 bg-purple-500/10 px-4 py-1.5 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5 hover:border-purple-300/60 hover:bg-purple-500/20"
-                >
-                  <span className="bg-gradient-to-r from-violet-300 via-fuchsia-300 to-purple-300 bg-clip-text text-transparent">
-                    📖 꿈해몽 사전 전체 보기 ➔
-                  </span>
-                </Link>
-              </div>
-
-              {/* 카테고리 퀵 숏컷: 사전의 대분류를 검색창 바로 아래에서 바로 필터링해 진입 */}
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                {DICTIONARY_CATEGORIES.map((category) => (
-                  <button
-                    key={category.label}
-                    type="button"
-                    onClick={() => router.push(`/dictionary?category=${encodeURIComponent(category.label)}`)}
-                    className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-all duration-300 hover:-translate-y-0.5 hover:border-purple-400/40 hover:bg-purple-500/10 hover:text-purple-200"
-                  >
-                    <span>{category.emoji}</span>
-                    {category.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
       <div className="relative mx-auto h-px w-full max-w-3xl bg-gradient-to-r from-transparent via-indigo-400/30 to-transparent" />
 
-      <main className="relative mx-auto max-w-5xl px-6 py-16">
-        <DreamCalendarWidget />
+      {/* 2단 반응형 대시보드: 데스크톱에서는 좌(개인 데이터)/우(커뮤니티 데이터)로 나뉘고,
+          모바일(lg 미만)에서는 자연스럽게 한 줄로 쌓인다. */}
+      <main className="relative mx-auto max-w-6xl px-6 py-16">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+          {/* 좌측: 개인 데이터 영역 - 사전 포털 보드 + 나의 꿈 별자리 캘린더 */}
+          <div className="lg:col-span-8">
+            {/* 꿈해몽 사전 포털 보드: 검색 + 사전 바로가기 + 카테고리 숏컷을 하나의 보드로 통합 */}
+            <div className="group relative w-full">
+              <div className="absolute inset-0 rounded-3xl bg-purple-500/20 opacity-40 blur-2xl transition-all duration-300 ease-out group-hover:opacity-80 group-hover:blur-[48px]" />
+              <div className="relative overflow-hidden rounded-3xl border border-purple-400/20 bg-white/5 p-6 text-left backdrop-blur-md transition-all duration-300 group-hover:-translate-y-0.5 group-hover:border-purple-400/50 group-hover:shadow-[0_0_45px_rgba(168,85,247,0.3)]">
+                <p className="text-xs tracking-widest text-purple-300/70 uppercase">🔮 Dream Dictionary</p>
 
-        {/* 실시간 트렌드 키워드: 꿈 기록소(공개 글) + 꿈해몽 사전(검색어) 실제 집계, 세로형 랭킹 리스트 */}
-        <section className="mx-auto mt-16 max-w-2xl">
-          <h2 className="text-center text-lg font-semibold text-slate-100">✨ 실시간 트렌드 키워드</h2>
-          <div className="mt-5 flex flex-col gap-3">
-            {isLoadingTrends ? (
-              Array.from({ length: 5 }, (_, index) => (
-                <div
-                  key={index}
-                  className="flex w-full animate-pulse items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-4"
-                >
-                  <span className="h-6 w-6 shrink-0 rounded-full bg-white/10" />
-                  <span className="h-4 flex-1 rounded-full bg-white/10" />
-                  <span className="h-3 w-10 shrink-0 rounded-full bg-white/10" />
+                <form onSubmit={handleHeroSearchSubmit} className="mt-3">
+                  <div className="flex items-center gap-2 rounded-full border border-violet-400/30 bg-black/20 px-5 py-3 transition-colors focus-within:border-violet-400/60">
+                    <span className="text-base">🔍</span>
+                    <input
+                      type="text"
+                      value={heroSearchQuery}
+                      onChange={(event) => setHeroSearchQuery(event.target.value)}
+                      placeholder="🔍 '하늘을 나는 꿈', '뱀에게 물리는 꿈'처럼 떠오르는 구절을 편하게 검색해 보세요."
+                      className="flex-1 bg-transparent text-sm text-white placeholder:text-slate-500/80 focus:outline-none"
+                    />
+                  </div>
+                </form>
+
+                <div className="mt-4">
+                  <Link
+                    href="/dictionary"
+                    className="inline-block rounded-full border border-purple-400/30 bg-purple-500/10 px-4 py-1.5 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5 hover:border-purple-300/60 hover:bg-purple-500/20"
+                  >
+                    <span className="bg-gradient-to-r from-violet-300 via-fuchsia-300 to-purple-300 bg-clip-text text-transparent">
+                      📖 꿈해몽 사전 전체 보기 ➔
+                    </span>
+                  </Link>
                 </div>
-              ))
-            ) : trends.length > 0 ? (
-              trends.map((trend, index) => {
-                const style = rankStyle(index);
-                return (
-                  <button
-                    key={trend.keyword}
-                    type="button"
-                    onClick={() => router.push(`/dictionary?search=${encodeURIComponent(trend.keyword)}`)}
-                    className={`group flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-left backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:cursor-pointer hover:bg-white/10 ${style.row}`}
-                  >
-                    <span className={`w-8 shrink-0 text-center text-2xl font-bold ${style.number}`}>
-                      {index + 1}
-                    </span>
-                    <span className="flex-1 truncate font-medium text-slate-100">{toHashtagDisplay(trend.keyword)}</span>
-                    <span className="shrink-0 text-sm text-violet-300/80">{trend.count}회</span>
-                    <span className="ml-1 -translate-x-1 text-violet-300/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-violet-300/90">
-                      ➔
-                    </span>
-                  </button>
-                );
-              })
-            ) : (
-              <p className="rounded-2xl border border-white/10 bg-white/5 px-5 py-6 text-center text-xs text-slate-500">
-                아직 트렌드로 집계된 꿈이 없어요. 첫 기록을 남겨보세요 ✨
-              </p>
-            )}
-          </div>
-        </section>
 
-        {/* 오늘의 베스트 꿈 */}
-        <section className="mt-16">
-          <h2 className="text-lg font-semibold text-slate-100">🌠 오늘의 베스트 꿈</h2>
-          <div className="mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {bestDreams.map((dream, index) => {
-              const isLiked = likedIds.has(dream.id);
-              return (
-                <article
-                  key={dream.id}
-                  className="group overflow-hidden rounded-2xl border border-violet-400/10 bg-violet-950/30 backdrop-blur-md transition-all duration-300 hover:-translate-y-2 hover:border-violet-400/40 hover:bg-violet-950/50 hover:shadow-2xl hover:shadow-violet-900/40"
-                >
-                  {/* 몽환적인 파스텔톤 썸네일 배너 */}
-                  <div
-                    className={`relative flex h-28 items-center justify-center overflow-hidden bg-gradient-to-br ${
-                      CARD_BANNERS[index % CARD_BANNERS.length]
-                    }`}
-                  >
-                    <span className="text-6xl opacity-40 blur-[0.5px] transition-transform duration-300 group-hover:scale-110">
-                      {dream.emotion}
-                    </span>
-                  </div>
-
-                  <div className="p-6">
-                    <h3 className="font-semibold text-white">{dream.title}</h3>
-                    <p className="mt-3 line-clamp-2 text-sm text-slate-400">{dream.content}</p>
-                    <span className="mt-4 block text-xs text-slate-500">by {dream.author}</span>
+                {/* 카테고리 퀵 숏컷: 사전의 대분류를 검색창 바로 아래에서 바로 필터링해 진입 */}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {DICTIONARY_CATEGORIES.map((category) => (
                     <button
+                      key={category.label}
                       type="button"
-                      onClick={() => toggleEmpathy(dream.id)}
-                      className={`mt-3 flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-2 text-xs transition-colors ${
-                        isLiked
-                          ? "border-violet-400 bg-violet-500/30 text-violet-100"
-                          : "border-white/10 text-slate-400 hover:border-violet-400/40 hover:text-violet-200"
-                      }`}
+                      onClick={() => router.push(`/dictionary?category=${encodeURIComponent(category.label)}`)}
+                      className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-all duration-300 hover:-translate-y-0.5 hover:border-purple-400/40 hover:bg-purple-500/10 hover:text-purple-200"
                     >
-                      🙋 저도 이런 꿈 꾼 적 있어요 <span>{dream.empathy_count}</span>
+                      <span>{category.emoji}</span>
+                      {category.label}
                     </button>
-                  </div>
-                </article>
-              );
-            })}
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 광고 Slot B: 좌측 인피드 가로 배너 (728x90) - 포털 보드와 캘린더 사이 */}
+            <div
+              role="complementary"
+              aria-label="광고 영역"
+              className="my-6 flex max-h-[90px] w-full items-center justify-center rounded-xl border border-white/10 bg-white/5 py-6 text-xs text-slate-500"
+            >
+              AD · 728×90
+            </div>
+
+            <DreamCalendarWidget />
           </div>
-        </section>
+
+          {/* 우측: 커뮤니티 데이터 영역 - 실시간 트렌드 키워드 + 오늘의 베스트 꿈 */}
+          <div className="lg:col-span-4">
+            {/* 실시간 트렌드 키워드: 꿈 기록소(공개 글) + 꿈해몽 사전(검색어) 실제 집계, 세로형 랭킹 리스트 */}
+            <section>
+              <h2 className="text-lg font-semibold text-slate-100">✨ 실시간 트렌드 키워드</h2>
+              <div className="mt-4 flex flex-col gap-2.5">
+                {isLoadingTrends ? (
+                  Array.from({ length: 5 }, (_, index) => (
+                    <div
+                      key={index}
+                      className="flex w-full animate-pulse items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+                    >
+                      <span className="h-5 w-5 shrink-0 rounded-full bg-white/10" />
+                      <span className="h-3.5 flex-1 rounded-full bg-white/10" />
+                      <span className="h-3 w-8 shrink-0 rounded-full bg-white/10" />
+                    </div>
+                  ))
+                ) : trends.length > 0 ? (
+                  trends.map((trend, index) => {
+                    const style = rankStyle(index);
+                    return (
+                      <button
+                        key={trend.keyword}
+                        type="button"
+                        onClick={() => router.push(`/dictionary?search=${encodeURIComponent(trend.keyword)}`)}
+                        className={`group flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:cursor-pointer hover:bg-white/10 ${style.row}`}
+                      >
+                        <span className={`w-6 shrink-0 text-center text-lg font-bold ${style.number}`}>
+                          {index + 1}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-100">
+                          {toHashtagDisplay(trend.keyword)}
+                        </span>
+                        <span className="shrink-0 text-xs text-violet-300/80">{trend.count}회</span>
+                        <span className="ml-0.5 -translate-x-1 text-violet-300/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-violet-300/90">
+                          ➔
+                        </span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="rounded-xl border border-white/10 bg-white/5 px-4 py-5 text-center text-xs text-slate-500">
+                    아직 트렌드로 집계된 꿈이 없어요. 첫 기록을 남겨보세요 ✨
+                  </p>
+                )}
+              </div>
+            </section>
+
+            {/* 오늘의 베스트 꿈: 사이드바 폭에 맞춘 컴팩트 리스트 카드 */}
+            <section className="mt-10">
+              <h2 className="text-lg font-semibold text-slate-100">🌠 오늘의 베스트 꿈</h2>
+              <div className="mt-4 flex flex-col gap-3">
+                {bestDreams.map((dream, index) => {
+                  const isLiked = likedIds.has(dream.id);
+                  return (
+                    <article
+                      key={dream.id}
+                      className="group rounded-2xl border border-violet-400/10 bg-violet-950/30 p-4 backdrop-blur-md transition-all duration-300 hover:border-violet-400/40 hover:bg-violet-950/50"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-base ${
+                            CARD_BANNERS[index % CARD_BANNERS.length]
+                          }`}
+                        >
+                          {dream.emotion}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="truncate text-sm font-semibold text-white">{dream.title}</h3>
+                          <p className="mt-1 line-clamp-3 text-xs text-slate-400">{dream.content}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <span className="truncate text-[11px] text-slate-500">by {dream.author}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleEmpathy(dream.id)}
+                          className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                            isLiked
+                              ? "border-violet-400 bg-violet-500/30 text-violet-100"
+                              : "border-white/10 text-slate-400 hover:border-violet-400/40 hover:text-violet-200"
+                          }`}
+                        >
+                          🙋 {dream.empathy_count}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* 광고 Slot A: 우측 사이드바 하단 고정석 (300x250/600) */}
+            <div
+              role="complementary"
+              aria-label="광고 영역"
+              className="my-6 flex min-h-[250px] w-full flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 text-xs text-slate-500"
+            >
+              <span>AD</span>
+              <span className="text-[10px] text-slate-600">Sponsored</span>
+            </div>
+          </div>
+        </div>
       </main>
 
       {/* 오늘의 무의식 위상 상세 운세 모달 */}

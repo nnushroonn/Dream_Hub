@@ -41,14 +41,14 @@ export default function DreamCalendarWidget() {
   const hasAnyEntry = entryMap.size > 0;
 
   return (
-    <section className="relative mx-auto max-w-2xl overflow-hidden rounded-3xl border border-white/10 bg-white/5 px-6 py-8 text-center backdrop-blur-md">
+    <section className="relative w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 px-4 py-5 text-center backdrop-blur-md">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(129,90,255,0.12),transparent_60%)]" />
 
-      <h2 className="relative text-lg font-semibold text-slate-100">🌌 나의 지난밤 꿈 별자리</h2>
+      <h2 className="relative text-base font-semibold text-slate-100">🌌 나의 지난밤 꿈 별자리</h2>
       <p className="relative mt-1 text-xs text-slate-500">{monthLabel}, 당신의 무의식이 그려낸 궤적</p>
 
       {isAuthenticated && !hasAnyEntry && (
-        <p className="relative mt-6 text-xs text-slate-500">
+        <p className="relative mt-4 text-xs text-slate-500">
           아직 이번 달 기록이 없어요.{" "}
           <Link href="/diary" className="text-violet-300 underline-offset-2 hover:underline">
             첫 꿈을 기록해 보세요
@@ -57,11 +57,11 @@ export default function DreamCalendarWidget() {
         </p>
       )}
 
-      <div className="relative mt-8 flex justify-center">
+      <div className="relative mt-5 flex justify-center">
         <ConstellationDots daysInMonth={daysInMonth} startWeekday={startWeekday} entries={entryMap} />
       </div>
 
-      <div className="relative mt-6">
+      <div className="relative mt-4">
         <ConstellationMoodLegend />
       </div>
 
