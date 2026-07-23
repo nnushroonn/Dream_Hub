@@ -25,10 +25,11 @@ export async function getMoonPhase(): Promise<MoonPhase> {
   return data;
 }
 
+// 실시간 트렌드 키워드: 꿈 기록소(공개 글 제목)와 꿈해몽 사전(검색 횟수)을 합산한 실제 집계
+// (routers/trends.py). 더미 이모지는 없다 - 홈 화면이 순수하게 keyword/count만으로 렌더링한다.
 export interface Trend {
   keyword: string;
   count: number;
-  emoji: string;
 }
 
 export interface LiveTickerEntry {
@@ -57,8 +58,8 @@ export interface BestDream {
 }
 
 export async function getTrends(): Promise<Trend[]> {
-  const { data } = await api.get<{ trends: Trend[] }>("/api/home/trends");
-  return data.trends;
+  const { data } = await api.get<Trend[]>("/api/trends/keywords");
+  return data;
 }
 
 export async function getBestDreams(): Promise<BestDream[]> {

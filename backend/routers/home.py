@@ -1,4 +1,6 @@
-"""메인 홈: 히어로 섹션 / 실시간 트렌드 키워드 / 오늘의 베스트 꿈 추천 (더미 데이터) / 달 위상 위젯."""
+"""메인 홈: 히어로 섹션 / 오늘의 베스트 꿈 추천 (더미 데이터) / 달 위상 위젯.
+
+실시간 트렌드 키워드는 routers/trends.py가 실제 DB 데이터로 별도 제공한다."""
 
 import math
 from datetime import date, datetime, time, timedelta, timezone
@@ -269,19 +271,6 @@ def calculate_moon_phase(now: datetime | None = None) -> dict:
 @router.get("/moon-phase")
 def get_moon_phase():
     return calculate_moon_phase()
-
-
-@router.get("/trends")
-def get_trends():
-    return {
-        "trends": [
-            {"keyword": "하늘을_나는_꿈", "count": 128, "emoji": "🕊️"},
-            {"keyword": "이빨이_빠지는_꿈", "count": 97, "emoji": "🦷"},
-            {"keyword": "물에_빠지는_꿈", "count": 64, "emoji": "🌊"},
-            {"keyword": "누군가에게_쫓기는_꿈", "count": 51, "emoji": "🏃"},
-            {"keyword": "돌아가신_분을_만나는_꿈", "count": 40, "emoji": "🕯️"},
-        ]
-    }
 
 
 @router.get("/best-dreams")

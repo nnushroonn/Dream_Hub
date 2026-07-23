@@ -208,6 +208,9 @@ export default function DictionaryPage() {
     try {
       const parsed = await parseSearchQuery(trimmed);
       await openKeywordDetail(parsed.keyword || trimmed, parsed.context);
+      // openKeywordDetail은 검색창을 파싱된 대표 키워드로 채우지만, 검색창에는 유저가
+      // 실제로 입력했던(또는 트렌드에서 넘어온) 구절 원문을 그대로 남겨야 한다.
+      setQuery(trimmed);
     } catch {
       // 파싱에 실패해도 원문 전체를 키워드로 취급해 기존과 동일하게 동작시킨다.
       await openKeywordDetail(trimmed);

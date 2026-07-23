@@ -46,18 +46,12 @@ interface Star {
   delay: string;
 }
 
-// 홈 트렌드 키워드는 "하늘을_나는_꿈" 같은 해시태그형 문구라 사전 검색어로 바로 쓰기엔
-// 너무 길다. 꿈해몽 사전으로 넘길 핵심 단어만 뽑아내는 매핑이다.
-const TREND_DICTIONARY_KEYWORD_MAP: Record<string, string> = {
-  하늘을_나는_꿈: "하늘",
-  이빨이_빠지는_꿈: "이빨",
-  물에_빠지는_꿈: "물",
-  누군가에게_쫓기는_꿈: "쫓기는",
-  돌아가신_분을_만나는_꿈: "돌아가신 조상",
-};
-
-function resolveTrendDictionaryKeyword(rawKeyword: string): string {
-  return TREND_DICTIONARY_KEYWORD_MAP[rawKeyword] ?? rawKeyword.replace(/_?꿈$/, "").replace(/_/g, " ").trim();
+// 트렌드 키워드는 백엔드에서 이미 "하늘을 나는 꿈"처럼 공백이 있는 완전한 구절로 온다.
+// 화면에는 해시태그처럼 보이도록 공백만 언더바로 바꿔 표시하고, 클릭 시에는 이 표시용
+// 변환과 무관하게 원본 구절(trend.keyword)을 그대로 사전 검색어로 넘긴다 - 절대 단어를
+// 임의로 쪼개거나 추출하지 않는다.
+function toHashtagDisplay(keyword: string): string {
+  return `#${keyword.trim().replace(/\s+/g, "_")}`;
 }
 
 const CARD_BANNERS = [
@@ -98,6 +92,7 @@ export default function HomePage() {
   const { login } = useAuthStore();
 
   const [trends, setTrends] = useState<Trend[]>([]);
+  const [isLoadingTrends, setIsLoadingTrends] = useState(true);
   const [bestDreams, setBestDreams] = useState<BestDream[]>([]);
   const [likedIds, setLikedIds] = useState<Set<number>>(new Set());
   const [stars, setStars] = useState<Star[]>([]);
@@ -120,9 +115,11 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // TODO: 실제 구현 시 로딩/에러 상태 처리 추가
   useEffect(() => {
-    getTrends().then(setTrends).catch(() => {});
+    getTrends()
+      .then(setTrends)
+      .catch(() => {})
+      .finally(() => setIsLoadingTrends(false));
     getBestDreams().then(setBestDreams).catch(() => {});
     getMoonPhase().then(setMoonPhase).catch(() => {});
   }, []);
@@ -361,33 +358,47 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* 실시간 트렌드 키워드: 세로형 랭킹 리스트 (완전 중앙 정렬) */}
+        {/* 실시간 트렌드 키워드: 꿈 기록소(공개 글) + 꿈해몽 사전(검색어) 실제 집계, 세로형 랭킹 리스트 */}
         <section className="mx-auto mt-16 max-w-2xl">
           <h2 className="text-center text-lg font-semibold text-slate-100">✨ 실시간 트렌드 키워드</h2>
           <div className="mt-5 flex flex-col gap-3">
-            {trends.map((trend, index) => {
-              const style = rankStyle(index);
-              return (
-                <button
-                  key={trend.keyword}
-                  type="button"
-                  onClick={() =>
-                    router.push(`/dictionary?search=${encodeURIComponent(resolveTrendDictionaryKeyword(trend.keyword))}`)
-                  }
-                  className={`group flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-left backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:cursor-pointer hover:bg-white/10 ${style.row}`}
+            {isLoadingTrends ? (
+              Array.from({ length: 5 }, (_, index) => (
+                <div
+                  key={index}
+                  className="flex w-full animate-pulse items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-4"
                 >
-                  <span className={`mr-1 w-8 shrink-0 text-center text-2xl font-bold ${style.number}`}>
-                    {index + 1}
-                  </span>
-                  <span className="text-2xl">{trend.emoji}</span>
-                  <span className="flex-1 font-medium text-slate-100">#{trend.keyword}</span>
-                  <span className="text-sm text-violet-300/80">{trend.count}회</span>
-                  <span className="ml-1 -translate-x-1 text-violet-300/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-violet-300/90">
-                    ➔
-                  </span>
-                </button>
-              );
-            })}
+                  <span className="h-6 w-6 shrink-0 rounded-full bg-white/10" />
+                  <span className="h-4 flex-1 rounded-full bg-white/10" />
+                  <span className="h-3 w-10 shrink-0 rounded-full bg-white/10" />
+                </div>
+              ))
+            ) : trends.length > 0 ? (
+              trends.map((trend, index) => {
+                const style = rankStyle(index);
+                return (
+                  <button
+                    key={trend.keyword}
+                    type="button"
+                    onClick={() => router.push(`/dictionary?search=${encodeURIComponent(trend.keyword)}`)}
+                    className={`group flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-left backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:cursor-pointer hover:bg-white/10 ${style.row}`}
+                  >
+                    <span className={`w-8 shrink-0 text-center text-2xl font-bold ${style.number}`}>
+                      {index + 1}
+                    </span>
+                    <span className="flex-1 truncate font-medium text-slate-100">{toHashtagDisplay(trend.keyword)}</span>
+                    <span className="shrink-0 text-sm text-violet-300/80">{trend.count}회</span>
+                    <span className="ml-1 -translate-x-1 text-violet-300/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-violet-300/90">
+                      ➔
+                    </span>
+                  </button>
+                );
+              })
+            ) : (
+              <p className="rounded-2xl border border-white/10 bg-white/5 px-5 py-6 text-center text-xs text-slate-500">
+                아직 트렌드로 집계된 꿈이 없어요. 첫 기록을 남겨보세요 ✨
+              </p>
+            )}
           </div>
         </section>
 

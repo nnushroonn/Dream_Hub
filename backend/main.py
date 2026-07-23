@@ -5,7 +5,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 import models  # noqa: F401 - Base.metadata에 테이블 정의를 등록하기 위해 임포트만으로 충분
 from database import Base, engine, get_settings, redis_client
-from routers import ai_interpretation, auth, community, diary, dictionary, dreams, home, lucid, mypage
+from routers import ai_interpretation, auth, community, diary, dictionary, dreams, home, lucid, mypage, trends
 
 settings = get_settings()
 
@@ -38,6 +38,7 @@ app.include_router(lucid.router)
 app.include_router(ai_interpretation.router)
 app.include_router(dreams.router)
 app.include_router(dictionary.router)
+app.include_router(trends.router)
 
 
 @app.get("/")
