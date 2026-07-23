@@ -96,7 +96,7 @@ export function ConstellationDots({ daysInMonth, startWeekday, entries }: Conste
                   className={`flex h-full w-full select-none items-center justify-center rounded-full transition-all duration-300 ${
                     entry
                       ? `text-white font-medium ${MOOD_NODE_GLOW[entry.mood]} ${isHovered ? "scale-110" : ""}`
-                      : "text-xs font-light text-slate-600/20 hover:bg-white/5 hover:backdrop-blur-sm"
+                      : "text-xs font-light text-slate-400/50 hover:bg-white/5 hover:backdrop-blur-sm"
                   }`}
                 >
                   <span className={entry ? "text-sm" : undefined}>{day}</span>
