@@ -340,7 +340,7 @@ export default function HomePage() {
             <div
               role="complementary"
               aria-label="광고 영역"
-              className="my-6 flex h-[90px] w-full items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03]"
+              className="my-6 flex h-[90px] w-full items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.03]"
             >
               <span className="text-[11px] tracking-wide text-slate-600">Sponsored</span>
             </div>
@@ -452,9 +452,9 @@ export default function HomePage() {
             <div
               role="complementary"
               aria-label="광고 영역"
-              className="my-6 flex w-full min-h-[250px] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 p-4 lg:sticky lg:top-6 lg:min-h-[450px]"
+              className="relative my-6 flex w-full min-h-[250px] items-start justify-start rounded-2xl border border-white/10 bg-white/5 p-4 lg:sticky lg:top-6 lg:min-h-[450px]"
             >
-              <span className="text-xs text-slate-500">Sponsored</span>
+              <span className="absolute left-4 top-3 text-xs text-slate-500">Sponsored</span>
             </div>
           </div>
         </div>

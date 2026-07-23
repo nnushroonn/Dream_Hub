@@ -41,7 +41,7 @@ export default function DreamCalendarWidget() {
   const hasAnyEntry = entryMap.size > 0;
 
   return (
-    <section className="relative w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 px-4 py-5 text-center backdrop-blur-md">
+    <section className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-5 text-center backdrop-blur-md">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(129,90,255,0.12),transparent_60%)]" />
 
       <h2 className="relative text-base font-semibold text-slate-100">🌌 나의 지난밤 꿈 별자리</h2>
@@ -66,7 +66,7 @@ export default function DreamCalendarWidget() {
       </div>
 
       {!isAuthenticated && (
-        <div className="absolute inset-0 flex items-center justify-center rounded-3xl bg-slate-950/70 backdrop-blur-md">
+        <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-950/70 backdrop-blur-md">
           <Link
             href="/login"
             className="rounded-full border border-violet-400/40 bg-white/5 px-5 py-2.5 text-sm text-violet-200 shadow-[0_0_20px_rgba(167,139,250,0.3)] transition-colors hover:border-violet-300/60 hover:text-white"
