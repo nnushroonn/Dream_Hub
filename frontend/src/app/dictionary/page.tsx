@@ -55,32 +55,32 @@ function findCategoryLabel(word: string): string {
  * 일치해야 하며, 뚜렷이 매칭되는 보기가 없으면 "기타" + 키워드 자체를 커스텀값으로 쓴다. */
 function mapCategoryToTargetChip(categoryLabel: string, keyword: string): { chip: string; other?: string } {
   if (categoryLabel === "사람/인물") {
-    if (keyword === "연예인") return { chip: "좋아하는 연예인이나 아이돌" };
-    if (keyword === "낯선 사람") return { chip: "정체불명의 낯선 사람/그림자" };
-    if (keyword === "선생님") return { chip: "직장 동료 및 학교 지인" };
-    return { chip: "가까운 가족이나 절친" };
+    if (keyword === "연예인") return { chip: "평소에 좋아하는 연예인이나 아이돌이요" };
+    if (keyword === "낯선 사람") return { chip: "정체불명의 낯선 사람이나 검은 그림자요" };
+    if (keyword === "선생님") return { chip: "직장 동료, 학교 친구 같은 사회적 지인이요" };
+    return { chip: "가족, 연인, 절친처럼 가장 가까운 사람요" };
   }
-  if (categoryLabel === "동물/식물") return { chip: "실제 존재하는 동물/곤충" };
-  if (categoryLabel === "사물/음식") return { chip: "로봇/AI/스마트폰/사물" };
+  if (categoryLabel === "동물/식물") return { chip: "강아지, 고양이, 뱀 같은 실제 동물이요" };
+  if (categoryLabel === "사물/음식") return { chip: "로봇, AI, 스마트폰 같은 기계나 사물이요" };
   return { chip: "기타", other: keyword };
 }
 
 // 시나리오 제목에 등장하는 동작 단서로 Step 4(역동성) 칩을 추정하고, 단서가 없으면 mood로 보수적으로 대체한다.
 // DreamWizard의 DYNAMICS_OPTIONS 라벨과 정확히 일치해야 한다.
 const DYNAMICS_KEYWORD_RULES: [RegExp, string][] = [
-  [/날아|비행|하늘을 나는/, "하늘을 자유롭게 날아다님"],
-  [/쫓기는|도망|추격당하는|쫓아오는/, "필사적으로 쫓기거나 도망침"],
-  [/싸우|저항|맞서|대결/, "격렬하게 싸우거나 저항함"],
-  [/떨어지|추락|낭떠러지/, "높은 곳에서 끝없이 추락함"],
-  [/쫓는|추적|찾아다니는|뒤쫓는|찾으려/, "무언가를 찾으려고 계속 헤맴"],
+  [/날아|비행|하늘을 나는/, "하늘을 자유롭게 날아다니거나 붕 떠 있었어요"],
+  [/쫓기는|도망|추격당하는|쫓아오는/, "누군가에게 필사적으로 쫓기거나 도망쳤어요"],
+  [/싸우|저항|맞서|대결/, "상대방한테 격렬하게 맞서 싸우거나 저항했어요"],
+  [/떨어지|추락|낭떠러지/, "바닥이 없는 낭떠러지로 끝없이 떨어졌어요"],
+  [/쫓는|추적|찾아다니는|뒤쫓는|찾으려/, "뭔가를 찾으려고 계속 헤매고 다녔어요"],
 ];
 
 function mapScenarioToDynamicsChip(scenarioTitle: string, mood: DreamMood): string {
   const matched = DYNAMICS_KEYWORD_RULES.find(([pattern]) => pattern.test(scenarioTitle));
   if (matched) return matched[1];
-  if (mood === "nightmare") return "필사적으로 쫓기거나 도망침";
-  if (mood === "good") return "하늘을 자유롭게 날아다님";
-  return "제3자처럼 상황을 멍하니 바라봄";
+  if (mood === "nightmare") return "누군가에게 필사적으로 쫓기거나 도망쳤어요";
+  if (mood === "good") return "하늘을 자유롭게 날아다니거나 붕 떠 있었어요";
+  return "난 아무것도 안 하고 그 상황을 구경만 했어요";
 }
 
 /** 시나리오 제목 안에서 검색 키워드 부분만 포인트 컬러로 하이라이트한다. */

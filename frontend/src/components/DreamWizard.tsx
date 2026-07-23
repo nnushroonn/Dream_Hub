@@ -27,60 +27,61 @@ const OTHER_LABEL = "기타";
 // 그래도 딱 들어맞지 않는 경우를 위해 각 단계 끝에 "기타" 직접입력을 남겨둔다.
 // 백엔드는 이 라벨 문자열을 그대로 받아 EXPERT_MATRIX 힌트로 쓰므로, 표현을 임의로 바꾸지 않는다.
 const LIGHT_OPTIONS: ChipOption[] = [
-  { emoji: "☀️", label: "눈부시고 맑은 햇살" },
-  { emoji: "🏡", label: "평범하고 익숙한 낮 풍경" },
-  { emoji: "🌅", label: "은은한 노을빛이나 새벽녘" },
-  { emoji: "🔮", label: "네온 사인이 반짝이는 화려한 밤" },
-  { emoji: "🌑", label: "앞이 안 보이는 칠흑 같은 어둠" },
-  { emoji: "🌫️", label: "안개 낀 듯 뿌옇고 흐린 배경" },
-  { emoji: "🏚️", label: "황량하고 쓸쓸한 폐허 분위기" },
-  { emoji: "🎨", label: "색채가 없는 흑백 풍경" },
-  { emoji: "🌀", label: "시시각각 배경과 빛이 바뀜" },
+  { emoji: "☀️", label: "햇살이 눈부시고 엄청 맑았어요" },
+  { emoji: "🏡", label: "늘 보던 일상 풍경처럼 평범했어요" },
+  { emoji: "🌑", label: "눈앞이 캄캄하고 아주 어두웠어요" },
+  { emoji: "🌫️", label: "안개가 낀 것처럼 흐릿하고 답답했어요" },
+  { emoji: "🏚️", label: "황량하고 쓸쓸한 폐허 같은 느낌이었어요" },
+  { emoji: "🔮", label: "화려한 조명이나 네온사인이 반짝였어요" },
+  { emoji: "🌅", label: "새벽녘이나 노을빛처럼 은은했어요" },
+  { emoji: "🎨", label: "색깔이 없는 흑백 영화 같았어요" },
+  { emoji: "🌀", label: "주변 배경이랑 빛이 시시각각 변했어요" },
   { emoji: "✏️", label: OTHER_LABEL },
 ];
 
 const SPACE_OPTIONS: ChipOption[] = [
-  { emoji: "🏠", label: "매일 가는 익숙한 곳" },
-  { emoji: "🗺️", label: "한 번도 가본 적 없는 낯선 장소" },
-  { emoji: "🔒", label: "사방이 꽉 막힌 밀폐 공간" },
-  { emoji: "🏞️", label: "사방이 탁 트인 야외" },
-  { emoji: "🌀", label: "탈출하기 힘든 미로 같은 곳" },
-  { emoji: "🌌", label: "왜곡된 초현실적 공간" },
-  { emoji: "🎢", label: "아슬아슬하게 매달려 있는 공간" },
+  { emoji: "🏠", label: "집, 학교, 회사처럼 매일 가는 익숙한 곳이요" },
+  { emoji: "🗺️", label: "태어나서 처음 보는 낯선 장소였어요" },
+  // 🫁(폐) 이모지는 일부 환경에서 깨져 보여 🔒로 대체한다.
+  { emoji: "🔒", label: "방이나 엘리베이터처럼 꽉 막혀 답답한 곳이요" },
+  { emoji: "🏞️", label: "바다나 벌판처럼 탁 트인 야외였어요" },
+  { emoji: "🌀", label: "탈출구 없는 미로처럼 끝없이 얽힌 곳이요" },
+  { emoji: "🌌", label: "우주나 가상현실처럼 현실적인 느낌이 아니었어요" },
+  { emoji: "🎢", label: "높은 곳에 아슬아슬하게 매달려 있는 공간이었어요" },
   { emoji: "✏️", label: OTHER_LABEL },
 ];
 
 const PROJECTION_OPTIONS: ChipOption[] = [
-  { emoji: "👤", label: "가까운 가족이나 절친" },
-  { emoji: "👥", label: "직장 동료 및 학교 지인" },
-  { emoji: "🎤", label: "좋아하는 연예인이나 아이돌" },
-  { emoji: "👻", label: "정체불명의 낯선 사람/그림자" },
-  { emoji: "🦁", label: "실제 존재하는 동물/곤충" },
-  { emoji: "🐉", label: "신화 속 존재나 괴물" },
-  { emoji: "🤖", label: "로봇/AI/스마트폰/사물" },
-  { emoji: "❌", label: "나 외에는 아무도 없음" },
+  { emoji: "👤", label: "가족, 연인, 절친처럼 가장 가까운 사람요" },
+  { emoji: "👥", label: "직장 동료, 학교 친구 같은 사회적 지인이요" },
+  { emoji: "🎤", label: "평소에 좋아하는 연예인이나 아이돌이요" },
+  { emoji: "👻", label: "정체불명의 낯선 사람이나 검은 그림자요" },
+  { emoji: "🦁", label: "강아지, 고양이, 뱀 같은 실제 동물이요" },
+  { emoji: "🐉", label: "용, 유령, 괴물 같은 상상 속 존재요" },
+  { emoji: "🤖", label: "로봇, AI, 스마트폰 같은 기계나 사물이요" },
+  { emoji: "❌", label: "아무도 없이 저 혼자만 덩그러니 있었어요" },
   { emoji: "✏️", label: OTHER_LABEL },
 ];
 
 const DYNAMICS_OPTIONS: ChipOption[] = [
-  { emoji: "🏃", label: "필사적으로 쫓기거나 도망침" },
-  { emoji: "⚔️", label: "격렬하게 싸우거나 저항함" },
-  { emoji: "🦅", label: "하늘을 자유롭게 날아다님" },
-  { emoji: "🕳️", label: "높은 곳에서 끝없이 추락함" },
-  { emoji: "🧍", label: "몸이나 목소리가 굳어 꼼짝 못 함" },
-  { emoji: "🔍", label: "무언가를 찾으려고 계속 헤맴" },
-  { emoji: "📺", label: "제3자처럼 상황을 멍하니 바라봄" },
-  { emoji: "🍲", label: "먹거나 마시는 등 평범한 행동" },
+  { emoji: "🏃", label: "누군가에게 필사적으로 쫓기거나 도망쳤어요" },
+  { emoji: "⚔️", label: "상대방한테 격렬하게 맞서 싸우거나 저항했어요" },
+  { emoji: "🦅", label: "하늘을 자유롭게 날아다니거나 붕 떠 있었어요" },
+  { emoji: "🕳️", label: "바닥이 없는 낭떠러지로 끝없이 떨어졌어요" },
+  { emoji: "🧍", label: "가위눌린 것처럼 몸이 굳어 꼼짝도 못 했어요" },
+  { emoji: "🔍", label: "뭔가를 찾으려고 계속 헤매고 다녔어요" },
+  { emoji: "📺", label: "난 아무것도 안 하고 그 상황을 구경만 했어요" },
+  { emoji: "🍲", label: "음식을 먹거나 물건을 사는 일상적인 행동이었어요" },
   { emoji: "✏️", label: OTHER_LABEL },
 ];
 
 const REALITY_OPTIONS: ChipOption[] = [
-  { emoji: "💼", label: "업무/학업/시험의 마감 압박" },
-  { emoji: "👥", label: "인간관계 갈등 및 상처" },
-  { emoji: "📈", label: "재정 및 미래에 대한 현실적 불안" },
-  { emoji: "🔋", label: "몸과 마음이 모두 지친 번아웃" },
-  { emoji: "🎯", label: "새로운 도전이나 시작을 앞둠" },
-  { emoji: "🧘", label: "평온하고 안정적인 상태" },
+  { emoji: "💼", label: "시험, 업무, 과제 등 마감 압박이 심해요" },
+  { emoji: "👥", label: "직장이나 가족, 친구 간의 인간관계가 힘들어요" },
+  { emoji: "📈", label: "돈 문제나 취업, 미래에 대한 불안감이 커요" },
+  { emoji: "🔋", label: "몸과 마음이 다 지쳐서 번아웃이 온 것 같아요" },
+  { emoji: "🎯", label: "이직, 독립 등 인생의 큰 변화나 도전을 앞두고 있어요" },
+  { emoji: "🧘", label: "특별한 걱정거리 없이 비교적 평온하게 지내고 있어요" },
   { emoji: "✏️", label: OTHER_LABEL },
 ];
 
@@ -391,7 +392,7 @@ export default function DreamWizard({
           {step === 1 && (
             <div>
               <h3 className="text-base font-medium text-white">
-                무의식의 첫 번째 층위: 꿈속 배경의 빛은 어떠했나요?
+                눈을 떴을 때 꿈속 주변의 전체적인 분위기는 어땠나요?
               </h3>
               <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
                 {LIGHT_OPTIONS.map((opt) => (
@@ -430,7 +431,7 @@ export default function DreamWizard({
           {step === 2 && (
             <div>
               <h3 className="text-base font-medium text-white">
-                공간의 밀도: 꿈속 장소의 특징을 선택하고, 그 풍경을 들려주세요.
+                어떤 공간에서 일어난 일인가요?
               </h3>
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {SPACE_OPTIONS.map((opt) => (
@@ -468,7 +469,7 @@ export default function DreamWizard({
           {step === 3 && (
             <div>
               <h3 className="text-base font-medium text-white">
-                무의식의 투사: 꿈속에서 당신의 시선을 가장 강렬하게 사로잡은 존재는 누구인가요?
+                꿈에 나 말고 누가 또 등장했나요?
               </h3>
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {PROJECTION_OPTIONS.map((opt) => (
@@ -506,7 +507,7 @@ export default function DreamWizard({
           {step === 4 && (
             <div>
               <h3 className="text-base font-medium text-white">
-                정신적 역동: 그곳에서 당신이 행한 본능적인 움직임이나 사건은 무엇인가요?
+                그 안에서 주로 어떤 행동을 하셨나요?
               </h3>
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {DYNAMICS_OPTIONS.map((opt) => (
@@ -544,7 +545,7 @@ export default function DreamWizard({
           {step === 5 && (
             <div>
               <h3 className="text-base font-medium text-white">
-                현실과의 관련성: 이 꿈은 최근 당신의 일상이나 마음 상태와 어떻게 연결되어 있나요?
+                요즘 일상에서 가장 신경 쓰이는 부분이 있나요?
               </h3>
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {REALITY_OPTIONS.map((opt) => (
