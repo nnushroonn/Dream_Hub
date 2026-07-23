@@ -17,7 +17,7 @@ const STEP_META = [
   { key: "target", label: "대상" },
   { key: "dynamics", label: "역동성" },
   { key: "reality", label: "현실 공명" },
-  { key: "dimension", label: "차원 제어" },
+  { key: "dimension", label: "마무리" },
 ];
 
 const OTHER_LABEL = "기타";
@@ -130,6 +130,14 @@ function chipClass(selected: boolean): string {
   }`;
 }
 
+// 선명도 슬라이더 값을 친구에게 말하듯 담백한 구어체 한 줄로 풀어준다.
+function vividnessDescription(value: number): string {
+  if (value <= 25) return "🌫️ 꿈인 건 알겠는데, 장면들이 뿌옇고 흐릿했어요";
+  if (value <= 50) return "📺 그냥 평범한 영화를 보는 것처럼 무난했어요";
+  if (value <= 75) return "🎨 색깔이나 소리가 평소보다 쨍하고 생생했어요";
+  return "👁️ 깨고 나서도 현실인가 싶을 정도로 생생했어요";
+}
+
 // 다크 모드 가독성: 실제 입력 글자는 선명한 화이트, placeholder는 은은한 서브 톤으로 구분한다.
 function otherInputClass(): string {
   return "mt-3 w-full rounded-xl border border-violet-400/30 bg-black/30 px-4 py-2.5 text-sm text-white placeholder:text-slate-500/80 focus:border-violet-400/60 focus:outline-none";
@@ -188,7 +196,7 @@ export default function DreamWizard({
   initialDynamicsChip,
   initialDynamicsOther,
   onDraftChange,
-  submitLabel = "✨ AI 무의식 해몽 요청하기",
+  submitLabel = "🔮 내 꿈 분석결과 확인하기",
 }: DreamWizardProps) {
   const [step, setStep] = useState(1);
   const [phase, setPhase] = useState<SlidePhase>("idle");
@@ -573,13 +581,11 @@ export default function DreamWizard({
 
           {step === 6 && (
             <div>
-              <h3 className="text-base font-medium text-white">
-                차원 제어 지수: 현실의 자아가 꿈에 개입한 정도와 선명도를 설정하세요.
-              </h3>
+              <h3 className="text-base font-medium text-white">마지막으로, 이 꿈이 전체적으로 얼마나 생생했나요?</h3>
 
               <div className="mt-5">
                 <div className="flex items-center justify-between text-xs text-indigo-300/70">
-                  <span>선명도 (Vivid)</span>
+                  <span>선명도</span>
                   <span className="font-medium text-violet-200">{vividness}%</span>
                 </div>
                 <input
@@ -590,26 +596,20 @@ export default function DreamWizard({
                   onChange={(event) => setVividness(Number(event.target.value))}
                   className="mt-2 w-full accent-violet-500"
                 />
+                <p className="mt-2 text-xs text-slate-400">{vividnessDescription(vividness)}</p>
               </div>
 
-              <div className="mt-6 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                <div>
-                  <p className="text-sm text-white">✨ 자각몽이었나요?</p>
-                  <p className="mt-0.5 text-xs text-slate-500">꿈속에서 꿈이라는 걸 인지하고 있었다면 켜주세요.</p>
-                </div>
+              <div className="mt-6">
+                <p className="text-sm text-white">
+                  혹시 꿈속에서 &apos;지금 이건 꿈이구나&apos; 하고 스스로 알아챘나요?
+                </p>
                 <button
                   type="button"
                   onClick={() => setIsLucid((prev) => !prev)}
                   aria-pressed={isLucid}
-                  className={`relative h-7 w-12 shrink-0 rounded-full transition-all duration-300 ${
-                    isLucid ? "bg-violet-500 shadow-[0_0_12px_rgba(167,139,250,0.6)]" : "bg-white/15"
-                  }`}
+                  className={`${chipClass(isLucid)} mt-3`}
                 >
-                  <span
-                    className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-300 ${
-                      isLucid ? "translate-x-5" : "translate-x-0"
-                    }`}
-                  />
+                  ✨ 네, 제 의지대로 꿈을 인지하거나 조절했어요
                 </button>
               </div>
 

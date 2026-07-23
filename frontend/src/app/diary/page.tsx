@@ -695,7 +695,7 @@ export default function DiaryPage() {
                 initialTargetOther={editingEntry ? undefined : initialTargetOther}
                 initialDynamicsChip={editingEntry ? undefined : initialDynamicsChip}
                 onDraftChange={editingEntry ? undefined : setWizardDraft}
-                submitLabel={editingEntry ? "💾 수정 완료 및 재분석" : "✨ AI 무의식 해몽 요청하기"}
+                submitLabel={editingEntry ? "💾 수정 완료 및 재분석" : "🔮 내 꿈 분석결과 확인하기"}
               />
             )}
 
