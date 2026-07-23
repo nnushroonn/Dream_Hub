@@ -22,11 +22,17 @@ const STEP_META = [
 
 const OTHER_LABEL = "기타";
 
+// 각 보기는 프로이트(억압/욕구)·융(원형/신화)·아들러(열등감/현실목표)·게슈탈트(미해결 과제)
+// 전문가 동적 매칭 매트릭스와 현대 트렌드 심리(도시, 디지털, SNS 등)를 함께 겨냥해 확장했다.
+// 백엔드는 이 라벨 문자열을 그대로 받아 EXPERT_MATRIX 힌트로 쓰므로, 표현을 임의로 바꾸지 않는다.
 const LIGHT_OPTIONS: ChipOption[] = [
   { emoji: "🌑", label: "칠흑 같은 어둠" },
   { emoji: "🌅", label: "은은한 새벽녘" },
   { emoji: "☀️", label: "눈부신 광명" },
   { emoji: "🌆", label: "몽환적인 노을" },
+  { emoji: "⚡", label: "번쩍이는 네온/전광" },
+  { emoji: "🌫️", label: "뿌옇게 흐린 안개빛" },
+  { emoji: "🕯️", label: "위태롭게 흔들리는 촛불" },
   { emoji: "✏️", label: OTHER_LABEL },
 ];
 
@@ -35,15 +41,20 @@ const SPACE_OPTIONS: ChipOption[] = [
   { emoji: "🌄", label: "광활한 외부(실외)" },
   { emoji: "🌀", label: "초현실적 차원" },
   { emoji: "🌌", label: "무한한 심해/우주" },
+  { emoji: "🏢", label: "삭막한 도시/직장" },
+  { emoji: "🏚️", label: "낡고 오래된 유년의 집" },
+  { emoji: "📱", label: "디지털 가상공간(SNS/메타버스)" },
   { emoji: "✏️", label: OTHER_LABEL },
 ];
 
 const PROJECTION_OPTIONS: ChipOption[] = [
   { emoji: "🙋", label: "홀로 머묾" },
   { emoji: "👨‍👩‍👧", label: "인연(가족/지인)" },
+  { emoji: "💞", label: "그리운 옛 인연(전 애인)" },
   { emoji: "🌫️", label: "그림자(낯선 사람)" },
   { emoji: "🐾", label: "영물(동물)" },
   { emoji: "🔮", label: "성물(특이한 사물)" },
+  { emoji: "🤖", label: "인공적 존재(AI/로봇)" },
   { emoji: "✏️", label: OTHER_LABEL },
 ];
 
@@ -53,6 +64,8 @@ const DYNAMICS_OPTIONS: ChipOption[] = [
   { emoji: "🔍", label: "추적과 탐색" },
   { emoji: "🗣️", label: "교감과 대화" },
   { emoji: "👁️", label: "방관적 응시" },
+  { emoji: "⚔️", label: "대결과 경쟁" },
+  { emoji: "📉", label: "통제 불능의 추락/붕괴" },
   { emoji: "✏️", label: OTHER_LABEL },
 ];
 
@@ -61,6 +74,9 @@ const REALITY_OPTIONS: ChipOption[] = [
   { emoji: "🌫️", label: "희미하게 겹쳐짐" },
   { emoji: "🔄", label: "정반대로 나타남(보상 심리)" },
   { emoji: "🧩", label: "전혀 무관해 보임" },
+  { emoji: "📊", label: "반복되는 시험/마감 압박" },
+  { emoji: "💸", label: "SNS·자산·경쟁에 대한 불안" },
+  { emoji: "🌱", label: "아직 매듭짓지 못한 지난 일" },
   { emoji: "✏️", label: OTHER_LABEL },
 ];
 
@@ -100,10 +116,10 @@ function resolveChipState(options: ChipOption[], value: string): { chip: string;
 }
 
 function chipClass(selected: boolean): string {
-  return `rounded-full border px-4 py-2 text-sm backdrop-blur-md transition-all duration-200 ${
+  return `w-full rounded-xl border px-3 py-2.5 text-left text-sm backdrop-blur-md transition-all duration-200 ${
     selected
-      ? "border-violet-400/70 bg-violet-500/25 text-white shadow-[0_0_16px_rgba(167,139,250,0.35)]"
-      : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
+      ? "border-purple-500 bg-purple-600/30 text-white shadow-[0_0_10px_rgba(168,85,247,0.5)]"
+      : "border-white/10 bg-white/5 text-slate-300 hover:border-purple-400/30 hover:bg-purple-500/20"
   }`;
 }
 
@@ -313,7 +329,7 @@ export default function DreamWizard({
               <h3 className="text-base font-medium text-white">
                 무의식의 첫 번째 층위: 꿈속 배경의 빛은 어떠했나요?
               </h3>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                 {LIGHT_OPTIONS.map((opt) => (
                   <button
                     key={opt.label}
@@ -352,7 +368,7 @@ export default function DreamWizard({
               <h3 className="text-base font-medium text-white">
                 공간의 밀도: 꿈속 장소의 특징을 선택하고, 그 풍경을 들려주세요.
               </h3>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                 {SPACE_OPTIONS.map((opt) => (
                   <button
                     key={opt.label}
@@ -390,7 +406,7 @@ export default function DreamWizard({
               <h3 className="text-base font-medium text-white">
                 무의식의 투사: 꿈속에서 당신의 시선을 가장 강렬하게 사로잡은 존재는 누구인가요?
               </h3>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                 {PROJECTION_OPTIONS.map((opt) => (
                   <button
                     key={opt.label}
@@ -428,7 +444,7 @@ export default function DreamWizard({
               <h3 className="text-base font-medium text-white">
                 정신적 역동: 그곳에서 당신이 행한 본능적인 움직임이나 사건은 무엇인가요?
               </h3>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                 {DYNAMICS_OPTIONS.map((opt) => (
                   <button
                     key={opt.label}
@@ -466,7 +482,7 @@ export default function DreamWizard({
               <h3 className="text-base font-medium text-white">
                 현실과의 관련성: 이 꿈은 최근 당신의 일상이나 마음 상태와 어떻게 연결되어 있나요?
               </h3>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                 {REALITY_OPTIONS.map((opt) => (
                   <button
                     key={opt.label}
