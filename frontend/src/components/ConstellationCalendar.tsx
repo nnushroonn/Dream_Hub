@@ -19,6 +19,7 @@ const MOOD_NODE_GLOW: Record<DreamMood, string> = {
 };
 
 export interface ConstellationEntry {
+  id: number;
   mood: DreamMood;
   date: string;
   tooltip: string;
@@ -30,6 +31,8 @@ interface ConstellationDotsProps {
   /** 그 달 1일의 요일. 0(일) ~ 6(토) */
   startWeekday: number;
   entries: Map<number, ConstellationEntry>;
+  /** 불 켜진 노드를 클릭하면 해당 기록의 id와 함께 호출된다 (상세 보기 오픈용) */
+  onSelectEntry?: (id: number) => void;
 }
 
 function cellCenter(gridIndex: number) {
@@ -38,7 +41,7 @@ function cellCenter(gridIndex: number) {
   return { x: col * CELL + CELL / 2, y: row * CELL + CELL / 2 };
 }
 
-export function ConstellationDots({ daysInMonth, startWeekday, entries }: ConstellationDotsProps) {
+export function ConstellationDots({ daysInMonth, startWeekday, entries, onSelectEntry }: ConstellationDotsProps) {
   const [hoveredDay, setHoveredDay] = useState<number | null>(null);
 
   const totalCells = startWeekday + daysInMonth;
@@ -92,15 +95,19 @@ export function ConstellationDots({ daysInMonth, startWeekday, entries }: Conste
                 onMouseLeave={() => setHoveredDay(null)}
               >
                 {/* 날짜 숫자 자체가 별자리의 노드가 된다 — 별도의 점(dot) 없이 하나로 일체화 */}
-                <div
+                <button
+                  type="button"
+                  disabled={!entry}
+                  onClick={() => entry && onSelectEntry?.(entry.id)}
+                  aria-label={entry ? `${entry.date} 꿈 기록 상세 보기` : undefined}
                   className={`flex h-full w-full select-none items-center justify-center rounded-full transition-all duration-300 ${
                     entry
-                      ? `text-white font-medium ${MOOD_NODE_GLOW[entry.mood]} ${isHovered ? "scale-110" : ""}`
-                      : "text-xs font-light text-slate-400/50 hover:bg-white/5 hover:backdrop-blur-sm"
+                      ? `cursor-pointer text-white font-medium ${MOOD_NODE_GLOW[entry.mood]} ${isHovered ? "scale-110" : ""}`
+                      : "cursor-default text-xs font-light text-slate-400/50 hover:bg-white/5 hover:backdrop-blur-sm"
                   }`}
                 >
                   <span className={entry ? "text-sm" : undefined}>{day}</span>
-                </div>
+                </button>
 
                 {entry && (
                   <div

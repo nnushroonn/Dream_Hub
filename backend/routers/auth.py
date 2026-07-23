@@ -6,6 +6,7 @@ import jwt
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
@@ -56,6 +57,36 @@ def create_email_verification_token(user_id: int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.email_verification_token_expire_minutes)
     payload = {"sub": str(user_id), "type": "email_verification", "exp": expire}
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+bearer_scheme = HTTPBearer()
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    """Authorization: Bearer <access_token> 헤더를 검증해 현재 로그인한 유저를 반환한다.
+
+    꿈 기록소 CRUD처럼 유저 소유 데이터를 다루는 라우터가 이 의존성을 걸어 두면,
+    본인 소유가 아닌 데이터에는 접근할 수 없다.
+    """
+    try:
+        decoded = jwt.decode(credentials.credentials, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않거나 만료된 토큰입니다.",
+        )
+
+    if decoded.get("type") != "access":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 토큰입니다.")
+
+    user = db.query(User).filter(User.id == int(decoded["sub"])).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="사용자를 찾을 수 없습니다.")
+
+    return user
 
 
 async def send_verification_email(email: str, token: str) -> None:

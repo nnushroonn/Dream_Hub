@@ -119,6 +119,49 @@ export async function requestAiInterpretation(payload: DreamEntryInput): Promise
   return data;
 }
 
+// 아래는 로그인한 유저 소유의 꿈 기록 CRUD. 미리보기용 해몽 요청(위)과 달리 로그인이 필요하다.
+
+export interface DreamEntryRecord {
+  id: number;
+  dream_date: string;
+  title: string;
+  emotion: string;
+  is_public: boolean;
+  is_lucid: boolean;
+  survey: DreamSurvey;
+  interpretation: AiInterpretation;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DreamEntryPayload {
+  dream_date: string;
+  title: string;
+  emotion: string;
+  is_public: boolean;
+  survey: DreamSurvey;
+  interpretation: AiInterpretation;
+}
+
+export async function listDreams(): Promise<DreamEntryRecord[]> {
+  const { data } = await api.get<DreamEntryRecord[]>("/api/dreams");
+  return data;
+}
+
+export async function createDream(payload: DreamEntryPayload): Promise<DreamEntryRecord> {
+  const { data } = await api.post<DreamEntryRecord>("/api/dreams", payload);
+  return data;
+}
+
+export async function updateDream(id: number, payload: DreamEntryPayload): Promise<DreamEntryRecord> {
+  const { data } = await api.put<DreamEntryRecord>(`/api/dreams/${id}`, payload);
+  return data;
+}
+
+export async function deleteDream(id: number): Promise<void> {
+  await api.delete(`/api/dreams/${id}`);
+}
+
 export interface CommunityEntry {
   id: number;
   author_email: string;

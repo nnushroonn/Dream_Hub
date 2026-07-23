@@ -1,5 +1,3 @@
-import type { SavedDream } from "@/store/useSavedDreamsStore";
-
 export function todayDateString(): string {
   return formatDateString(new Date());
 }
@@ -27,8 +25,11 @@ export interface StreakResult {
  * 오늘(기록이 있으면) 또는 가장 최근 기록일부터 하루씩 과거로 소급하며
  * 끊기지 않고 이어지는 연속 기록 일수를 센다.
  */
-export function computeStreak(entries: SavedDream[], todayStr: string = todayDateString()): StreakResult {
-  const dateSet = new Set(entries.map((entry) => entry.date));
+export function computeStreak(
+  entries: { dream_date: string }[],
+  todayStr: string = todayDateString()
+): StreakResult {
+  const dateSet = new Set(entries.map((entry) => entry.dream_date));
   const checkedInToday = dateSet.has(todayStr);
 
   if (dateSet.size === 0) {

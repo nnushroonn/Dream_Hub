@@ -17,9 +17,9 @@ const MOOD_EMOJI_FALLBACK: Record<DreamMood, string> = {
 
 function toEntryMap(days: DreamCalendarDay[]): Map<number, ConstellationEntry> {
   return new Map(
-    days.map((d) => [
+    days.map((d, index) => [
       Number(d.date.slice(-2)),
-      { mood: d.mood, date: d.date, tooltip: d.summary, emoji: MOOD_EMOJI_FALLBACK[d.mood] },
+      { id: index, mood: d.mood, date: d.date, tooltip: d.summary, emoji: MOOD_EMOJI_FALLBACK[d.mood] },
     ])
   );
 }

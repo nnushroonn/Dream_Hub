@@ -1,9 +1,9 @@
 import enum
-from datetime import datetime, time
-from typing import Optional
+from datetime import date as PyDate, datetime, time
+from typing import Any, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text, Time, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Integer, JSON, String, Time, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -98,22 +98,30 @@ class DictionaryAlias(Base):
 
 
 class DreamEntry(Base):
-    """꿈 기록소의 꿈 일기 한 건. AI 해몽 결과와 자각몽 여부를 함께 저장한다."""
+    """꿈 기록소의 꿈 일기 한 건. 6단계 위저드 응답 원본과 AI 해몽 결과를 함께 저장해,
+    수정 시 폼 프리필과 상세 보기 화면에 그대로 재사용할 수 있게 한다."""
 
     __tablename__ = "dream_entries"
+    __table_args__ = (UniqueConstraint("user_id", "dream_date", name="uq_dream_entry_user_date"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    # 감정 이모지 (예: "😨", "😊")
-    emotion: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
-    # AI 해몽 결과 (의미/상징/행운요소 등을 담은 텍스트. 구조화가 필요해지면 JSON 컬럼으로 전환 고려)
-    ai_interpretation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    dream_date: Mapped[PyDate] = mapped_column(Date, nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    # 유저가 고른 감정 이모지 (예: "😨", "😊")
+    emotion: Mapped[str] = mapped_column(String(8), nullable=False)
+    # 6단계 위저드 응답 원본 (DreamSurveyInput과 동일한 형태) - 수정 모드 프리필에 사용
+    survey: Mapped[dict[str, Any]] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=False)
+    # AI 해몽 결과 원본 (tags/description/lucky_* 등) - 상세 보기에 그대로 재사용
+    interpretation: Mapped[dict[str, Any]] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=False)
     status: Mapped[DreamStatus] = mapped_column(
         SAEnum(DreamStatus, name="dream_status"), nullable=False, default=DreamStatus.PRIVATE
     )
     is_lucid: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
     user: Mapped["User"] = relationship(back_populates="dream_entries")
     keyword_maps: Mapped[list["DreamKeywordMap"]] = relationship(

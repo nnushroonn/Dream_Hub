@@ -71,6 +71,19 @@ type SlidePhase = "idle" | "leaving" | "entering";
 interface DreamWizardProps {
   onComplete: (survey: DreamSurvey) => void;
   isSubmitting: boolean;
+  /** 수정 모드에서 기존에 저장된 응답을 그대로 채워 넣기 위한 원본 데이터 */
+  initialData?: DreamSurvey;
+  /** 최종 제출 버튼 라벨. 수정 모드에서는 "💾 수정 완료 및 재분석"으로 바뀐다 */
+  submitLabel?: string;
+}
+
+/**
+ * survey에 저장된 최종 문자열이 프리셋 칩 라벨과 일치하면 그 칩을 선택한 상태로,
+ * 일치하지 않으면 "기타" 칩을 선택하고 그 문자열을 커스텀 입력값으로 복원한다.
+ */
+function resolveChipState(options: ChipOption[], value: string): { chip: string; other: string } {
+  const matched = options.find((opt) => opt.label !== OTHER_LABEL && opt.label === value);
+  return matched ? { chip: matched.label, other: "" } : { chip: OTHER_LABEL, other: value };
 }
 
 function chipClass(selected: boolean): string {
@@ -127,33 +140,43 @@ function SubjectiveGuideField({ visible, guide, value, onChange, placeholder, as
   );
 }
 
-export default function DreamWizard({ onComplete, isSubmitting }: DreamWizardProps) {
+export default function DreamWizard({
+  onComplete,
+  isSubmitting,
+  initialData,
+  submitLabel = "✨ AI 무의식 해몽 요청하기",
+}: DreamWizardProps) {
   const [step, setStep] = useState(1);
   const [phase, setPhase] = useState<SlidePhase>("idle");
   const [direction, setDirection] = useState<1 | -1>(1);
 
-  const [light, setLight] = useState<string | null>(null);
-  const [lightOther, setLightOther] = useState("");
-  const [title, setTitle] = useState("");
+  const lightInit = initialData ? resolveChipState(LIGHT_OPTIONS, initialData.brightness) : null;
+  const [light, setLight] = useState<string | null>(lightInit?.chip ?? null);
+  const [lightOther, setLightOther] = useState(lightInit?.other ?? "");
+  const [title, setTitle] = useState(initialData?.title ?? "");
 
-  const [space, setSpace] = useState<string | null>(null);
-  const [spaceOther, setSpaceOther] = useState("");
-  const [spaceDetail, setSpaceDetail] = useState("");
+  const spaceInit = initialData ? resolveChipState(SPACE_OPTIONS, initialData.space_depth) : null;
+  const [space, setSpace] = useState<string | null>(spaceInit?.chip ?? null);
+  const [spaceOther, setSpaceOther] = useState(spaceInit?.other ?? "");
+  const [spaceDetail, setSpaceDetail] = useState(initialData?.space_detail ?? "");
 
-  const [projection, setProjection] = useState<string | null>(null);
-  const [projectionOther, setProjectionOther] = useState("");
-  const [identityDetail, setIdentityDetail] = useState("");
+  const projectionInit = initialData ? resolveChipState(PROJECTION_OPTIONS, initialData.identity_factor) : null;
+  const [projection, setProjection] = useState<string | null>(projectionInit?.chip ?? null);
+  const [projectionOther, setProjectionOther] = useState(projectionInit?.other ?? "");
+  const [identityDetail, setIdentityDetail] = useState(initialData?.identity_detail ?? "");
 
-  const [dynamics, setDynamics] = useState<string | null>(null);
-  const [dynamicsOther, setDynamicsOther] = useState("");
-  const [actionDetail, setActionDetail] = useState("");
+  const dynamicsInit = initialData ? resolveChipState(DYNAMICS_OPTIONS, initialData.action_physics) : null;
+  const [dynamics, setDynamics] = useState<string | null>(dynamicsInit?.chip ?? null);
+  const [dynamicsOther, setDynamicsOther] = useState(dynamicsInit?.other ?? "");
+  const [actionDetail, setActionDetail] = useState(initialData?.action_detail ?? "");
 
-  const [reality, setReality] = useState<string | null>(null);
-  const [realityOther, setRealityOther] = useState("");
-  const [realityDetail, setRealityDetail] = useState("");
+  const realityInit = initialData ? resolveChipState(REALITY_OPTIONS, initialData.reality_link) : null;
+  const [reality, setReality] = useState<string | null>(realityInit?.chip ?? null);
+  const [realityOther, setRealityOther] = useState(realityInit?.other ?? "");
+  const [realityDetail, setRealityDetail] = useState(initialData?.reality_detail ?? "");
 
-  const [vividness, setVividness] = useState(50);
-  const [isLucid, setIsLucid] = useState(false);
+  const [vividness, setVividness] = useState(initialData?.vividness ?? 50);
+  const [isLucid, setIsLucid] = useState(initialData?.is_lucid ?? false);
   const [sketchPreview, setSketchPreview] = useState<string | null>(null);
 
   const goToStep = (nextStep: number, dir: 1 | -1) => {
@@ -553,7 +576,7 @@ export default function DreamWizard({ onComplete, isSubmitting }: DreamWizardPro
               disabled={!isSurveyComplete || isSubmitting}
               className="relative rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-6 py-2.5 text-sm font-semibold text-white transition-all duration-300 group-hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              ✨ AI 무의식 해몽 요청하기
+              {submitLabel}
             </button>
           </div>
         )}

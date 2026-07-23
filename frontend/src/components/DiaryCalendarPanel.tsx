@@ -2,17 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import type { DreamEntryRecord } from "@/api/dream";
 import { ConstellationDots, ConstellationMoodLegend, type ConstellationEntry } from "@/components/ConstellationCalendar";
 import { computeStreak } from "@/lib/dreamCalendar";
-import { useSavedDreamsStore, type SavedDream } from "@/store/useSavedDreamsStore";
+import { moodBucketForEmoji } from "@/lib/moodBucket";
+import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 
 const CHECK_IN_PULSE_MS = 1600;
-
-const MOOD_EMOJI_FALLBACK: Record<SavedDream["mood"], string> = {
-  good: "😊",
-  neutral: "😐",
-  nightmare: "😱",
-};
 
 function daysInMonthOf(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -30,7 +26,12 @@ function shiftMonth(date: Date, delta: number): Date {
   return new Date(date.getFullYear(), date.getMonth() + delta, 1);
 }
 
-export default function DiaryCalendarPanel() {
+interface DiaryCalendarPanelProps {
+  /** 불 켜진 별자리 노드를 클릭했을 때, 해당 꿈 기록 전체를 들고 상세 보기를 열어달라는 콜백 */
+  onSelectEntry?: (entry: DreamEntryRecord) => void;
+}
+
+export default function DiaryCalendarPanel({ onSelectEntry }: DiaryCalendarPanelProps) {
   const entries = useSavedDreamsStore((state) => state.entries);
 
   // 조회 중인 달은 클라이언트 시각에 의존하므로, 서버/클라이언트 렌더 불일치를 피하려고
@@ -50,20 +51,21 @@ export default function DiaryCalendarPanel() {
   const goToPrevMonth = () => setViewDate((prev) => (prev ? shiftMonth(prev, -1) : prev));
   const goToNextMonth = () => setViewDate((prev) => (prev ? shiftMonth(prev, 1) : prev));
 
-  // 기록이 없는 날은 하드코딩 없이 그대로 비어 있어야 하므로, savedDreams에서
-  // 조회 중인 달에 해당하는 항목만 뽑아 도트 좌표로 매핑한다.
+  // 기록이 없는 날은 하드코딩 없이 그대로 비어 있어야 하므로, 백엔드에서 동기화해 온
+  // entries 중 조회 중인 달에 해당하는 항목만 뽑아 도트 좌표로 매핑한다.
   const entryMap = useMemo(() => {
     if (!monthKey) return new Map<number, ConstellationEntry>();
     return new Map(
       entries
-        .filter((entry) => entry.date.startsWith(monthKey))
+        .filter((entry) => entry.dream_date.startsWith(monthKey))
         .map((entry) => [
-          Number(entry.date.slice(-2)),
+          Number(entry.dream_date.slice(-2)),
           {
-            mood: entry.mood,
-            date: entry.date,
+            id: entry.id,
+            mood: moodBucketForEmoji(entry.emotion),
+            date: entry.dream_date,
             tooltip: entry.title,
-            emoji: entry.emoji ?? MOOD_EMOJI_FALLBACK[entry.mood],
+            emoji: entry.emotion,
           },
         ])
     );
@@ -84,6 +86,11 @@ export default function DiaryCalendarPanel() {
       return () => window.clearTimeout(timer);
     }
   }, [checkedInToday]);
+
+  const handleSelectEntry = (id: number) => {
+    const entry = entries.find((e) => e.id === id);
+    if (entry) onSelectEntry?.(entry);
+  };
 
   return (
     <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-8 text-center backdrop-blur-md">
@@ -130,7 +137,12 @@ export default function DiaryCalendarPanel() {
       <p className="relative mt-1 text-xs text-slate-500">당신이 기록한 무의식의 궤적</p>
 
       <div className="relative mt-8 flex justify-center">
-        <ConstellationDots daysInMonth={daysInMonth} startWeekday={startWeekday} entries={entryMap} />
+        <ConstellationDots
+          daysInMonth={daysInMonth}
+          startWeekday={startWeekday}
+          entries={entryMap}
+          onSelectEntry={handleSelectEntry}
+        />
       </div>
 
       <div className="relative mt-6">

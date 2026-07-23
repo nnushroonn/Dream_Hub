@@ -1,34 +1,31 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-import type { DreamMood } from "@/api/dream";
-
-export interface SavedDream {
-  /** YYYY-MM-DD */
-  date: string;
-  mood: DreamMood;
-  title: string;
-  /** 유저가 실제로 고른 감정 이모지. 이전 버전에 저장된 기록에는 없을 수 있다. */
-  emoji?: string;
-}
+import type { DreamEntryRecord } from "@/api/dream";
 
 interface SavedDreamsState {
-  entries: SavedDream[];
-  addEntry: (entry: SavedDream) => void;
+  entries: DreamEntryRecord[];
+  setEntries: (entries: DreamEntryRecord[]) => void;
+  upsertEntry: (entry: DreamEntryRecord) => void;
+  removeEntry: (id: number) => void;
 }
 
-// 백엔드에 실제 유저별 꿈 기록 저장소가 아직 없어, 로컬 스토리지에 영속화한 실제 기록을
-// "savedDreams"로 취급한다. 꿈 별자리 캘린더와 출석 스트릭은 모두 이 배열에서 파생된다.
+// 백엔드 /api/dreams가 진실 공급원이다. 이 스토어는 로그인한 유저의 꿈 기록을 그대로
+// 미러링해 두는 캐시로, 꿈 별자리 캘린더와 출석 스트릭은 모두 이 배열에서 파생된다.
 export const useSavedDreamsStore = create<SavedDreamsState>()(
   persist(
     (set) => ({
       entries: [],
-      addEntry: (entry) =>
+      setEntries: (entries) => set({ entries }),
+      upsertEntry: (entry) =>
         set((state) => ({
-          // 같은 날짜에 이미 기록이 있으면 최신 기록으로 대체한다.
-          entries: [...state.entries.filter((e) => e.date !== entry.date), entry],
+          entries: [...state.entries.filter((e) => e.id !== entry.id), entry],
         })),
+      removeEntry: (id) =>
+        set((state) => ({ entries: state.entries.filter((e) => e.id !== id) })),
     }),
-    { name: "saved-dreams-storage" }
+    // 이전 버전(date/mood/title 로컬 전용 구조)과 스키마가 완전히 달라져 이름을 바꿨다 -
+    // 예전 형태의 캐시가 남아 있어도 무시하고 새로 시작한다.
+    { name: "saved-dreams-storage-v2" }
   )
 );
