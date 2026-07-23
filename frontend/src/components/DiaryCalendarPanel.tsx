@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DreamEntryRecord } from "@/api/dream";
 import { ConstellationDots, ConstellationMoodLegend, type ConstellationEntry } from "@/components/ConstellationCalendar";
+import { buildDayEntryMap } from "@/lib/constellationEntries";
 import { computeStreak } from "@/lib/dreamCalendar";
-import { moodBucketForEmoji } from "@/lib/moodBucket";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 
 const CHECK_IN_PULSE_MS = 1600;
@@ -52,28 +52,8 @@ export default function DiaryCalendarPanel({ onSelectDay }: DiaryCalendarPanelPr
   const goToNextMonth = () => setViewDate((prev) => (prev ? shiftMonth(prev, 1) : prev));
 
   // 기록이 없는 날은 하드코딩 없이 그대로 비어 있어야 하므로, 백엔드에서 동기화해 온
-  // entries 중 조회 중인 달에 해당하는 항목만 뽑아 날짜별로 묶는다. 하루에 여러 꿈을
-  // 기록할 수 있어 값은 배열이며, entries 자체가 이미 (날짜desc, 작성순 asc)로 오므로
-  // 같은 날짜 안에서는 작성 순서가 그대로 유지된다.
-  const entryMap = useMemo(() => {
-    const map = new Map<number, ConstellationEntry[]>();
-    if (!monthKey) return map;
-    for (const entry of entries) {
-      if (!entry.dream_date.startsWith(monthKey)) continue;
-      const day = Number(entry.dream_date.slice(-2));
-      const summary: ConstellationEntry = {
-        id: entry.id,
-        mood: moodBucketForEmoji(entry.emotion),
-        date: entry.dream_date,
-        tooltip: entry.title,
-        emoji: entry.emotion,
-      };
-      const existing = map.get(day);
-      if (existing) existing.push(summary);
-      else map.set(day, [summary]);
-    }
-    return map;
-  }, [entries, monthKey]);
+  // entries 중 조회 중인 달에 해당하는 항목만 뽑아 날짜별로 묶는다 (홈 화면 미니 위젯과 로직 공유).
+  const entryMap = useMemo(() => (monthKey ? buildDayEntryMap(entries, monthKey) : new Map()), [entries, monthKey]);
 
   const { streakDays, checkedInToday } = useMemo(() => computeStreak(entries), [entries]);
 

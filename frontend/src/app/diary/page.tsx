@@ -7,7 +7,6 @@ import { getAuthErrorMessage } from "@/api/auth";
 import {
   createDream,
   deleteDream,
-  listDreams,
   requestAiInterpretation,
   updateDream,
   type AiInterpretation,
@@ -31,7 +30,6 @@ function todayDateInputValue(): string {
 
 export default function DiaryPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const setEntries = useSavedDreamsStore((state) => state.setEntries);
   const upsertEntry = useSavedDreamsStore((state) => state.upsertEntry);
   const removeEntry = useSavedDreamsStore((state) => state.removeEntry);
 
@@ -67,16 +65,8 @@ export default function DiaryPage() {
     setSelectedDate(todayDateInputValue());
   }, []);
 
-  // 로그인 상태에 맞춰 캘린더/스트릭의 진실 공급원인 로컬 스토어를 백엔드와 동기화한다.
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setEntries([]);
-      return;
-    }
-    listDreams()
-      .then(setEntries)
-      .catch(() => {});
-  }, [isAuthenticated, setEntries]);
+  // 로그인 상태에 맞춘 savedDreams 동기화는 모든 화면에 공통으로 떠 있는 NavBar가 담당한다
+  // (홈 캘린더와 꿈 기록소 캘린더가 항상 같은 전역 상태를 바라보게 하기 위함).
 
   useEffect(() => {
     if (!isModalOpen && !detailEntries && !deleteTarget) return;

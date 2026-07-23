@@ -47,23 +47,6 @@ export async function getExplorerCount(): Promise<number> {
 
 export type DreamMood = "good" | "neutral" | "nightmare";
 
-export interface DreamCalendarDay {
-  date: string;
-  mood: DreamMood;
-  summary: string;
-}
-
-export interface DreamCalendar {
-  month: string;
-  days_in_month: number;
-  days: DreamCalendarDay[];
-}
-
-export async function getDreamCalendar(): Promise<DreamCalendar> {
-  const { data } = await api.get<DreamCalendar>("/api/home/dream-calendar");
-  return data;
-}
-
 export interface BestDream {
   id: number;
   title: string;

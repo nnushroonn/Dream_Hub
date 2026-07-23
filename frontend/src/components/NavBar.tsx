@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { listDreams } from "@/api/dream";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 
 const NAV_ITEMS = [
   { href: "/", label: "홈" },
@@ -15,6 +18,20 @@ const NAV_ITEMS = [
 export default function NavBar() {
   const pathname = usePathname();
   const { user, isAuthenticated, logout } = useAuthStore();
+  const setSavedDreams = useSavedDreamsStore((state) => state.setEntries);
+
+  // 어느 화면(홈/꿈 기록소/커뮤니티/마이페이지)으로 들어오든 NavBar는 항상 렌더링되므로,
+  // 여기서 로그인한 유저의 실제 꿈 기록을 동기화해 두면 홈 캘린더와 꿈 기록소 캘린더가
+  // 항상 같은 savedDreams 전역 상태를 바라보게 된다.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setSavedDreams([]);
+      return;
+    }
+    listDreams()
+      .then(setSavedDreams)
+      .catch(() => {});
+  }, [isAuthenticated, setSavedDreams]);
 
   return (
     <header className="sticky top-0 z-10 border-b border-indigo-900/50 bg-[#0b0518]/80 backdrop-blur">

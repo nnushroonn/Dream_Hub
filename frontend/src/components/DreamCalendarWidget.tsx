@@ -1,63 +1,64 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-import { getDreamCalendar, type DreamCalendarDay, type DreamMood } from "@/api/dream";
-import { ConstellationDots, ConstellationMoodLegend, type ConstellationEntry } from "@/components/ConstellationCalendar";
+import { ConstellationDots, ConstellationMoodLegend } from "@/components/ConstellationCalendar";
+import { buildDayEntryMap } from "@/lib/constellationEntries";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 
-const FALLBACK_DAYS_IN_MONTH = 30;
-
-const MOOD_EMOJI_FALLBACK: Record<DreamMood, string> = {
-  good: "😊",
-  neutral: "😐",
-  nightmare: "😱",
-};
-
-function toEntryMap(days: DreamCalendarDay[]): Map<number, ConstellationEntry[]> {
-  return new Map(
-    days.map((d, index) => [
-      Number(d.date.slice(-2)),
-      [{ id: index, mood: d.mood, date: d.date, tooltip: d.summary, emoji: MOOD_EMOJI_FALLBACK[d.mood] }],
-    ])
-  );
+function daysInMonthOf(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
 
-function startWeekdayOf(monthLabel: string | null): number {
-  if (!monthLabel) return 0;
-  const [year, month] = monthLabel.split("-").map(Number);
-  return new Date(year, month - 1, 1).getDay();
+function monthKeyOf(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabelOf(date: Date): string {
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
 }
 
 export default function DreamCalendarWidget() {
-  const { isAuthenticated } = useAuthStore();
-  const [month, setMonth] = useState<string | null>(null);
-  const [daysInMonth, setDaysInMonth] = useState(FALLBACK_DAYS_IN_MONTH);
-  const [entries, setEntries] = useState<Map<number, ConstellationEntry[]>>(new Map());
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  // NavBar가 로그인 상태에 맞춰 이미 실제 꿈 기록으로 동기화해 둔 전역 상태를 그대로 읽는다 -
+  // 꿈 기록소 캘린더와 완전히 같은 savedDreams를 바라보므로 두 화면의 데이터가 어긋날 수 없다.
+  const entries = useSavedDreamsStore((state) => state.entries);
 
+  // 서버/클라이언트 렌더 결과가 달라지는 걸 피하려고 마운트 이후에만 오늘 날짜를 채운다.
+  const [today, setToday] = useState<Date | null>(null);
   useEffect(() => {
-    if (!isAuthenticated) return;
-    getDreamCalendar()
-      .then((res) => {
-        setMonth(res.month);
-        setDaysInMonth(res.days_in_month);
-        setEntries(toEntryMap(res.days));
-      })
-      .catch(() => {});
-  }, [isAuthenticated]);
+    setToday(new Date());
+  }, []);
+
+  const monthKey = today ? monthKeyOf(today) : null;
+  const monthLabel = today ? monthLabelOf(today) : "이번 달";
+  const daysInMonth = today ? daysInMonthOf(today) : 30;
+  const startWeekday = today ? new Date(today.getFullYear(), today.getMonth(), 1).getDay() : 0;
+
+  const entryMap = useMemo(() => (monthKey ? buildDayEntryMap(entries, monthKey) : new Map()), [entries, monthKey]);
+  const hasAnyEntry = entryMap.size > 0;
 
   return (
     <section className="relative mx-auto max-w-2xl overflow-hidden rounded-3xl border border-white/10 bg-white/5 px-6 py-8 text-center backdrop-blur-md">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(129,90,255,0.12),transparent_60%)]" />
 
       <h2 className="relative text-lg font-semibold text-slate-100">🌌 나의 지난밤 꿈 별자리</h2>
-      <p className="relative mt-1 text-xs text-slate-500">
-        {month ?? "이번 달"}, 당신의 무의식이 그려낸 궤적
-      </p>
+      <p className="relative mt-1 text-xs text-slate-500">{monthLabel}, 당신의 무의식이 그려낸 궤적</p>
 
-      <div className="relative mt-10 flex justify-center">
-        <ConstellationDots daysInMonth={daysInMonth} startWeekday={startWeekdayOf(month)} entries={entries} />
+      {isAuthenticated && !hasAnyEntry && (
+        <p className="relative mt-6 text-xs text-slate-500">
+          아직 이번 달 기록이 없어요.{" "}
+          <Link href="/diary" className="text-violet-300 underline-offset-2 hover:underline">
+            첫 꿈을 기록해 보세요
+          </Link>{" "}
+          ✨
+        </p>
+      )}
+
+      <div className="relative mt-8 flex justify-center">
+        <ConstellationDots daysInMonth={daysInMonth} startWeekday={startWeekday} entries={entryMap} />
       </div>
 
       <div className="relative mt-6">
