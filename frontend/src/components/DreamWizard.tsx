@@ -42,7 +42,7 @@ const LIGHT_OPTIONS: ChipOption[] = [
 const SPACE_OPTIONS: ChipOption[] = [
   { emoji: "🏠", label: "매일 가는 익숙한 곳" },
   { emoji: "🗺️", label: "한 번도 가본 적 없는 낯선 장소" },
-  { emoji: "🫁", label: "사방이 꽉 막힌 밀폐 공간" },
+  { emoji: "🔒", label: "사방이 꽉 막힌 밀폐 공간" },
   { emoji: "🏞️", label: "사방이 탁 트인 야외" },
   { emoji: "🌀", label: "탈출하기 힘든 미로 같은 곳" },
   { emoji: "🌌", label: "왜곡된 초현실적 공간" },
@@ -594,7 +594,7 @@ export default function DreamWizard({
 
               <div className="mt-6 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                 <div>
-                  <p className="text-sm text-white">🪄 자각몽이었나요?</p>
+                  <p className="text-sm text-white">✨ 자각몽이었나요?</p>
                   <p className="mt-0.5 text-xs text-slate-500">꿈속에서 꿈이라는 걸 인지하고 있었다면 켜주세요.</p>
                 </div>
                 <button
