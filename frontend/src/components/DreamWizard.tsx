@@ -73,6 +73,8 @@ interface DreamWizardProps {
   isSubmitting: boolean;
   /** 수정 모드에서 기존에 저장된 응답을 그대로 채워 넣기 위한 원본 데이터 */
   initialData?: DreamSurvey;
+  /** 꿈해몽 사전에서 "이 상징을 바탕으로 기록하기"로 넘어온 경우, Step 1 제목만 미리 채운다 (initialData가 있으면 무시됨) */
+  initialTitle?: string;
   /** 최종 제출 버튼 라벨. 수정 모드에서는 "💾 수정 완료 및 재분석"으로 바뀐다 */
   submitLabel?: string;
 }
@@ -145,6 +147,7 @@ export default function DreamWizard({
   onComplete,
   isSubmitting,
   initialData,
+  initialTitle,
   submitLabel = "✨ AI 무의식 해몽 요청하기",
 }: DreamWizardProps) {
   const [step, setStep] = useState(1);
@@ -154,7 +157,7 @@ export default function DreamWizard({
   const lightInit = initialData ? resolveChipState(LIGHT_OPTIONS, initialData.brightness) : null;
   const [light, setLight] = useState<string | null>(lightInit?.chip ?? null);
   const [lightOther, setLightOther] = useState(lightInit?.other ?? "");
-  const [title, setTitle] = useState(initialData?.title ?? "");
+  const [title, setTitle] = useState(initialData?.title ?? initialTitle ?? "");
 
   const spaceInit = initialData ? resolveChipState(SPACE_OPTIONS, initialData.space_depth) : null;
   const [space, setSpace] = useState<string | null>(spaceInit?.chip ?? null);

@@ -61,8 +61,21 @@ export default function DiaryPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // 꿈해몽 사전의 "이 상징을 바탕으로 꿈 기록하기"에서 ?title=고래 형태로 넘어온 경우,
+  // Step 1 제목을 미리 채워 넣는다.
+  const [initialTitle, setInitialTitle] = useState<string | undefined>(undefined);
+
   useEffect(() => {
     setSelectedDate(todayDateInputValue());
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const titleParam = params.get("title");
+    if (!titleParam) return;
+    setInitialTitle(titleParam);
+    setWizardKey((key) => key + 1);
+    window.history.replaceState({}, "", window.location.pathname);
   }, []);
 
   // 로그인 상태에 맞춘 savedDreams 동기화는 모든 화면에 공통으로 떠 있는 NavBar가 담당한다
@@ -302,6 +315,7 @@ export default function DiaryPage() {
               onComplete={handleWizardComplete}
               isSubmitting={isLoading}
               initialData={editingEntry?.survey}
+              initialTitle={editingEntry ? undefined : initialTitle}
               submitLabel={editingEntry ? "💾 수정 완료 및 재분석" : "✨ AI 무의식 해몽 요청하기"}
             />
 

@@ -11,6 +11,7 @@ import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 const NAV_ITEMS = [
   { href: "/", label: "홈" },
   { href: "/diary", label: "꿈 기록소" },
+  { href: "/dictionary", label: "꿈해몽 사전" },
   { href: "/community", label: "커뮤니티" },
   { href: "/mypage", label: "마이페이지" },
 ];

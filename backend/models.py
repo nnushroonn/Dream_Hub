@@ -52,13 +52,16 @@ class User(Base):
 
 
 class StandardKeyword(Base):
-    """해몽/트렌드의 기준이 되는 대표 키워드."""
+    """해몽/트렌드의 기준이 되는 대표 키워드. 꿈해몽 사전 검색 시 조회수를 여기에 누적해
+    실제 인기 검색어 랭킹(트렌드 대시보드)의 근거로 쓴다."""
 
     __tablename__ = "standard_keywords"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
-    category: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    # 큐레이션된 카테고리에 속하지 않는 자유 검색어도 들어올 수 있어 nullable.
+    category: Mapped[Optional[str]] = mapped_column(String(100), index=True, nullable=True)
+    search_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     aliases: Mapped[list["DictionaryAlias"]] = relationship(
         back_populates="standard",
