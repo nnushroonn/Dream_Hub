@@ -98,6 +98,17 @@ export default function DictionaryPage() {
     setDailyPicks(pickDailyWords(ALL_DICTIONARY_WORDS, 3, dayOfYear));
   }, []);
 
+  // 홈 화면 '실시간 트렌드 키워드'에서 ?search=하늘 형태로 넘어온 경우,
+  // 검색창을 채우고 상세 리스트 뷰를 곧바로 자동 실행한다.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const searchParam = params.get("search");
+    if (!searchParam) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    openKeywordDetail(searchParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // selectedKeyword가 바뀔 때마다 살짝 아래에서 떠오르듯 페이드인 시킨다.
   useEffect(() => {
     if (!selectedKeyword) return;

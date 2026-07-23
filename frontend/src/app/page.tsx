@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { decodeAccessToken } from "@/api/auth";
 import {
@@ -27,6 +28,20 @@ interface Star {
   left: string;
   size: number;
   delay: string;
+}
+
+// 홈 트렌드 키워드는 "하늘을_나는_꿈" 같은 해시태그형 문구라 사전 검색어로 바로 쓰기엔
+// 너무 길다. 꿈해몽 사전으로 넘길 핵심 단어만 뽑아내는 매핑이다.
+const TREND_DICTIONARY_KEYWORD_MAP: Record<string, string> = {
+  하늘을_나는_꿈: "하늘",
+  이빨이_빠지는_꿈: "이빨",
+  물에_빠지는_꿈: "물",
+  누군가에게_쫓기는_꿈: "쫓기는",
+  돌아가신_분을_만나는_꿈: "돌아가신 조상",
+};
+
+function resolveTrendDictionaryKeyword(rawKeyword: string): string {
+  return TREND_DICTIONARY_KEYWORD_MAP[rawKeyword] ?? rawKeyword.replace(/_?꿈$/, "").replace(/_/g, " ").trim();
 }
 
 const CARD_BANNERS = [
@@ -63,6 +78,7 @@ function rankStyle(index: number): { number: string; row: string } {
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const { login } = useAuthStore();
 
   const [trends, setTrends] = useState<Trend[]>([]);
@@ -265,9 +281,13 @@ export default function HomePage() {
             {trends.map((trend, index) => {
               const style = rankStyle(index);
               return (
-                <div
+                <button
                   key={trend.keyword}
-                  className={`flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/10 ${style.row}`}
+                  type="button"
+                  onClick={() =>
+                    router.push(`/dictionary?search=${encodeURIComponent(resolveTrendDictionaryKeyword(trend.keyword))}`)
+                  }
+                  className={`group flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-left backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:cursor-pointer hover:bg-white/10 ${style.row}`}
                 >
                   <span className={`mr-1 w-8 shrink-0 text-center text-2xl font-bold ${style.number}`}>
                     {index + 1}
@@ -275,7 +295,10 @@ export default function HomePage() {
                   <span className="text-2xl">{trend.emoji}</span>
                   <span className="flex-1 font-medium text-slate-100">#{trend.keyword}</span>
                   <span className="text-sm text-violet-300/80">{trend.count}회</span>
-                </div>
+                  <span className="ml-1 -translate-x-1 text-violet-300/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-violet-300/90">
+                    ➔
+                  </span>
+                </button>
               );
             })}
           </div>
