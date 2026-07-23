@@ -27,11 +27,11 @@ function shiftMonth(date: Date, delta: number): Date {
 }
 
 interface DiaryCalendarPanelProps {
-  /** 불 켜진 별자리 노드를 클릭했을 때, 해당 꿈 기록 전체를 들고 상세 보기를 열어달라는 콜백 */
-  onSelectEntry?: (entry: DreamEntryRecord) => void;
+  /** 불 켜진 별자리 노드를 클릭했을 때, 그 날의 꿈 기록 전체 목록을 들고 상세 보기를 열어달라는 콜백 */
+  onSelectDay?: (dayEntries: DreamEntryRecord[]) => void;
 }
 
-export default function DiaryCalendarPanel({ onSelectEntry }: DiaryCalendarPanelProps) {
+export default function DiaryCalendarPanel({ onSelectDay }: DiaryCalendarPanelProps) {
   const entries = useSavedDreamsStore((state) => state.entries);
 
   // 조회 중인 달은 클라이언트 시각에 의존하므로, 서버/클라이언트 렌더 불일치를 피하려고
@@ -52,23 +52,27 @@ export default function DiaryCalendarPanel({ onSelectEntry }: DiaryCalendarPanel
   const goToNextMonth = () => setViewDate((prev) => (prev ? shiftMonth(prev, 1) : prev));
 
   // 기록이 없는 날은 하드코딩 없이 그대로 비어 있어야 하므로, 백엔드에서 동기화해 온
-  // entries 중 조회 중인 달에 해당하는 항목만 뽑아 도트 좌표로 매핑한다.
+  // entries 중 조회 중인 달에 해당하는 항목만 뽑아 날짜별로 묶는다. 하루에 여러 꿈을
+  // 기록할 수 있어 값은 배열이며, entries 자체가 이미 (날짜desc, 작성순 asc)로 오므로
+  // 같은 날짜 안에서는 작성 순서가 그대로 유지된다.
   const entryMap = useMemo(() => {
-    if (!monthKey) return new Map<number, ConstellationEntry>();
-    return new Map(
-      entries
-        .filter((entry) => entry.dream_date.startsWith(monthKey))
-        .map((entry) => [
-          Number(entry.dream_date.slice(-2)),
-          {
-            id: entry.id,
-            mood: moodBucketForEmoji(entry.emotion),
-            date: entry.dream_date,
-            tooltip: entry.title,
-            emoji: entry.emotion,
-          },
-        ])
-    );
+    const map = new Map<number, ConstellationEntry[]>();
+    if (!monthKey) return map;
+    for (const entry of entries) {
+      if (!entry.dream_date.startsWith(monthKey)) continue;
+      const day = Number(entry.dream_date.slice(-2));
+      const summary: ConstellationEntry = {
+        id: entry.id,
+        mood: moodBucketForEmoji(entry.emotion),
+        date: entry.dream_date,
+        tooltip: entry.title,
+        emoji: entry.emotion,
+      };
+      const existing = map.get(day);
+      if (existing) existing.push(summary);
+      else map.set(day, [summary]);
+    }
+    return map;
   }, [entries, monthKey]);
 
   const { streakDays, checkedInToday } = useMemo(() => computeStreak(entries), [entries]);
@@ -87,9 +91,10 @@ export default function DiaryCalendarPanel({ onSelectEntry }: DiaryCalendarPanel
     }
   }, [checkedInToday]);
 
-  const handleSelectEntry = (id: number) => {
-    const entry = entries.find((e) => e.id === id);
-    if (entry) onSelectEntry?.(entry);
+  const handleSelectDay = (dayEntries: ConstellationEntry[]) => {
+    const ids = new Set(dayEntries.map((e) => e.id));
+    const fullEntries = entries.filter((e) => ids.has(e.id));
+    if (fullEntries.length > 0) onSelectDay?.(fullEntries);
   };
 
   return (
@@ -141,7 +146,7 @@ export default function DiaryCalendarPanel({ onSelectEntry }: DiaryCalendarPanel
           daysInMonth={daysInMonth}
           startWeekday={startWeekday}
           entries={entryMap}
-          onSelectEntry={handleSelectEntry}
+          onSelectEntry={handleSelectDay}
         />
       </div>
 

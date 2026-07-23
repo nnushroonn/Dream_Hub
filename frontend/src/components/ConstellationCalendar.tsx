@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 import type { DreamMood } from "@/api/dream";
 
@@ -18,6 +18,26 @@ const MOOD_NODE_GLOW: Record<DreamMood, string> = {
   nightmare: "bg-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.65)]",
 };
 
+// 하루에 감정이 다른 꿈이 2개 이상 섞여 있을 때, 그 색들을 그라데이션으로 녹여 성단처럼 보이게 한다.
+const MOOD_GLOW_RGBA: Record<DreamMood, string> = {
+  good: "rgba(251,191,36,0.9)",
+  neutral: "rgba(226,232,240,0.9)",
+  nightmare: "rgba(168,85,247,0.9)",
+};
+
+const MOOD_DOT_BG: Record<DreamMood, string> = {
+  good: "bg-amber-400",
+  neutral: "bg-white/90",
+  nightmare: "bg-purple-500",
+};
+
+// 서브 도트(2번째 이후 기록)를 노드 테두리 세 지점에 붙여 '별의 무리'처럼 보이게 한다.
+const SUB_DOT_POSITIONS: CSSProperties[] = [
+  { top: -2, right: -2 },
+  { bottom: -2, right: -2 },
+  { bottom: -2, left: -2 },
+];
+
 export interface ConstellationEntry {
   id: number;
   mood: DreamMood;
@@ -30,9 +50,10 @@ interface ConstellationDotsProps {
   daysInMonth: number;
   /** 그 달 1일의 요일. 0(일) ~ 6(토) */
   startWeekday: number;
-  entries: Map<number, ConstellationEntry>;
-  /** 불 켜진 노드를 클릭하면 해당 기록의 id와 함께 호출된다 (상세 보기 오픈용) */
-  onSelectEntry?: (id: number) => void;
+  /** 하루에 여러 꿈을 기록할 수 있어, 날짜당 기록이 배열로 들어온다 */
+  entries: Map<number, ConstellationEntry[]>;
+  /** 불 켜진 노드를 클릭하면 그 날의 전체 기록 목록과 함께 호출된다 (상세 보기 오픈용) */
+  onSelectEntry?: (dayEntries: ConstellationEntry[]) => void;
 }
 
 function cellCenter(gridIndex: number) {
@@ -81,10 +102,22 @@ export function ConstellationDots({ daysInMonth, startWeekday, entries, onSelect
         {Array.from({ length: daysInMonth }, (_, i) => i).map((i) => {
           const day = i + 1;
           const gridIndex = startWeekday + i;
-          const entry = entries.get(day);
+          const dayEntries = entries.get(day);
+          const entry = dayEntries?.[0];
+          const extraCount = (dayEntries?.length ?? 0) - 1;
+          const uniqueMoods = dayEntries ? Array.from(new Set(dayEntries.map((e) => e.mood))) : [];
           const { x, y } = cellCenter(gridIndex);
           const isTopRow = Math.floor(gridIndex / COLS) === 0;
           const isHovered = hoveredDay === day;
+
+          // 감정이 섞인 성단(2개 이상 기록 + 서로 다른 무드)은 인라인 그라데이션으로 색을 섞는다.
+          const clusterStyle: CSSProperties | undefined =
+            uniqueMoods.length > 1
+              ? {
+                  background: `linear-gradient(135deg, ${uniqueMoods.map((m) => MOOD_GLOW_RGBA[m]).join(", ")})`,
+                  boxShadow: `0 0 16px ${MOOD_GLOW_RGBA[uniqueMoods[0]]}`,
+                }
+              : undefined;
 
           return (
               <div
@@ -98,20 +131,35 @@ export function ConstellationDots({ daysInMonth, startWeekday, entries, onSelect
                 <button
                   type="button"
                   disabled={!entry}
-                  onClick={() => entry && onSelectEntry?.(entry.id)}
-                  aria-label={entry ? `${entry.date} 꿈 기록 상세 보기` : undefined}
+                  onClick={() => dayEntries && onSelectEntry?.(dayEntries)}
+                  aria-label={
+                    entry ? `${entry.date} 꿈 기록 ${dayEntries!.length}건 상세 보기` : undefined
+                  }
+                  style={clusterStyle}
                   className={`flex h-full w-full select-none items-center justify-center rounded-full transition-all duration-300 ${
                     entry
-                      ? `cursor-pointer text-white font-medium ${MOOD_NODE_GLOW[entry.mood]} ${isHovered ? "scale-110" : ""}`
+                      ? `cursor-pointer text-white font-medium ${clusterStyle ? "" : MOOD_NODE_GLOW[entry.mood]} ${
+                          isHovered ? "scale-110" : ""
+                        }`
                       : "cursor-default text-xs font-light text-slate-400/50 hover:bg-white/5 hover:backdrop-blur-sm"
                   }`}
                 >
                   <span className={entry ? "text-sm" : undefined}>{day}</span>
                 </button>
 
+                {/* 서브 도트: 하루에 기록이 2개 이상이면 별의 무리처럼 작은 점을 최대 3개까지 덧붙인다 */}
+                {extraCount > 0 &&
+                  dayEntries!.slice(1, 4).map((extra, idx) => (
+                    <span
+                      key={extra.id}
+                      className={`pointer-events-none absolute h-1.5 w-1.5 rounded-full ${MOOD_DOT_BG[extra.mood]} shadow-[0_0_4px_rgba(255,255,255,0.7)]`}
+                      style={SUB_DOT_POSITIONS[idx]}
+                    />
+                  ))}
+
                 {entry && (
                   <div
-                    className={`pointer-events-none absolute left-1/2 z-10 w-40 -translate-x-1/2 rounded-xl border border-violet-400/30 bg-black/90 px-3 py-2 text-[11px] leading-relaxed text-violet-100 shadow-lg backdrop-blur-md transition-all duration-300 ${
+                    className={`pointer-events-none absolute left-1/2 z-10 w-44 -translate-x-1/2 rounded-xl border border-violet-400/30 bg-black/90 px-3 py-2 text-[11px] leading-relaxed text-violet-100 shadow-lg backdrop-blur-md transition-all duration-300 ${
                       isTopRow ? "top-full mt-2" : "bottom-full mb-2"
                     } ${
                       isHovered
@@ -119,11 +167,16 @@ export function ConstellationDots({ daysInMonth, startWeekday, entries, onSelect
                         : `${isTopRow ? "-translate-y-1" : "translate-y-1"} opacity-0`
                     }`}
                   >
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm leading-none">{entry.emoji}</span>
-                      <span className="text-[10px] text-violet-300/70">{entry.date}</span>
-                    </div>
-                    <p className="mt-1">{entry.tooltip}</p>
+                    <span className="text-[10px] text-violet-300/70">
+                      {entry.date}
+                      {extraCount > 0 && ` · 꿈 ${dayEntries!.length}편`}
+                    </span>
+                    {dayEntries!.map((e) => (
+                      <div key={e.id} className="mt-1 flex items-start gap-1.5">
+                        <span className="text-sm leading-tight">{e.emoji}</span>
+                        <p className="leading-tight">{e.tooltip}</p>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

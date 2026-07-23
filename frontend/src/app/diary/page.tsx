@@ -52,8 +52,13 @@ export default function DiaryPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // 상세 보기 / 삭제 확인 모달
-  const [detailEntry, setDetailEntry] = useState<DreamEntryRecord | null>(null);
+  // 상세 보기 모달: 하루에 여러 꿈이 있으면 탭으로 전환해서 본다.
+  const [detailEntries, setDetailEntries] = useState<DreamEntryRecord[] | null>(null);
+  const [activeDetailIndex, setActiveDetailIndex] = useState(0);
+  const [detailVisible, setDetailVisible] = useState(true);
+  const activeDetail = detailEntries?.[activeDetailIndex] ?? null;
+
+  // 삭제 확인 모달
   const [deleteTarget, setDeleteTarget] = useState<DreamEntryRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -74,16 +79,16 @@ export default function DiaryPage() {
   }, [isAuthenticated, setEntries]);
 
   useEffect(() => {
-    if (!isModalOpen && !detailEntry && !deleteTarget) return;
+    if (!isModalOpen && !detailEntries && !deleteTarget) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (deleteTarget) setDeleteTarget(null);
-      else if (detailEntry) setDetailEntry(null);
+      else if (detailEntries) setDetailEntries(null);
       else setIsModalOpen(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isModalOpen, detailEntry, deleteTarget]);
+  }, [isModalOpen, detailEntries, deleteTarget]);
 
   const handleWizardComplete = async (survey: DreamSurvey) => {
     if (isLoading) return;
@@ -133,7 +138,7 @@ export default function DiaryPage() {
   };
 
   const startEdit = (entry: DreamEntryRecord) => {
-    setDetailEntry(null);
+    setDetailEntries(null);
     setEditingEntry(entry);
     setSelectedDate(entry.dream_date);
     setMood(entry.emotion);
@@ -144,12 +149,34 @@ export default function DiaryPage() {
     setWizardKey((key) => key + 1);
   };
 
-  const cancelEdit = () => {
+  // 수정 모드 취소, 그리고 "오늘 다른 꿈 추가 기록" 버튼이 공유하는 초기화 로직 -
+  // 편집 상태를 비우고 오늘 날짜의 새 빈 세션으로 되돌린다.
+  const startNewToday = () => {
     setEditingEntry(null);
     setSelectedDate(todayDateInputValue());
     setMood(MOOD_OPTIONS[3].emoji);
     setIsPublic(false);
+    setInterpretation(null);
+    setErrorMessage(null);
+    setSaveError(null);
     setWizardKey((key) => key + 1);
+  };
+
+  const handleSelectDay = (dayEntries: DreamEntryRecord[]) => {
+    if (dayEntries.length === 0) return;
+    setDetailEntries([...dayEntries].sort((a, b) => a.created_at.localeCompare(b.created_at)));
+    setActiveDetailIndex(0);
+    setDetailVisible(true);
+  };
+
+  // 탭/화살표로 다른 꿈을 볼 때 짧게 페이드 아웃-인 시켜 전환이 부드럽게 느껴지게 한다.
+  const switchDetailTab = (index: number) => {
+    if (!detailEntries || index === activeDetailIndex || index < 0 || index >= detailEntries.length) return;
+    setDetailVisible(false);
+    window.setTimeout(() => {
+      setActiveDetailIndex(index);
+      setDetailVisible(true);
+    }, 150);
   };
 
   const confirmDelete = async () => {
@@ -191,18 +218,29 @@ export default function DiaryPage() {
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,360px)_1fr] lg:items-start">
           {/* 좌측: 꿈 별자리 캘린더 & 출석 체크 */}
-          <DiaryCalendarPanel onSelectEntry={setDetailEntry} />
+          <DiaryCalendarPanel onSelectDay={handleSelectDay} />
 
           {/* 우측: 꿈 작성 에디터 - 저장/수정/삭제는 유저 소유 데이터라 로그인이 필요하다 */}
           <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md sm:p-8">
-            {editingEntry && (
-              <div className="mb-5 flex items-center justify-between rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-2.5 text-xs text-violet-200">
-                <span>✏️ {editingEntry.dream_date} 기록을 수정하는 중이에요</span>
-                <button type="button" onClick={cancelEdit} className="text-violet-300/70 underline-offset-2 hover:text-white hover:underline">
-                  수정 취소
-                </button>
-              </div>
-            )}
+            <div className="mb-5 flex items-center justify-between gap-3">
+              {editingEntry ? (
+                <div className="flex flex-1 items-center justify-between rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-2.5 text-xs text-violet-200">
+                  <span>✏️ {editingEntry.dream_date} 기록을 수정하는 중이에요</span>
+                  <button type="button" onClick={startNewToday} className="text-violet-300/70 underline-offset-2 hover:text-white hover:underline">
+                    수정 취소
+                  </button>
+                </div>
+              ) : (
+                <span className="text-xs text-slate-500">오늘의 무의식을 하나씩 기록해 보세요.</span>
+              )}
+              <button
+                type="button"
+                onClick={startNewToday}
+                className="shrink-0 rounded-full border border-violet-400/30 bg-violet-500/10 px-3.5 py-2 text-xs font-medium text-violet-200 transition-colors hover:border-violet-400/60 hover:bg-violet-500/20"
+              >
+                ➕ 오늘 다른 꿈 추가 기록
+              </button>
+            </div>
 
             {/* 고정형 메타 정보: 날짜 · 감정 · 공개 범위 */}
             <div className="space-y-5">
@@ -394,58 +432,102 @@ export default function DiaryPage() {
         </div>
       )}
 
-      {/* 상세 보기 모달: 캘린더의 불 켜진 노드를 클릭하면 열린다 */}
-      {detailEntry && (
+      {/* 상세 보기 모달: 캘린더의 불 켜진 노드를 클릭하면 열린다. 하루에 꿈이 여러 개면 탭으로 넘나든다 */}
+      {detailEntries && activeDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setDetailEntry(null)} />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setDetailEntries(null)} />
 
           <div className="relative max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-violet-400/30 bg-white/10 p-8 shadow-[0_0_60px_rgba(139,92,246,0.35)] backdrop-blur-2xl">
             <button
               type="button"
-              onClick={() => setDetailEntry(null)}
+              onClick={() => setDetailEntries(null)}
               aria-label="닫기"
               className="absolute right-5 top-5 text-slate-400 transition-colors hover:text-white"
             >
               ✕
             </button>
 
-            <div className="text-center">
-              <p className="text-xs tracking-widest text-indigo-300/70 uppercase">{detailEntry.dream_date}</p>
-              <h3 className="mt-1 text-2xl font-semibold text-white">
-                {detailEntry.emotion} {detailEntry.title}
-              </h3>
-            </div>
-
-            <div className="mt-5 flex flex-wrap justify-center gap-2">
-              {detailEntry.interpretation.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full border border-violet-400/30 bg-violet-500/15 px-3 py-1 text-xs text-violet-200"
-                >
-                  {tag.startsWith("#") ? tag : `#${tag}`}
-                </span>
-              ))}
-            </div>
-
-            <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-300">
-              {detailEntry.interpretation.description}
+            <p className="text-center text-xs tracking-widest text-indigo-300/70 uppercase">
+              {activeDetail.dream_date}
+              {detailEntries.length > 1 && ` · ${activeDetailIndex + 1} / ${detailEntries.length}`}
             </p>
 
-            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-center text-xs text-indigo-300/70">행운의 아이템</p>
-                <p className="mt-1.5 text-center font-medium text-white">{detailEntry.interpretation.lucky_item}</p>
+            {/* 탭 + 좌우 화살표: 같은 날짜에 기록된 여러 꿈 사이를 오간다 */}
+            {detailEntries.length > 1 && (
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => switchDetailTab(activeDetailIndex - 1)}
+                  disabled={activeDetailIndex === 0}
+                  aria-label="이전 꿈"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  ◀
+                </button>
+                <div className="flex flex-wrap justify-center gap-1.5">
+                  {detailEntries.map((entry, index) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      onClick={() => switchDetailTab(index)}
+                      className={`max-w-[9rem] truncate rounded-full border px-3 py-1 text-xs transition-all duration-200 ${
+                        index === activeDetailIndex
+                          ? "border-violet-400/70 bg-violet-500/25 text-white shadow-[0_0_12px_rgba(167,139,250,0.35)]"
+                          : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
+                      }`}
+                    >
+                      {entry.emotion} {entry.title}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => switchDetailTab(activeDetailIndex + 1)}
+                  disabled={activeDetailIndex === detailEntries.length - 1}
+                  aria-label="다음 꿈"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  ▶
+                </button>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-center text-xs text-indigo-300/70">행운의 숫자</p>
-                <p className="mt-1.5 text-center font-medium text-white">{detailEntry.interpretation.lucky_number}</p>
+            )}
+
+            <div className={`transition-opacity duration-300 ${detailVisible ? "opacity-100" : "opacity-0"}`}>
+              <h3 className="mt-4 text-center text-2xl font-semibold text-white">
+                {activeDetail.emotion} {activeDetail.title}
+              </h3>
+
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                {activeDetail.interpretation.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border border-violet-400/30 bg-violet-500/15 px-3 py-1 text-xs text-violet-200"
+                  >
+                    {tag.startsWith("#") ? tag : `#${tag}`}
+                  </span>
+                ))}
+              </div>
+
+              <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-300">
+                {activeDetail.interpretation.description}
+              </p>
+
+              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-center text-xs text-indigo-300/70">행운의 아이템</p>
+                  <p className="mt-1.5 text-center font-medium text-white">{activeDetail.interpretation.lucky_item}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-center text-xs text-indigo-300/70">행운의 숫자</p>
+                  <p className="mt-1.5 text-center font-medium text-white">{activeDetail.interpretation.lucky_number}</p>
+                </div>
               </div>
             </div>
 
             <div className="mt-7 flex flex-col gap-2.5 sm:flex-row">
               <button
                 type="button"
-                onClick={() => startEdit(detailEntry)}
+                onClick={() => startEdit(activeDetail)}
                 className="flex-1 rounded-full border border-violet-400/40 bg-violet-500/15 px-5 py-2.5 text-sm font-semibold text-violet-100 transition-transform hover:-translate-y-0.5"
               >
                 ✏️ 수정하기
@@ -453,8 +535,8 @@ export default function DiaryPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setDeleteTarget(detailEntry);
-                  setDetailEntry(null);
+                  setDeleteTarget(activeDetail);
+                  setDetailEntries(null);
                 }}
                 className="flex-1 rounded-full border border-red-400/40 bg-red-500/10 px-5 py-2.5 text-sm font-semibold text-red-200 transition-transform hover:-translate-y-0.5"
               >

@@ -15,11 +15,11 @@ const MOOD_EMOJI_FALLBACK: Record<DreamMood, string> = {
   nightmare: "😱",
 };
 
-function toEntryMap(days: DreamCalendarDay[]): Map<number, ConstellationEntry> {
+function toEntryMap(days: DreamCalendarDay[]): Map<number, ConstellationEntry[]> {
   return new Map(
     days.map((d, index) => [
       Number(d.date.slice(-2)),
-      { id: index, mood: d.mood, date: d.date, tooltip: d.summary, emoji: MOOD_EMOJI_FALLBACK[d.mood] },
+      [{ id: index, mood: d.mood, date: d.date, tooltip: d.summary, emoji: MOOD_EMOJI_FALLBACK[d.mood] }],
     ])
   );
 }
@@ -34,7 +34,7 @@ export default function DreamCalendarWidget() {
   const { isAuthenticated } = useAuthStore();
   const [month, setMonth] = useState<string | null>(null);
   const [daysInMonth, setDaysInMonth] = useState(FALLBACK_DAYS_IN_MONTH);
-  const [entries, setEntries] = useState<Map<number, ConstellationEntry>>(new Map());
+  const [entries, setEntries] = useState<Map<number, ConstellationEntry[]>>(new Map());
 
   useEffect(() => {
     if (!isAuthenticated) return;

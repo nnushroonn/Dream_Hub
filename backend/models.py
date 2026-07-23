@@ -99,10 +99,11 @@ class DictionaryAlias(Base):
 
 class DreamEntry(Base):
     """꿈 기록소의 꿈 일기 한 건. 6단계 위저드 응답 원본과 AI 해몽 결과를 함께 저장해,
-    수정 시 폼 프리필과 상세 보기 화면에 그대로 재사용할 수 있게 한다."""
+    수정 시 폼 프리필과 상세 보기 화면에 그대로 재사용할 수 있게 한다.
+
+    하루에 여러 개의 꿈을 기록할 수 있어(1:N), (user_id, dream_date) 조합은 유니크하지 않다."""
 
     __tablename__ = "dream_entries"
-    __table_args__ = (UniqueConstraint("user_id", "dream_date", name="uq_dream_entry_user_date"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)

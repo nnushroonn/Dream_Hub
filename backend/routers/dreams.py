@@ -92,7 +92,9 @@ def list_dreams(current_user: User = Depends(get_current_user), db: Session = De
     entries = (
         db.query(DreamEntry)
         .filter(DreamEntry.user_id == current_user.id)
-        .order_by(DreamEntry.dream_date.desc())
+        # 같은 날짜에 여러 건이 있을 수 있어, 날짜 내림차순 + 작성 순서(오름차순)로 정렬해
+        # 프론트엔드가 탭 순서를 다시 계산할 필요 없이 그대로 쓸 수 있게 한다.
+        .order_by(DreamEntry.dream_date.desc(), DreamEntry.created_at.asc())
         .all()
     )
     return [_to_response(entry) for entry in entries]
@@ -104,16 +106,10 @@ def create_dream(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # 같은 날짜에 이미 기록이 있으면(uq_dream_entry_user_date) 최신 기록으로 대체한다.
-    existing = (
-        db.query(DreamEntry)
-        .filter(DreamEntry.user_id == current_user.id, DreamEntry.dream_date == payload.dream_date)
-        .first()
-    )
-    entry = existing or DreamEntry(user_id=current_user.id)
+    # 하루에 여러 개의 꿈을 기록할 수 있으므로, 같은 날짜라도 항상 새 레코드를 만든다.
+    entry = DreamEntry(user_id=current_user.id)
     _apply_input(entry, payload)
-    if existing is None:
-        db.add(entry)
+    db.add(entry)
     db.commit()
     db.refresh(entry)
     return _to_response(entry)
@@ -127,22 +123,6 @@ def update_dream(
     db: Session = Depends(get_db),
 ):
     entry = _get_owned_entry(dream_id, current_user, db)
-
-    conflict = (
-        db.query(DreamEntry)
-        .filter(
-            DreamEntry.user_id == current_user.id,
-            DreamEntry.dream_date == payload.dream_date,
-            DreamEntry.id != dream_id,
-        )
-        .first()
-    )
-    if conflict is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="해당 날짜에 이미 다른 꿈 기록이 있어요.",
-        )
-
     _apply_input(entry, payload)
     db.commit()
     db.refresh(entry)
