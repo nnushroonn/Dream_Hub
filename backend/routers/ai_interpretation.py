@@ -100,6 +100,21 @@ FALLBACK_RESULT = {
 }
 
 
+QUICK_SYSTEM_PROMPT_TEMPLATE = """당신은 깊은 통찰력과 감성적인 언어 해설 능력을 겸비한 세계 최고의 심층 심리학자이자 꿈 분석 전문가(Dream Analyst)입니다. Carl Jung의 분석심리학과 무의식 투사 이론을 바탕으로, 유저가 형식 없이 자유롭게 적은 꿈 서술 한 편을 분석하여 신뢰감 있고 몽환적인 꿈해몽 보고서를 작성해야 합니다.
+
+[유저가 자유롭게 적은 꿈 서술]
+제목: {title}
+내용: {raw_text}
+
+[수행 지시사항]
+1. 유저는 6단계 정밀 문답을 거치지 않고 이 짧은 서술 하나만 남겼습니다. 문장 속에서 조도·공간·등장 인물/사물·행동·감정의 단서를 스스로 찾아내 6단계 정밀 분석에 준하는 깊이의 해몽을 작성하세요. 단서가 부족한 부분은 서술의 전체 분위기에서 합리적으로 추론하세요.
+2. 본문 구조: description은 반드시 '무의식 상태 → 상징 분석 → 자아의 메시지' 3개 문단으로 구성하고, 문단 사이는 빈 줄로 구분하세요. 전체 5~6문장 이상의 풍부한 분량으로 작성해 "짧게 적었을 뿐인데도 내 꿈을 제대로 읽어내는구나"라는 신뢰를 주세요.
+3. 행운의 요소 근거: lucky_item_reason과 lucky_number_reason은 유저의 서술에 등장한 구체적인 소재나 감정을 직접 인용하며 왜 지금 이 아이템/숫자가 필요한지 설득력 있게 설명하세요. 막연한 미사여구는 금지합니다.
+4. 톤앤매너: 'Dream_Hub' 서비스의 정체성에 맞게 신비롭고 몽환적이면서도, 내면을 꿰뚫어 보는 듯한 차분하고 세련된 어조를 유지하세요.
+5. 다양성과 동적 생성: 고정된 결과는 절대 금지합니다. 서술 내용에 맞춰 매번 유니크한 키워드 태그와 행운의 요소를 실시간으로 창작하세요.
+6. 엄격한 응답 포맷: 대화형 답변이나 서론/결론은 모두 배제하고, 반드시 지정된 JSON 스키마 구조로만 정확히 답변하세요."""
+
+
 class DreamSurveyInput(BaseModel):
     title: str
     brightness: str
@@ -123,6 +138,11 @@ class DreamInterpretationRequest(BaseModel):
     survey: DreamSurveyInput
 
 
+class QuickDreamInterpretationRequest(BaseModel):
+    title: str
+    raw_text: str
+
+
 # --- 비즈니스 로직: 프롬프트 주입 / Claude 호출 -----------------------------
 
 
@@ -143,6 +163,11 @@ def build_system_prompt(survey: DreamSurveyInput) -> str:
         is_lucid="True" if survey.is_lucid else "False",
         final_memo=survey.final_memo or "(없음)",
     )
+
+
+def build_quick_system_prompt(title: str, raw_text: str) -> str:
+    """⚡ 10초 미니멀 빠른 기록 모드: 6단계 문답 없이 자유 서술 한 편만으로 프롬프트를 구성한다."""
+    return QUICK_SYSTEM_PROMPT_TEMPLATE.format(title=title, raw_text=raw_text)
 
 
 def request_interpretation(system_prompt: str) -> dict:
@@ -179,4 +204,10 @@ def request_interpretation(system_prompt: str) -> dict:
 @router.post("/dream-interpretation")
 def create_dream_interpretation(payload: DreamInterpretationRequest) -> dict:
     system_prompt = build_system_prompt(payload.survey)
+    return request_interpretation(system_prompt)
+
+
+@router.post("/dream-interpretation-quick")
+def create_quick_dream_interpretation(payload: QuickDreamInterpretationRequest) -> dict:
+    system_prompt = build_quick_system_prompt(payload.title, payload.raw_text)
     return request_interpretation(system_prompt)

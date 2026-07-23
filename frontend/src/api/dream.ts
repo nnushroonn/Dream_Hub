@@ -103,6 +103,15 @@ export async function requestAiInterpretation(payload: DreamEntryInput): Promise
   return data;
 }
 
+// ⚡ 10초 미니멀 빠른 기록: 6단계 문답 없이 자유 서술 한 편만 보내 AI 해몽을 받는다.
+export async function requestQuickAiInterpretation(title: string, rawText: string): Promise<AiInterpretation> {
+  const { data } = await api.post<AiInterpretation>("/api/dream-interpretation-quick", {
+    title,
+    raw_text: rawText,
+  });
+  return data;
+}
+
 // 아래는 로그인한 유저 소유의 꿈 기록 CRUD. 미리보기용 해몽 요청(위)과 달리 로그인이 필요하다.
 
 export interface DreamEntryRecord {

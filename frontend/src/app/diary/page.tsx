@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { getAuthErrorMessage } from "@/api/auth";
@@ -8,6 +8,7 @@ import {
   createDream,
   deleteDream,
   requestAiInterpretation,
+  requestQuickAiInterpretation,
   updateDream,
   type AiInterpretation,
   type DreamEntryRecord,
@@ -62,11 +63,29 @@ export default function DiaryPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // 꿈해몽 사전의 "이 상징을 바탕으로 꿈 기록하기"에서 ?title=고래 형태로 넘어온 경우,
-  // Step 1 제목을 미리 채워 넣는다.
+  // Step 1 제목을 미리 채워 넣는다. ⚡ 빠른 기록에서 정밀 모드로 업그레이드할 때도 재사용한다.
   const [initialTitle, setInitialTitle] = useState<string | undefined>(undefined);
+  const [initialActionDetail, setInitialActionDetail] = useState<string | undefined>(undefined);
+
+  // 투트랙 기록 모드: 기본값은 진입 장벽이 낮은 ⚡ 10초 미니멀 빠른 기록.
+  const [recordMode, setRecordMode] = useState<"quick" | "precise">("quick");
+  const [quickTitle, setQuickTitle] = useState("");
+  const [quickText, setQuickText] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  // Web Speech API는 표준 DOM 타입에 아직 없어 any로 다룬다 (webkitSpeechRecognition 등 실험적 API).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     setSelectedDate(todayDateInputValue());
+  }, []);
+
+  // 브라우저 내장 음성 인식(Web Speech API) 지원 여부는 마운트 이후에만 판단한다.
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const win = window as any;
+    setSpeechSupported(Boolean(win.SpeechRecognition ?? win.webkitSpeechRecognition));
   }, []);
 
   useEffect(() => {
@@ -110,10 +129,93 @@ export default function DiaryPage() {
     }
   };
 
+  // ⚡ 10초 미니멀 빠른 기록: 6단계 문답 없이 자유 서술 한 편만 AI 해몽 백엔드로 보낸다.
+  // 저장 시에는 기존 CRUD 흐름을 그대로 재사용하기 위해, 구조화된 6단계 항목 중
+  // 실제로 값이 있는 action_detail 자리에만 서술 원문을 담고 나머지는 비워 둔다
+  // (선택하지 않은 항목을 지어내지 않고 정직하게 빈 상태로 남긴다).
+  const handleQuickSubmit = async () => {
+    if (isLoading) return;
+
+    const title = quickTitle.trim();
+    const text = quickText.trim();
+    if (!title || !text) {
+      setErrorMessage("제목과 꿈 내용을 모두 적어주세요.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsLoading(true);
+    try {
+      const result = await requestQuickAiInterpretation(title, text);
+      setLastSurvey({
+        title,
+        brightness: "",
+        space_depth: "",
+        space_detail: "",
+        identity_factor: "",
+        target_detail: "",
+        action_physics: "",
+        action_detail: text,
+        reality_link: "",
+        reality_detail: "",
+        vividness: 50,
+        is_lucid: false,
+        final_memo: "",
+      });
+      setInterpretation(result);
+      setIsModalOpen(true);
+    } catch {
+      setErrorMessage("AI 해몽 요청에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 미니멀 모드에 적어둔 내용을 그대로 들고 정밀 위저드로 전환한다: 제목은 Step 1로,
+  // 서술은 Step 4(행동 묘사)로 프리필된다.
+  const upgradeToPreciseMode = () => {
+    setInitialTitle(quickTitle.trim() || undefined);
+    setInitialActionDetail(quickText.trim() || undefined);
+    setRecordMode("precise");
+    setWizardKey((key) => key + 1);
+  };
+
+  const startVoiceInput = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const win = window as any;
+    const SpeechRecognitionCtor = win.SpeechRecognition ?? win.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor || isListening) return;
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = "ko-KR";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      const transcript = event.results?.[0]?.[0]?.transcript ?? "";
+      if (transcript) {
+        setQuickText((prev) => (prev ? `${prev} ${transcript}` : transcript));
+      }
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    setIsListening(true);
+    recognition.start();
+  };
+
+  const stopVoiceInput = () => {
+    recognitionRef.current?.stop();
+  };
+
   const resetWizard = () => {
     setIsModalOpen(false);
     setEditingEntry(null);
     setWizardKey((key) => key + 1);
+    setRecordMode("quick");
+    setQuickTitle("");
+    setQuickText("");
+    setInitialActionDetail(undefined);
   };
 
   const handleSave = async () => {
@@ -150,6 +252,8 @@ export default function DiaryPage() {
     setErrorMessage(null);
     setSaveError(null);
     setWizardKey((key) => key + 1);
+    // 이미 저장된 6단계 응답을 다시 다듬는 작업이라 항상 정밀 위저드로 연다.
+    setRecordMode("precise");
   };
 
   // 수정 모드 취소, 그리고 "오늘 다른 꿈 추가 기록" 버튼이 공유하는 초기화 로직 -
@@ -163,6 +267,10 @@ export default function DiaryPage() {
     setErrorMessage(null);
     setSaveError(null);
     setWizardKey((key) => key + 1);
+    setRecordMode("quick");
+    setQuickTitle("");
+    setQuickText("");
+    setInitialActionDetail(undefined);
   };
 
   const handleSelectDay = (dayEntries: DreamEntryRecord[]) => {
@@ -309,15 +417,107 @@ export default function DiaryPage() {
 
             <div className="my-7 h-px bg-white/10" />
 
-            {/* 단계별 무의식 문답 위저드 */}
-            <DreamWizard
-              key={wizardKey}
-              onComplete={handleWizardComplete}
-              isSubmitting={isLoading}
-              initialData={editingEntry?.survey}
-              initialTitle={editingEntry ? undefined : initialTitle}
-              submitLabel={editingEntry ? "💾 수정 완료 및 재분석" : "✨ AI 무의식 해몽 요청하기"}
-            />
+            {/* 투트랙 기록 모드 탭: 기존 기록을 다듬는 수정 모드에서는 항상 정밀 위저드로 고정된다 */}
+            {!editingEntry && (
+              <div className="mb-6 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-white/5 p-1.5 backdrop-blur-md">
+                <button
+                  type="button"
+                  onClick={() => setRecordMode("quick")}
+                  className={`rounded-xl px-3 py-2.5 text-xs font-medium transition-all duration-200 ${
+                    recordMode === "quick"
+                      ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  ⚡ 10초 미니멀 빠른 기록
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecordMode("precise")}
+                  className={`rounded-xl px-3 py-2.5 text-xs font-medium transition-all duration-200 ${
+                    recordMode === "precise"
+                      ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  🔮 6단계 정밀 분석 기록
+                </button>
+              </div>
+            )}
+
+            {recordMode === "quick" ? (
+              /* ⚡ 10초 미니멀 빠른 기록: 제목 + 자유 서술 하나만으로 즉시 AI 해몽 요청 */
+              <div>
+                <label className="text-xs text-indigo-300/70">오늘의 꿈 제목</label>
+                <input
+                  type="text"
+                  value={quickTitle}
+                  onChange={(event) => setQuickTitle(event.target.value)}
+                  placeholder="예: 황금 고래와 함께한 하늘 비행"
+                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-2.5 text-sm text-white placeholder:text-slate-500/80 focus:border-violet-400/60 focus:outline-none"
+                />
+
+                <div className="mt-5">
+                  <label className="text-xs text-indigo-300/70">지난밤 꾼 꿈을 자유롭게 적어주세요</label>
+                  <div className="relative mt-1.5">
+                    <textarea
+                      value={quickText}
+                      onChange={(event) => setQuickText(event.target.value)}
+                      placeholder="꿈에서 깨어난 느낌 그대로, 생각나는 조각들을 편하게 적어보세요 (예: 거대한 바다 위에서 황금 고래를 만나 하늘을 날았다)."
+                      rows={7}
+                      className="w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-slate-500/80 focus:border-violet-400/60 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={isListening ? stopVoiceInput : startVoiceInput}
+                      disabled={!speechSupported}
+                      title={speechSupported ? undefined : "이 브라우저는 음성 인식을 지원하지 않아요."}
+                      className={`absolute right-3 top-3 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs backdrop-blur-md transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
+                        isListening
+                          ? "border-red-400/50 bg-red-500/20 text-red-200"
+                          : "border-violet-400/30 bg-white/5 text-violet-200 hover:border-violet-400/60 hover:bg-violet-500/10"
+                      }`}
+                    >
+                      {isListening && <span className="h-1.5 w-1.5 animate-ping rounded-full bg-red-400" />}
+                      🎙️ {isListening ? "듣는 중..." : "음성으로 말하기"}
+                    </button>
+                  </div>
+
+                  <div className="mt-2 text-right">
+                    <button
+                      type="button"
+                      onClick={upgradeToPreciseMode}
+                      className="text-xs text-violet-300/70 underline-offset-2 transition-colors hover:text-violet-200 hover:underline"
+                    >
+                      💡 더 정밀한 6단계 분석으로 전환
+                    </button>
+                  </div>
+                </div>
+
+                <div className="group relative mt-6">
+                  <div className="absolute inset-0 rounded-full bg-violet-500 opacity-40 blur-xl transition-all duration-300 ease-out group-hover:opacity-90 group-hover:blur-2xl" />
+                  <button
+                    type="button"
+                    onClick={handleQuickSubmit}
+                    disabled={isLoading || !quickTitle.trim() || !quickText.trim()}
+                    className="relative w-full rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-6 py-3 text-sm font-semibold text-white transition-all duration-300 group-hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    ⚡ 10초 만에 AI 해몽 받기
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* 🔮 6단계 정밀 분석 기록: 칩 선택 + 주관식 가이드 위저드 */
+              <DreamWizard
+                key={wizardKey}
+                onComplete={handleWizardComplete}
+                isSubmitting={isLoading}
+                initialData={editingEntry?.survey}
+                initialTitle={editingEntry ? undefined : initialTitle}
+                initialActionDetail={editingEntry ? undefined : initialActionDetail}
+                submitLabel={editingEntry ? "💾 수정 완료 및 재분석" : "✨ AI 무의식 해몽 요청하기"}
+              />
+            )}
 
             {errorMessage && (
               <p className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-300">

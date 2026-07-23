@@ -75,6 +75,8 @@ interface DreamWizardProps {
   initialData?: DreamSurvey;
   /** 꿈해몽 사전에서 "이 상징을 바탕으로 기록하기"로 넘어온 경우, Step 1 제목만 미리 채운다 (initialData가 있으면 무시됨) */
   initialTitle?: string;
+  /** ⚡ 10초 미니멀 빠른 기록에서 "정밀 분석으로 전환"한 경우, 적어둔 서술을 Step 4(행동 묘사)에 미리 채운다 (initialData가 있으면 무시됨) */
+  initialActionDetail?: string;
   /** 최종 제출 버튼 라벨. 수정 모드에서는 "💾 수정 완료 및 재분석"으로 바뀐다 */
   submitLabel?: string;
 }
@@ -148,6 +150,7 @@ export default function DreamWizard({
   isSubmitting,
   initialData,
   initialTitle,
+  initialActionDetail,
   submitLabel = "✨ AI 무의식 해몽 요청하기",
 }: DreamWizardProps) {
   const [step, setStep] = useState(1);
@@ -172,7 +175,7 @@ export default function DreamWizard({
   const dynamicsInit = initialData ? resolveChipState(DYNAMICS_OPTIONS, initialData.action_physics) : null;
   const [dynamics, setDynamics] = useState<string | null>(dynamicsInit?.chip ?? null);
   const [dynamicsOther, setDynamicsOther] = useState(dynamicsInit?.other ?? "");
-  const [actionDetail, setActionDetail] = useState(initialData?.action_detail ?? "");
+  const [actionDetail, setActionDetail] = useState(initialData?.action_detail ?? initialActionDetail ?? "");
 
   const realityInit = initialData ? resolveChipState(REALITY_OPTIONS, initialData.reality_link) : null;
   const [reality, setReality] = useState<string | null>(realityInit?.chip ?? null);
