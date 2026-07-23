@@ -18,9 +18,13 @@ export const useSavedDreamsStore = create<SavedDreamsState>()(
       entries: [],
       setEntries: (entries) => set({ entries }),
       upsertEntry: (entry) =>
-        set((state) => ({
-          entries: [...state.entries.filter((e) => e.id !== entry.id), entry],
-        })),
+        set((state) => {
+          const index = state.entries.findIndex((e) => e.id === entry.id);
+          if (index === -1) return { entries: [...state.entries, entry] };
+          const next = [...state.entries];
+          next[index] = entry;
+          return { entries: next };
+        }),
       removeEntry: (id) =>
         set((state) => ({ entries: state.entries.filter((e) => e.id !== id) })),
     }),
