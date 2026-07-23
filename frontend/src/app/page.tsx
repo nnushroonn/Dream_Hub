@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { decodeAccessToken } from "@/api/auth";
-import { searchDictionary } from "@/api/dictionary";
 import {
   getBestDreams,
   getExplorerCount,
@@ -19,21 +18,25 @@ import DreamCalendarWidget from "@/components/DreamCalendarWidget";
 import LiveTicker from "@/components/LiveTicker";
 import MoonIcon from "@/components/MoonIcon";
 import NavBar from "@/components/NavBar";
-import { ALL_DICTIONARY_WORDS, DICTIONARY_CATEGORIES } from "@/lib/dictionaryCategories";
+import { DICTIONARY_CATEGORIES } from "@/lib/dictionaryCategories";
 import { useAuthStore } from "@/store/useAuthStore";
 
-// 홈 '오늘의 상징' 카드는 날짜가 바뀌기 전까지 같은 결과를 보여주면 되므로,
-// 방문할 때마다 AI를 다시 호출하지 않도록 하루 단위로 로컬에 캐싱한다.
-const SYMBOL_OF_DAY_CACHE_KEY = "dream_hub_symbol_of_day";
+const EXPLORER_COUNT_POLL_MS = 5000;
 
-interface SymbolOfDay {
-  date: string;
-  keyword: string;
+// 사전 포털 보드의 미니 카테고리 숏컷 - 표시용 라벨/이모지는 좀 더 짧게 다듬되,
+// 실제 라우팅 값(label)은 DICTIONARY_CATEGORIES의 진짜 카테고리명과 정확히 일치시켜
+// /dictionary?category= 필터가 그대로 맞물리게 한다.
+interface PortalCategoryShortcut {
+  label: string;
+  display: string;
   emoji: string;
-  summary: string;
 }
 
-const EXPLORER_COUNT_POLL_MS = 5000;
+const PORTAL_CATEGORY_SHORTCUTS: PortalCategoryShortcut[] = [
+  { label: "사람/인물", display: "인물", emoji: "👥" },
+  { label: "동물/식물", display: "동물", emoji: "🦁" },
+  { label: "자연/장소", display: "자연", emoji: "🏙️" },
+];
 
 interface Star {
   id: number;
@@ -102,8 +105,6 @@ export default function HomePage() {
   const [isMoonModalOpen, setIsMoonModalOpen] = useState(false);
   const [explorerCount, setExplorerCount] = useState<number | null>(null);
   const [heroSearchQuery, setHeroSearchQuery] = useState("");
-  const [symbolOfDay, setSymbolOfDay] = useState<SymbolOfDay | null>(null);
-  const [isLoadingSymbol, setIsLoadingSymbol] = useState(false);
 
   // 구글 로그인 콜백이 ?token=...으로 리다이렉트해서 돌아왔을 때 처리
   useEffect(() => {
@@ -155,44 +156,6 @@ export default function HomePage() {
         delay: `${Math.random() * 4}s`,
       }))
     );
-  }, []);
-
-  // 오늘의 상징: 날짜 시드로 큐레이션 단어를 정하고, 그 단어의 실제 한 줄 요약을 사전 API로
-  // 가져온다(record=false라 인기 검색어 집계는 건드리지 않음). 같은 날 재방문 시 캐시를 재사용.
-  useEffect(() => {
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const dayOfYear = Math.floor(
-      (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000
-    );
-    const keyword = ALL_DICTIONARY_WORDS[dayOfYear % ALL_DICTIONARY_WORDS.length];
-    const emoji = DICTIONARY_CATEGORIES.find((category) => category.words.includes(keyword))?.emoji ?? "🔮";
-
-    try {
-      const cachedRaw = window.localStorage.getItem(SYMBOL_OF_DAY_CACHE_KEY);
-      if (cachedRaw) {
-        const cached = JSON.parse(cachedRaw) as SymbolOfDay;
-        if (cached.date === todayKey && cached.keyword === keyword) {
-          setSymbolOfDay(cached);
-          return;
-        }
-      }
-    } catch {
-      // 캐시가 깨져 있으면 무시하고 새로 조회한다.
-    }
-
-    setIsLoadingSymbol(true);
-    searchDictionary(keyword, false)
-      .then((entry) => {
-        const payload: SymbolOfDay = { date: todayKey, keyword, emoji, summary: entry.summary };
-        setSymbolOfDay(payload);
-        try {
-          window.localStorage.setItem(SYMBOL_OF_DAY_CACHE_KEY, JSON.stringify(payload));
-        } catch {
-          // 저장 실패(프라이빗 모드 등)는 무시 - 다음 방문 때 다시 조회하면 된다.
-        }
-      })
-      .catch(() => {})
-      .finally(() => setIsLoadingSymbol(false));
   }, []);
 
   const handleHeroSearchSubmit = (event: FormEvent) => {
@@ -328,46 +291,50 @@ export default function HomePage() {
             </Link>
           </div>
 
-          {/* 빠른 꿈해몽 검색바: 기록 없이 단어만 찾아보고 싶은 라이트 유저를 위한 최상단 접점 */}
-          <form onSubmit={handleHeroSearchSubmit} className="relative mt-8 w-full max-w-md">
-            <div className="absolute inset-0 rounded-full bg-violet-500/20 opacity-60 blur-lg" />
-            <div className="relative flex items-center gap-2 rounded-full border border-violet-400/30 bg-white/5 px-5 py-3 backdrop-blur-md transition-colors focus-within:border-violet-400/60">
-              <span className="text-base">🔍</span>
-              <input
-                type="text"
-                value={heroSearchQuery}
-                onChange={(event) => setHeroSearchQuery(event.target.value)}
-                placeholder="지난밤 꾼 꿈 단어를 바로 검색해보세요 (예: 뱀, 비행, 이빨)"
-                className="flex-1 bg-transparent text-sm text-white placeholder:text-slate-500/80 focus:outline-none"
-              />
-            </div>
-          </form>
+          {/* 꿈해몽 사전 포털 보드: 검색 + 사전 바로가기 + 카테고리 숏컷을 하나의 보드로 통합 */}
+          <div className="group relative mt-8 w-full max-w-xl">
+            <div className="absolute inset-0 rounded-3xl bg-purple-500/20 opacity-40 blur-2xl transition-all duration-300 ease-out group-hover:opacity-80 group-hover:blur-[48px]" />
+            <div className="relative overflow-hidden rounded-3xl border border-purple-400/20 bg-white/5 p-6 text-left backdrop-blur-md transition-all duration-300 group-hover:-translate-y-0.5 group-hover:border-purple-400/50 group-hover:shadow-[0_0_45px_rgba(168,85,247,0.3)]">
+              <p className="text-xs tracking-widest text-purple-300/70 uppercase">🔮 Dream Dictionary</p>
 
-          {/* 오늘의 상징: 타로 카드 느낌의 큐레이션 컴포넌트, 클릭하면 사전 상세 뷰로 이동 */}
-          <div className="group relative mt-4 w-full max-w-md">
-            <div className="absolute inset-0 rounded-3xl bg-fuchsia-500/20 opacity-50 blur-xl transition-all duration-500 ease-out group-hover:opacity-90 group-hover:blur-2xl" />
-            <button
-              type="button"
-              disabled={!symbolOfDay}
-              onClick={() => symbolOfDay && router.push(`/dictionary?search=${encodeURIComponent(symbolOfDay.keyword)}`)}
-              className="relative flex w-full items-center gap-4 rounded-3xl border border-purple-400/30 bg-white/5 px-6 py-4 text-left backdrop-blur-md transition-all duration-300 group-hover:-translate-y-0.5 group-hover:border-purple-300/60 disabled:cursor-wait"
-            >
-              <span className="text-3xl">{symbolOfDay?.emoji ?? "🔮"}</span>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs tracking-widest text-purple-300/70 uppercase">🔮 오늘의 상징</p>
-                {symbolOfDay ? (
-                  <>
-                    <p className="mt-1 font-semibold text-white">{symbolOfDay.keyword}</p>
-                    <p className="mt-0.5 truncate text-sm text-slate-300">{symbolOfDay.summary}</p>
-                  </>
-                ) : (
-                  <p className="mt-1 text-sm text-slate-400">
-                    {isLoadingSymbol ? "오늘의 무의식 상징을 불러오는 중..." : "오늘의 상징을 준비하고 있어요..."}
-                  </p>
-                )}
+              <form onSubmit={handleHeroSearchSubmit} className="mt-3">
+                <div className="flex items-center gap-2 rounded-full border border-violet-400/30 bg-black/20 px-5 py-3 transition-colors focus-within:border-violet-400/60">
+                  <span className="text-base">🔍</span>
+                  <input
+                    type="text"
+                    value={heroSearchQuery}
+                    onChange={(event) => setHeroSearchQuery(event.target.value)}
+                    placeholder="지난밤 꾼 꿈 단어를 바로 검색해보세요 (예: 뱀, 비행, 이빨)"
+                    className="flex-1 bg-transparent text-sm text-white placeholder:text-slate-500/80 focus:outline-none"
+                  />
+                </div>
+              </form>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2.5">
+                <Link
+                  href="/dictionary"
+                  className="rounded-full border border-purple-400/30 bg-purple-500/10 px-4 py-1.5 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5 hover:border-purple-300/60 hover:bg-purple-500/20"
+                >
+                  <span className="bg-gradient-to-r from-violet-300 via-fuchsia-300 to-purple-300 bg-clip-text text-transparent">
+                    📖 꿈해몽 사전 전체 보기 ➔
+                  </span>
+                </Link>
+
+                <span className="h-4 w-px bg-white/10" />
+
+                {PORTAL_CATEGORY_SHORTCUTS.map((category) => (
+                  <button
+                    key={category.label}
+                    type="button"
+                    onClick={() => router.push(`/dictionary?category=${encodeURIComponent(category.label)}`)}
+                    className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-all duration-300 hover:-translate-y-0.5 hover:border-purple-400/40 hover:bg-purple-500/10 hover:text-purple-200"
+                  >
+                    <span>{category.emoji}</span>
+                    {category.display}
+                  </button>
+                ))}
               </div>
-              <span className="shrink-0 text-purple-300/60">➔</span>
-            </button>
+            </div>
           </div>
         </div>
       </section>
