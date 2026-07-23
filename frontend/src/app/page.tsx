@@ -23,21 +23,6 @@ import { useAuthStore } from "@/store/useAuthStore";
 
 const EXPLORER_COUNT_POLL_MS = 5000;
 
-// 사전 포털 보드의 미니 카테고리 숏컷 - 표시용 라벨/이모지는 좀 더 짧게 다듬되,
-// 실제 라우팅 값(label)은 DICTIONARY_CATEGORIES의 진짜 카테고리명과 정확히 일치시켜
-// /dictionary?category= 필터가 그대로 맞물리게 한다.
-interface PortalCategoryShortcut {
-  label: string;
-  display: string;
-  emoji: string;
-}
-
-const PORTAL_CATEGORY_SHORTCUTS: PortalCategoryShortcut[] = [
-  { label: "사람/인물", display: "인물", emoji: "👥" },
-  { label: "동물/식물", display: "동물", emoji: "🦁" },
-  { label: "자연/장소", display: "자연", emoji: "🏙️" },
-];
-
 interface Star {
   id: number;
   top: string;
@@ -307,27 +292,28 @@ export default function HomePage() {
                 </div>
               </form>
 
-              <div className="mt-4 flex flex-wrap items-center gap-2.5">
+              <div className="mt-4">
                 <Link
                   href="/dictionary"
-                  className="rounded-full border border-purple-400/30 bg-purple-500/10 px-4 py-1.5 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5 hover:border-purple-300/60 hover:bg-purple-500/20"
+                  className="inline-block rounded-full border border-purple-400/30 bg-purple-500/10 px-4 py-1.5 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5 hover:border-purple-300/60 hover:bg-purple-500/20"
                 >
                   <span className="bg-gradient-to-r from-violet-300 via-fuchsia-300 to-purple-300 bg-clip-text text-transparent">
                     📖 꿈해몽 사전 전체 보기 ➔
                   </span>
                 </Link>
+              </div>
 
-                <span className="h-4 w-px bg-white/10" />
-
-                {PORTAL_CATEGORY_SHORTCUTS.map((category) => (
+              {/* 카테고리 퀵 숏컷: 사전의 대분류를 검색창 바로 아래에서 바로 필터링해 진입 */}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {DICTIONARY_CATEGORIES.map((category) => (
                   <button
                     key={category.label}
                     type="button"
                     onClick={() => router.push(`/dictionary?category=${encodeURIComponent(category.label)}`)}
-                    className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-all duration-300 hover:-translate-y-0.5 hover:border-purple-400/40 hover:bg-purple-500/10 hover:text-purple-200"
+                    className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-all duration-300 hover:-translate-y-0.5 hover:border-purple-400/40 hover:bg-purple-500/10 hover:text-purple-200"
                   >
                     <span>{category.emoji}</span>
-                    {category.display}
+                    {category.label}
                   </button>
                 ))}
               </div>
@@ -340,23 +326,6 @@ export default function HomePage() {
 
       <main className="relative mx-auto max-w-5xl px-6 py-16">
         <DreamCalendarWidget />
-
-        {/* 카테고리 퀵 숏컷: 사전의 대분류를 홈에서 바로 필터링해 진입 */}
-        <section className="mx-auto mt-14 max-w-3xl">
-          <div className="flex flex-wrap items-center justify-center gap-2.5">
-            {DICTIONARY_CATEGORIES.map((category) => (
-              <button
-                key={category.label}
-                type="button"
-                onClick={() => router.push(`/dictionary?category=${encodeURIComponent(category.label)}`)}
-                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:border-purple-400/40 hover:bg-purple-500/10 hover:text-purple-200"
-              >
-                <span>{category.emoji}</span>
-                {category.label}
-              </button>
-            ))}
-          </div>
-        </section>
 
         {/* 실시간 트렌드 키워드: 꿈 기록소(공개 글) + 꿈해몽 사전(검색어) 실제 집계, 세로형 랭킹 리스트 */}
         <section className="mx-auto mt-16 max-w-2xl">
