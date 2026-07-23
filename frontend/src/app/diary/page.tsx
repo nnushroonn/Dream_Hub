@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -82,21 +82,9 @@ export default function DiaryPage() {
   const [recordMode, setRecordMode] = useState<"quick" | "precise">("quick");
   const [quickTitle, setQuickTitle] = useState("");
   const [quickText, setQuickText] = useState("");
-  const [isListening, setIsListening] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(false);
-  // Web Speech API는 표준 DOM 타입에 아직 없어 any로 다룬다 (webkitSpeechRecognition 등 실험적 API).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     setSelectedDate(todayDateInputValue());
-  }, []);
-
-  // 브라우저 내장 음성 인식(Web Speech API) 지원 여부는 마운트 이후에만 판단한다.
-  useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const win = window as any;
-    setSpeechSupported(Boolean(win.SpeechRecognition ?? win.webkitSpeechRecognition));
   }, []);
 
   // 꿈해몽 사전의 "🔮 내 꿈일기에 이 상징 기록하기"에서 title(+mood/badge/expert/targetChip/dynamicsChip)이
@@ -214,34 +202,6 @@ export default function DiaryPage() {
     setInitialActionDetail(quickText.trim() || undefined);
     setRecordMode("precise");
     setWizardKey((key) => key + 1);
-  };
-
-  const startVoiceInput = () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const win = window as any;
-    const SpeechRecognitionCtor = win.SpeechRecognition ?? win.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor || isListening) return;
-
-    const recognition = new SpeechRecognitionCtor();
-    recognition.lang = "ko-KR";
-    recognition.interimResults = false;
-    recognition.continuous = false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (event: any) => {
-      const transcript = event.results?.[0]?.[0]?.transcript ?? "";
-      if (transcript) {
-        setQuickText((prev) => (prev ? `${prev} ${transcript}` : transcript));
-      }
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    setIsListening(true);
-    recognition.start();
-  };
-
-  const stopVoiceInput = () => {
-    recognitionRef.current?.stop();
   };
 
   const resetWizard = () => {
@@ -521,29 +481,13 @@ export default function DiaryPage() {
 
                 <div className="mt-5">
                   <label className="text-xs text-indigo-300/70">지난밤 꾼 꿈을 자유롭게 적어주세요</label>
-                  <div className="relative mt-1.5">
-                    <textarea
-                      value={quickText}
-                      onChange={(event) => setQuickText(event.target.value)}
-                      placeholder="꿈에서 깨어난 느낌 그대로, 생각나는 조각들을 편하게 적어보세요 (예: 거대한 바다 위에서 황금 고래를 만나 하늘을 날았다)."
-                      rows={7}
-                      className="w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-slate-500/80 focus:border-violet-400/60 focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={isListening ? stopVoiceInput : startVoiceInput}
-                      disabled={!speechSupported}
-                      title={speechSupported ? undefined : "이 브라우저는 음성 인식을 지원하지 않아요."}
-                      className={`absolute right-3 top-3 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs backdrop-blur-md transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
-                        isListening
-                          ? "border-red-400/50 bg-red-500/20 text-red-200"
-                          : "border-violet-400/30 bg-white/5 text-violet-200 hover:border-violet-400/60 hover:bg-violet-500/10"
-                      }`}
-                    >
-                      {isListening && <span className="h-1.5 w-1.5 animate-ping rounded-full bg-red-400" />}
-                      🎙️ {isListening ? "듣는 중..." : "음성으로 말하기"}
-                    </button>
-                  </div>
+                  <textarea
+                    value={quickText}
+                    onChange={(event) => setQuickText(event.target.value)}
+                    placeholder="꿈에서 깨어난 느낌 그대로, 생각나는 조각들을 편하게 적어보세요 (예: 거대한 바다 위에서 황금 고래를 만나 하늘을 날았다)."
+                    rows={7}
+                    className="mt-1.5 w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-slate-500/80 focus:border-violet-400/60 focus:outline-none"
+                  />
 
                   <div className="mt-2 text-right">
                     <button
