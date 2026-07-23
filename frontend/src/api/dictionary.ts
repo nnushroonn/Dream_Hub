@@ -17,14 +17,28 @@ export async function searchDictionary(keyword: string, record: boolean = true):
   return data;
 }
 
+// 문장/구절 검색("뱀한테 물리는 꿈을 꿨어요")에서 대표 상징 키워드와 상황 맥락을 분리한다.
+export interface ParsedQuery {
+  keyword: string;
+  context: string;
+}
+
+export async function parseSearchQuery(query: string): Promise<ParsedQuery> {
+  const { data } = await api.post<ParsedQuery>("/api/dictionary/parse-query", { query });
+  return data;
+}
+
 export interface DreamScenario {
   title: string;
   mood: DreamMood;
+  // 문장 검색의 맥락과 가장 가까운 시나리오 하나에만 true - 리스트 최상단 하이라이트에 쓰인다.
+  is_best_match: boolean;
 }
 
-export async function getDictionaryScenarios(keyword: string): Promise<DreamScenario[]> {
+export async function getDictionaryScenarios(keyword: string, context: string = ""): Promise<DreamScenario[]> {
   const { data } = await api.post<{ keyword: string; scenarios: DreamScenario[] }>("/api/dictionary/scenarios", {
     keyword,
+    context,
   });
   return data.scenarios;
 }

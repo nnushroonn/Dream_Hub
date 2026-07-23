@@ -9,6 +9,7 @@ import {
   getRecentPublicDreams,
   getScenarioDetail,
   getTrendingKeywords,
+  parseSearchQuery,
   searchDictionary,
 } from "@/api/dictionary";
 import type { DictionaryEntry, DreamScenario, RecentDreamTitle, ScenarioDetail, TrendingKeyword } from "@/api/dictionary";
@@ -79,6 +80,9 @@ export default function DictionaryPage() {
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
+  // 문장/구절 검색어에서 대표 상징 키워드를 뽑아내는 파싱 단계 - openKeywordDetail의
+  // isLoadingDetail과는 별개 상태라, 파싱 도중 openKeywordDetail의 중복 실행 가드와 충돌하지 않는다.
+  const [isParsingQuery, setIsParsingQuery] = useState(false);
 
   // 시나리오 한 줄을 클릭하면 뜨는 최종 심층 해몽 모달
   const [scenarioModal, setScenarioModal] = useState<ScenarioDetail | null>(null);
@@ -111,7 +115,7 @@ export default function DictionaryPage() {
     window.history.replaceState({}, "", window.location.pathname);
 
     if (searchParam) {
-      openKeywordDetail(searchParam);
+      submitSearchQuery(searchParam);
       return;
     }
     if (categoryParam && DICTIONARY_CATEGORIES.some((category) => category.label === categoryParam)) {
@@ -130,7 +134,7 @@ export default function DictionaryPage() {
     return () => cancelAnimationFrame(raf1);
   }, [selectedKeyword]);
 
-  const openKeywordDetail = async (keyword: string) => {
+  const openKeywordDetail = async (keyword: string, context: string = "") => {
     const trimmed = keyword.trim();
     if (!trimmed || isLoadingDetail) return;
 
@@ -144,7 +148,7 @@ export default function DictionaryPage() {
     try {
       const [entryResult, scenarioResult] = await Promise.all([
         searchDictionary(trimmed),
-        getDictionaryScenarios(trimmed),
+        getDictionaryScenarios(trimmed, context),
       ]);
       setEssence(entryResult);
       setScenarios(scenarioResult);
@@ -154,6 +158,30 @@ export default function DictionaryPage() {
       setDetailError("사전 검색에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setIsLoadingDetail(false);
+    }
+  };
+
+  // 검색창에 입력된 원문을 그대로 처리한다: 단어 하나면 바로 상세 뷰를 열고,
+  // 문장/구절이면 먼저 AI로 대표 상징 키워드 + 상황 맥락을 파싱한 뒤 그 결과로 연다.
+  const submitSearchQuery = async (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed || isLoadingDetail || isParsingQuery) return;
+
+    const looksLikePhrase = /\s/.test(trimmed) || trimmed.length > 6;
+    if (!looksLikePhrase) {
+      openKeywordDetail(trimmed);
+      return;
+    }
+
+    setIsParsingQuery(true);
+    try {
+      const parsed = await parseSearchQuery(trimmed);
+      await openKeywordDetail(parsed.keyword || trimmed, parsed.context);
+    } catch {
+      // 파싱에 실패해도 원문 전체를 키워드로 취급해 기존과 동일하게 동작시킨다.
+      await openKeywordDetail(trimmed);
+    } finally {
+      setIsParsingQuery(false);
     }
   };
 
@@ -180,7 +208,7 @@ export default function DictionaryPage() {
 
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
-    openKeywordDetail(query);
+    submitSearchQuery(query);
   };
 
   const choseongMatches = activeChoseong
@@ -219,15 +247,15 @@ export default function DictionaryPage() {
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="꿈에서 본 상징을 검색해 보세요 (예: 뱀, 이빨, 바다...)"
+              placeholder="🔍 '하늘을 나는 꿈', '뱀에게 물리는 꿈'처럼 떠오르는 구절을 편하게 검색해 보세요."
               className="flex-1 bg-transparent text-sm text-white placeholder:text-slate-500/80 focus:outline-none"
             />
             <button
               type="submit"
-              disabled={!query.trim() || isLoadingDetail}
+              disabled={!query.trim() || isLoadingDetail || isParsingQuery}
               className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2 text-xs font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isLoadingDetail ? "검색 중..." : "검색"}
+              {isParsingQuery ? "문장 분석 중..." : isLoadingDetail ? "검색 중..." : "검색"}
             </button>
           </div>
         </form>
@@ -441,30 +469,41 @@ export default function DictionaryPage() {
                   )}
                 </div>
 
-                {/* 글래스모피즘 세부 시나리오 테이블 */}
+                {/* 글래스모피즘 세부 시나리오 테이블 - 검색 문맥과 가장 가까운 시나리오를 최상단에 하이라이트 */}
                 <div className="mt-6">
                   <p className="px-1 text-xs text-slate-500">‘{selectedKeyword}’이(가) 등장하는 상황별 꿈 {scenarios.length}가지</p>
                   <div className="mt-2 divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md">
-                    {scenarios.map((scenario) => {
-                      const badge = MOOD_BADGE[scenario.mood];
-                      return (
-                        <button
-                          key={scenario.title}
-                          type="button"
-                          onClick={() => openScenario(scenario)}
-                          disabled={isLoadingScenario}
-                          className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-all hover:bg-white/5 disabled:cursor-wait disabled:opacity-60"
-                        >
-                          <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium ${badge.className}`}>
-                            {badge.label}
-                          </span>
-                          <span className="flex-1 text-sm text-slate-200">
-                            <HighlightedTitle title={scenario.title} keyword={selectedKeyword} />
-                          </span>
-                          <span className="shrink-0 text-slate-600">›</span>
-                        </button>
-                      );
-                    })}
+                    {[...scenarios]
+                      .sort((a, b) => Number(b.is_best_match) - Number(a.is_best_match))
+                      .map((scenario) => {
+                        const badge = MOOD_BADGE[scenario.mood];
+                        return (
+                          <button
+                            key={scenario.title}
+                            type="button"
+                            onClick={() => openScenario(scenario)}
+                            disabled={isLoadingScenario}
+                            className={`flex w-full items-center gap-3 px-5 py-3.5 text-left transition-all hover:bg-white/5 disabled:cursor-wait disabled:opacity-60 ${
+                              scenario.is_best_match
+                                ? "rounded-xl border border-purple-500 bg-purple-500/10 shadow-sm"
+                                : ""
+                            }`}
+                          >
+                            <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium ${badge.className}`}>
+                              {badge.label}
+                            </span>
+                            <span className="flex-1 text-sm text-slate-200">
+                              <HighlightedTitle title={scenario.title} keyword={selectedKeyword} />
+                            </span>
+                            {scenario.is_best_match && (
+                              <span className="shrink-0 rounded-full border border-purple-400/40 bg-purple-500/15 px-2 py-0.5 text-[10px] font-medium text-purple-200">
+                                검색하신 상황과 가장 가까워요
+                              </span>
+                            )}
+                            <span className="shrink-0 text-slate-600">›</span>
+                          </button>
+                        );
+                      })}
                   </div>
                 </div>
 

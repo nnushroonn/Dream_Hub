@@ -304,7 +304,7 @@ export default function HomePage() {
                     type="text"
                     value={heroSearchQuery}
                     onChange={(event) => setHeroSearchQuery(event.target.value)}
-                    placeholder="지난밤 꾼 꿈 단어를 바로 검색해보세요 (예: 뱀, 비행, 이빨)"
+                    placeholder="🔍 '하늘을 나는 꿈', '뱀에게 물리는 꿈'처럼 떠오르는 구절을 편하게 검색해 보세요."
                     className="flex-1 bg-transparent text-sm text-white placeholder:text-slate-500/80 focus:outline-none"
                   />
                 </div>

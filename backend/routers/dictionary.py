@@ -80,6 +80,47 @@ FALLBACK_RESULT = {
     "related_keywords": [],
 }
 
+# --- 문장/구절 검색어 파싱: "뱀한테 물리는 꿈을 꿨어요" -> 키워드 '뱀' + 맥락 '뱀에게 물림' --
+
+QUERY_PARSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "keyword": {
+            "type": "string",
+            "description": (
+                "검색 쿼리에서 뽑아낸 대표 상징 단어(명사) 하나. 조사(을/를/이/가/에게 등)와 서술어는 "
+                "제거하고, 사전 표제어로 쓰기 좋은 짧은 명사형으로 정규화한다 (예: '뱀')."
+            ),
+        },
+        "context": {
+            "type": "string",
+            "description": (
+                "검색 쿼리에 담긴 구체적인 상황/행동만 뽑아낸 짧은 맥락 구절 (예: '뱀에게 물림', "
+                "'하늘을 자유롭게 날아다님'). 쿼리가 이미 단어 하나뿐이라 추가 맥락이 없으면 빈 문자열."
+            ),
+        },
+    },
+    "required": ["keyword", "context"],
+    "additionalProperties": False,
+}
+
+QUERY_PARSE_PROMPT_TEMPLATE = """당신은 꿈해몽 사전 검색어를 분석하는 자연어 파서입니다. 유저가 사전
+검색창에 입력한 쿼리에서 (1) 해몽의 핵심이 되는 대표 상징 단어와 (2) 그 단어를 둘러싼 구체적인 상황/행동
+맥락을 분리해 추출하세요.
+
+[검색 쿼리]
+{query}
+
+[수행 지시사항]
+1. keyword는 사전 표제어가 될 만한 짧은 명사 하나여야 합니다. 조사와 서술어를 제거하세요.
+   예: "뱀한테 물리는 꿈을 꿨어요" → keyword: "뱀". "하늘을 나는 꿈" → keyword: "하늘".
+   "호랑이한테 쫓기는 꿈" → keyword: "호랑이".
+2. context는 keyword를 뺀 나머지에서 상황/행동만 간결하게 정리하세요.
+   예: "뱀한테 물리는 꿈을 꿨어요" → context: "뱀에게 물림". "하늘을 나는 꿈" → context: "하늘을 자유롭게
+   날아다님". 쿼리가 이미 "뱀"처럼 단어 하나뿐이면 context는 빈 문자열("")로 둡니다.
+3. 쿼리가 이상하거나 모호해도 최선의 추정으로 keyword/context를 만들어내세요 (거부하지 마세요).
+4. 엄격한 응답 포맷: 서론/결론 없이 반드시 지정된 JSON 스키마 구조로만 답변하세요."""
+
 # --- 상황별 세부 꿈 아카이브: 키워드 -> 시나리오 목록 -> 시나리오 심층 해몽 -----------
 
 SCENARIO_LIST_SCHEMA = {
@@ -99,8 +140,16 @@ SCENARIO_LIST_SCHEMA = {
                         "enum": ["good", "neutral", "nightmare"],
                         "description": "전통 해몽 관점에서 이 상황이 길몽(good)/평몽(neutral)/흉몽(nightmare) 중 무엇에 가까운지",
                     },
+                    "is_best_match": {
+                        "type": "boolean",
+                        "description": (
+                            "유저가 검색창에 입력했던 원본 문맥(context hint)과 가장 정확히 일치하는 "
+                            "시나리오 단 하나에만 true를 부여한다. context hint가 없거나, 어떤 시나리오도 "
+                            "명확히 일치하지 않으면 전부 false."
+                        ),
+                    },
                 },
-                "required": ["title", "mood"],
+                "required": ["title", "mood", "is_best_match"],
                 "additionalProperties": False,
             },
             "description": "검색어가 등장하는 대표적인 상황별 꿈 시나리오 8개",
@@ -113,7 +162,7 @@ SCENARIO_LIST_SCHEMA = {
 SCENARIO_LIST_PROMPT_TEMPLATE = """당신은 한국 전통 꿈해몽과 현대 트렌드 심리 양쪽에 정통한 '꿈해몽 사전'의
 편찬자입니다. 유저가 '{keyword}'라는 상징으로 사전을 검색했습니다. 이 상징이 실제로 등장할 법한 구체적인
 상황별 꿈 시나리오를 8개 만들어 주세요.
-
+{context_block}
 [수행 지시사항]
 1. 각 제목은 반드시 '{keyword}'라는 단어를 그대로 포함한, 완전한 문장형 꿈 제목이어야 합니다
    (예: 검색어가 '남편'이면 '남편이 바람을 피우는 꿈', '남편이 승진하는 꿈' 등).
@@ -129,10 +178,13 @@ SCENARIO_LIST_PROMPT_TEMPLATE = """당신은 한국 전통 꿈해몽과 현대 �
 4. 각 시나리오의 mood는, '{keyword}'가 전통 민속에 대응 사례가 있는 상징이면 전통 해몽 관점에서,
    현대적 트렌드 개념이면 그 상황이 유저에게 주는 심리적 충격(불안·상실·성취·안도 등)을 기준으로
    길몽/평몽/흉몽 중 하나로 판단하세요. 8개가 전부 같은 mood로 쏠리지 않도록 다양하게 분배하세요.
-5. 엄격한 응답 포맷: 서론/결론 없이 반드시 지정된 JSON 스키마 구조로만 답변하세요."""
+5. is_best_match 판단: 아래 [유저 원본 검색 맥락]이 주어졌다면, 8개 중 그 맥락과 가장 정확히 일치하는
+   시나리오 하나를 반드시 포함시키고 그 항목에만 is_best_match: true를 부여하세요 (나머지는 false).
+   맥락이 없거나("(없음)") 뚜렷이 일치하는 상황이 없다면 전부 false로 두세요.
+6. 엄격한 응답 포맷: 서론/결론 없이 반드시 지정된 JSON 스키마 구조로만 답변하세요."""
 
 def _scenario_list_fallback(keyword: str) -> list[dict]:
-    return [{"title": f"{keyword}가 등장하는 꿈", "mood": "neutral"}]
+    return [{"title": f"{keyword}가 등장하는 꿈", "mood": "neutral", "is_best_match": False}]
 
 SCENARIO_DETAIL_SCHEMA = {
     "type": "object",
@@ -206,13 +258,26 @@ class RecentDreamTitle(BaseModel):
     dream_date: str
 
 
+class QueryParseRequest(BaseModel):
+    query: str
+
+
+class QueryParseResponse(BaseModel):
+    keyword: str
+    context: str
+
+
 class ScenarioListRequest(BaseModel):
     keyword: str
+    # 문장/구절 검색에서 파싱된 원본 맥락 힌트. 있으면 8개 시나리오 중 가장 가까운 하나를
+    # is_best_match=True로 표시해 프론트에서 최상단 하이라이트에 쓴다.
+    context: str = ""
 
 
 class DreamScenario(BaseModel):
     title: str
     mood: str
+    is_best_match: bool = False
 
 
 class ScenarioListResponse(BaseModel):
@@ -274,7 +339,9 @@ def _request_entry(keyword: str) -> dict:
         return {"keyword": keyword, **FALLBACK_RESULT}
 
 
-def _request_scenarios(keyword: str) -> list[dict]:
+def _parse_query(query: str) -> dict:
+    """문장/구절 검색어에서 대표 상징 키워드와 상황 맥락을 분리한다.
+    실패 시 원문 전체를 keyword로, context는 빈 문자열로 취급 - 파싱 이전의 기존 동작과 동일한 안전한 폴백."""
     try:
         settings = get_settings()
         if not settings.anthropic_api_key:
@@ -283,8 +350,37 @@ def _request_scenarios(keyword: str) -> list[dict]:
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
         response = client.messages.create(
             model=MODEL,
+            max_tokens=256,
+            system=QUERY_PARSE_PROMPT_TEMPLATE.format(query=query),
+            output_config={"format": {"type": "json_schema", "schema": QUERY_PARSE_SCHEMA}},
+            messages=[{"role": "user", "content": "위 검색 쿼리를 keyword/context로 분리해 JSON으로 작성해 주세요."}],
+        )
+        text = next(block.text for block in response.content if block.type == "text")
+        return json.loads(text)
+    except (
+        anthropic.APIStatusError,
+        anthropic.APIConnectionError,
+        RuntimeError,
+        StopIteration,
+        json.JSONDecodeError,
+    ) as exc:
+        logger.warning("검색어 파싱 실패, 원문을 그대로 키워드로 사용합니다: %s", exc)
+        return {"keyword": query, "context": ""}
+
+
+def _request_scenarios(keyword: str, context: str = "") -> list[dict]:
+    try:
+        settings = get_settings()
+        if not settings.anthropic_api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY가 설정되지 않았습니다.")
+
+        context_block = f"\n[유저 원본 검색 맥락]\n{context}\n" if context.strip() else "\n[유저 원본 검색 맥락]\n(없음)\n"
+
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        response = client.messages.create(
+            model=MODEL,
             max_tokens=1536,
-            system=SCENARIO_LIST_PROMPT_TEMPLATE.format(keyword=keyword),
+            system=SCENARIO_LIST_PROMPT_TEMPLATE.format(keyword=keyword, context_block=context_block),
             output_config={"format": {"type": "json_schema", "schema": SCENARIO_LIST_SCHEMA}},
             messages=[{"role": "user", "content": f"'{keyword}'의 상황별 꿈 시나리오 8개를 JSON으로 작성해 주세요."}],
         )
@@ -341,12 +437,20 @@ def search_dictionary(payload: SearchRequest, db: Session = Depends(get_db)) -> 
     return entry
 
 
+@router.post("/parse-query", response_model=QueryParseResponse)
+def parse_dictionary_query(payload: QueryParseRequest) -> dict:
+    query = payload.query.strip()
+    if not query:
+        return {"keyword": "", "context": ""}
+    return _parse_query(query)
+
+
 @router.post("/scenarios", response_model=ScenarioListResponse)
 def get_dictionary_scenarios(payload: ScenarioListRequest) -> dict:
     keyword = payload.keyword.strip()
     if not keyword:
         return {"keyword": "", "scenarios": []}
-    return {"keyword": keyword, "scenarios": _request_scenarios(keyword)}
+    return {"keyword": keyword, "scenarios": _request_scenarios(keyword, payload.context.strip())}
 
 
 @router.post("/scenario-detail", response_model=ScenarioDetailResponse)
