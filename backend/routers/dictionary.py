@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db, get_settings
 from models import DreamStatus, DreamEntry, StandardKeyword
+from routers.ai_interpretation import EXPERT_MATRIX_BLOCK
 
 router = APIRouter(prefix="/api/dictionary", tags=["dictionary"])
 logger = logging.getLogger(__name__)
@@ -32,7 +33,19 @@ RESPONSE_SCHEMA = {
         },
         "psychological_meaning": {
             "type": "string",
-            "description": "융 심리학 등 현대 심리학적 관점에서 이 상징이 뜻하는 무의식적 의미를 2~3문장으로 설명",
+            "description": "현대 심리학적 관점에서 이 상징이 뜻하는 무의식적 의미를 2~3문장으로 설명 (특정 학파에 얽매이지 않고 자유롭게 서술 — 학파를 못박은 깊은 해설은 expert_insight가 별도로 담당한다)",
+        },
+        "selected_expert": {
+            "type": "string",
+            "description": "EXPERT_MATRIX 규칙에 따라 이 검색어에 가장 적합하다고 판단해 선택한 심리학자 1~2명의 이름",
+        },
+        "expert_badge": {
+            "type": "string",
+            "description": "선택된 학파를 나타내는 이모지+짧은 분야명 (예: '🌌 분석심리학')",
+        },
+        "expert_insight": {
+            "type": "string",
+            "description": "선택된 전문가 특유의 어조로 이 상징을 깊이 있게 해설하는 3~4문장",
         },
         "related_keywords": {
             "type": "array",
@@ -44,16 +57,27 @@ RESPONSE_SCHEMA = {
             ),
         },
     },
-    "required": ["keyword", "summary", "traditional_meaning", "psychological_meaning", "related_keywords"],
+    "required": [
+        "keyword",
+        "summary",
+        "traditional_meaning",
+        "psychological_meaning",
+        "selected_expert",
+        "expert_badge",
+        "expert_insight",
+        "related_keywords",
+    ],
     "additionalProperties": False,
 }
 
-SYSTEM_PROMPT_TEMPLATE = """당신은 한국 전통 꿈해몽과 현대 심리학(특히 Carl Jung의 분석심리학) 양쪽에 모두 정통한
-'꿈해몽 사전' 편찬자입니다. 유저가 검색한 단어 하나에 대해, 전통적 해몽 관점과 심리학적 해몽 관점을
-나란히 제공하는 사전 표제어를 작성하세요.
+SYSTEM_PROMPT_TEMPLATE = """당신은 한국 전통 꿈해몽과 현대 심리학 양쪽에 모두 정통한 '꿈해몽 사전' 편찬자입니다.
+유저가 검색한 단어 하나에 대해, 전통적 해몽 관점과 심리학적 해몽 관점을 나란히 제공하는 사전 표제어를
+작성하세요.
 
 [검색어]
 {keyword}
+
+{expert_matrix}
 
 [수행 지시사항]
 1. 이 검색어가 꿈에 등장했을 때의 의미를 다룹니다. 검색어 자체가 이상하거나 모호해도, 꿈 상징으로서
@@ -61,22 +85,27 @@ SYSTEM_PROMPT_TEMPLATE = """당신은 한국 전통 꿈해몽과 현대 심리�
 2. 현대적 트렌드 치환: 검색어가 비트코인/가상자산, 챗GPT·AI, SNS·릴스, '갓생' 같은 최신 신조어 등
    고전 해몽 사전에 없는 현대적 개념이라면, 그 대상 자체의 사전적 의미가 아니라 그것이 지금 현대인의
    삶에 실제로 미치는 심리적 영향(변동성 불안, 통제력 상실, 도파민 중독, 도피 욕구, 성장 강박, SNS
-   인정욕구 등)을 포착해 융의 그림자·페르소나·개성화 개념과 엮어 해석하세요. 예를 들어 '비트코인'은
-   물질적 재물이 아니라 '현재 삶의 불안정성과 리스크 테이킹에 대한 심리적 압박감'으로 풀이하는 식입니다.
+   인정욕구 등)을 포착해 해석하세요. 예를 들어 '비트코인'은 물질적 재물이 아니라 '현재 삶의 불안정성과
+   리스크 테이킹에 대한 심리적 압박감'으로 풀이하는 식입니다.
 3. traditional_meaning과 psychological_meaning은 서로 다른 결의 해석이어야 하며, 상반되거나 상호
    보완적인 통찰을 담아 사전으로서의 깊이를 주세요. 다만 검색어가 현대적 트렌드 용어라 전통 민속에
    대응되는 사례가 없다면, traditional_meaning은 억지로 옛 이야기에 끼워 맞추지 말고 '이 대상이 없던
    시대라면 어떤 원형(재물욕, 이동, 소통, 변신 등)에 가장 가까운 자리를 대신 차지했을지'를 추론해
    설명하세요.
-4. 톤앤매너: 'Dream_Hub' 사전다운 신뢰감 있고 간결한 문체를 유지하되, 딱딱한 백과사전투는 피하고
+4. 전문가 동적 매칭: 위 [주제별 전문가 동적 매칭 규칙]에 따라 이 검색어의 핵심 주제를 근거로 가장
+   적합한 전문가를 selected_expert/expert_badge/expert_insight에 채워 넣으세요.
+5. 톤앤매너: 'Dream_Hub' 사전다운 신뢰감 있고 간결한 문체를 유지하되, 딱딱한 백과사전투는 피하고
    몽환적인 분위기를 살짝 곁들이세요.
-5. 다양성: 같은 검색어라도 매번 완전히 동일한 문장을 반복하지 말고, 표현을 조금씩 다르게 창작하세요.
-6. 엄격한 응답 포맷: 서론/결론 없이 반드시 지정된 JSON 스키마 구조로만 답변하세요."""
+6. 다양성: 같은 검색어라도 매번 완전히 동일한 문장을 반복하지 말고, 표현을 조금씩 다르게 창작하세요.
+7. 엄격한 응답 포맷: 서론/결론 없이 반드시 지정된 JSON 스키마 구조로만 답변하세요."""
 
 FALLBACK_RESULT = {
     "summary": "아직 풀이가 도착하지 않은 상징이에요.",
     "traditional_meaning": "이 단어는 지금 사전의 안개 속에 있습니다. 잠시 후 다시 찾아와 주세요.",
     "psychological_meaning": "때로는 의미가 늦게 도착하는 것도 무의식의 방식입니다. 조금 뒤 다시 검색해 보세요.",
+    "selected_expert": "칼 융 (Carl Jung)",
+    "expert_badge": "🌌 분석심리학",
+    "expert_insight": "융이라면 이 침묵조차 무의식이 스스로 정리할 시간을 요구하는 신호라고 말했을 거예요. 조금 뒤 다시 찾아와 보세요.",
     "related_keywords": [],
 }
 
@@ -198,12 +227,24 @@ SCENARIO_DETAIL_SCHEMA = {
             "type": "string",
             "description": "이 구체적인 상황의 심층 해몽. 길몽/흉몽 여부와 그 이유를 담아 3~4문장으로 설명",
         },
+        "selected_expert": {
+            "type": "string",
+            "description": "EXPERT_MATRIX 규칙에 따라 이 상황에 가장 적합하다고 판단해 선택한 심리학자 1~2명의 이름",
+        },
+        "expert_badge": {
+            "type": "string",
+            "description": "선택된 학파를 나타내는 이모지+짧은 분야명 (예: '🌌 분석심리학')",
+        },
+        "expert_insight": {
+            "type": "string",
+            "description": "선택된 전문가 특유의 어조로 이 상황을 깊이 있게 해설하는 3~4문장",
+        },
         "advice": {
             "type": "string",
             "description": "오늘 현실에서 이 꿈을 어떻게 받아들이고 행동하면 좋을지 담은 실질적인 조언 1~2문장",
         },
     },
-    "required": ["mood", "interpretation", "advice"],
+    "required": ["mood", "interpretation", "selected_expert", "expert_badge", "expert_insight", "advice"],
     "additionalProperties": False,
 }
 
@@ -214,20 +255,27 @@ SCENARIO_DETAIL_PROMPT_TEMPLATE = """당신은 한국 전통 꿈해몽과 현대
 [검색 키워드] {keyword}
 [선택한 구체적 시나리오] {scenario_title}
 
+{expert_matrix}
+
 [수행 지시사항]
 1. 이 구체적인 상황에 초점을 맞춰 길몽/흉몽 여부와 그 근거를 짚어내는 심층 해몽을 작성하세요.
 2. 막연한 미사여구 대신, 이 시나리오의 구체적인 요소(관계, 행동, 감정)를 직접 언급하며 설득력 있게
    해석하세요.
 3. 이 시나리오가 가상자산·AI·SNS 등 최신 트렌드/기술 개념과 관련되어 있다면, 고전 민속 해몽으로
    억지로 끼워 맞추지 말고 그 트렌드가 현대인에게 유발하는 심리 상태(변동성 불안, 통제력 상실,
-   도파민 중독, 도피 욕구, 성장 강박, 인정욕구 등)를 융 심리학과 엮어 해석하세요.
-4. advice는 점술적 지시가 아니라, 이 꿈이 현실의 어떤 부분을 돌아보게 하는지에 대한 담백한 조언으로
+   도파민 중독, 도피 욕구, 성장 강박, 인정욕구 등)를 심리학적으로 해석하세요.
+4. 전문가 동적 매칭: 위 [주제별 전문가 동적 매칭 규칙]에 따라 이 상황의 핵심 주제를 근거로 가장
+   적합한 전문가를 selected_expert/expert_badge/expert_insight에 채워 넣으세요.
+5. advice는 점술적 지시가 아니라, 이 꿈이 현실의 어떤 부분을 돌아보게 하는지에 대한 담백한 조언으로
    작성하세요.
-5. 엄격한 응답 포맷: 서론/결론 없이 반드시 지정된 JSON 스키마 구조로만 답변하세요."""
+6. 엄격한 응답 포맷: 서론/결론 없이 반드시 지정된 JSON 스키마 구조로만 답변하세요."""
 
 SCENARIO_DETAIL_FALLBACK = {
     "mood": "neutral",
     "interpretation": "이 상황은 지금 사전의 안개 속에 있습니다. 잠시 후 다시 찾아와 주세요.",
+    "selected_expert": "칼 융 (Carl Jung)",
+    "expert_badge": "🌌 분석심리학",
+    "expert_insight": "융이라면 이 침묵조차 무의식이 스스로 정리할 시간을 요구하는 신호라고 말했을 거예요. 조금 뒤 다시 찾아와 보세요.",
     "advice": "조금 뒤 다시 열어보면 더 선명한 풀이를 만날 수 있을 거예요.",
 }
 
@@ -244,6 +292,9 @@ class DictionaryEntry(BaseModel):
     summary: str
     traditional_meaning: str
     psychological_meaning: str
+    selected_expert: str
+    expert_badge: str
+    expert_insight: str
     related_keywords: list[str]
 
 
@@ -294,6 +345,9 @@ class ScenarioDetailResponse(BaseModel):
     title: str
     mood: str
     interpretation: str
+    selected_expert: str
+    expert_badge: str
+    expert_insight: str
     advice: str
 
 
@@ -322,7 +376,7 @@ def _request_entry(keyword: str) -> dict:
         response = client.messages.create(
             model=MODEL,
             max_tokens=1024,
-            system=SYSTEM_PROMPT_TEMPLATE.format(keyword=keyword),
+            system=SYSTEM_PROMPT_TEMPLATE.format(keyword=keyword, expert_matrix=EXPERT_MATRIX_BLOCK),
             output_config={"format": {"type": "json_schema", "schema": RESPONSE_SCHEMA}},
             messages=[{"role": "user", "content": f"'{keyword}'의 꿈해몽 사전 표제어를 JSON으로 작성해 주세요."}],
         )
@@ -408,7 +462,9 @@ def _request_scenario_detail(keyword: str, scenario_title: str) -> dict:
         response = client.messages.create(
             model=MODEL,
             max_tokens=1024,
-            system=SCENARIO_DETAIL_PROMPT_TEMPLATE.format(keyword=keyword, scenario_title=scenario_title),
+            system=SCENARIO_DETAIL_PROMPT_TEMPLATE.format(
+                keyword=keyword, scenario_title=scenario_title, expert_matrix=EXPERT_MATRIX_BLOCK
+            ),
             output_config={"format": {"type": "json_schema", "schema": SCENARIO_DETAIL_SCHEMA}},
             messages=[{"role": "user", "content": "위 시나리오의 심층 해몽을 JSON으로 작성해 주세요."}],
         )

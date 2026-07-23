@@ -9,6 +9,10 @@ export interface DictionaryEntry {
   summary: string;
   traditional_meaning: string;
   psychological_meaning: string;
+  // 모든 학파를 나열하지 않고, 이 검색어의 핵심 주제와 가장 찰떡궁합인 전문가 1~2명만 동적으로 선택된다.
+  selected_expert: string;
+  expert_badge: string;
+  expert_insight: string;
   related_keywords: string[];
 }
 
@@ -47,6 +51,9 @@ export interface ScenarioDetail {
   title: string;
   mood: DreamMood;
   interpretation: string;
+  selected_expert: string;
+  expert_badge: string;
+  expert_insight: string;
   advice: string;
 }
 

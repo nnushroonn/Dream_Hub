@@ -592,6 +592,17 @@ export default function DiaryPage() {
 
             <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-300">{interpretation.description}</p>
 
+            {/* 전문가의 시선: 모든 학파를 나열하지 않고, 이 꿈과 가장 찰떡궁합인 전문가 1~2명만 깊이 있게 */}
+            <div className="mt-5 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
+                  {interpretation.expert_badge}
+                </span>
+                <span className="text-xs text-violet-300/80">{interpretation.selected_expert}의 시선</span>
+              </div>
+              <p className="mt-2.5 text-sm leading-relaxed text-slate-300">{interpretation.expert_insight}</p>
+            </div>
+
             <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                 <p className="text-center text-xs text-indigo-300/70">행운의 아이템</p>
@@ -715,6 +726,17 @@ export default function DiaryPage() {
               <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-300">
                 {activeDetail.interpretation.description}
               </p>
+
+              {/* 전문가의 시선: 모든 학파를 나열하지 않고, 이 꿈과 가장 찰떡궁합인 전문가 1~2명만 깊이 있게 */}
+              <div className="mt-5 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
+                    {activeDetail.interpretation.expert_badge}
+                  </span>
+                  <span className="text-xs text-violet-300/80">{activeDetail.interpretation.selected_expert}의 시선</span>
+                </div>
+                <p className="mt-2.5 text-sm leading-relaxed text-slate-300">{activeDetail.interpretation.expert_insight}</p>
+              </div>
 
               <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-white/10 bg-white/5 p-4">

@@ -23,6 +23,9 @@ router = APIRouter(prefix="/api/dreams", tags=["dreams"])
 class AiInterpretationPayload(BaseModel):
     tags: list[str]
     description: str
+    selected_expert: str
+    expert_badge: str
+    expert_insight: str
     lucky_item: str
     lucky_item_reason: str
     lucky_number: int

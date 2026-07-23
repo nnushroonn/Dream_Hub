@@ -92,6 +92,10 @@ export interface DreamEntryInput {
 export interface AiInterpretation {
   tags: string[];
   description: string;
+  // 모든 학파를 나열하지 않고, 이 꿈의 핵심 주제와 가장 찰떡궁합인 전문가 1~2명만 동적으로 선택된다.
+  selected_expert: string;
+  expert_badge: string;
+  expert_insight: string;
   lucky_item: string;
   lucky_item_reason: string;
   lucky_number: number;

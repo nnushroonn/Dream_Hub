@@ -453,6 +453,17 @@ export default function DictionaryPage() {
                   <p className="mt-1 text-sm text-violet-200">{essence.summary}</p>
                   <p className="mt-3 text-sm leading-relaxed text-slate-300">{essence.psychological_meaning}</p>
 
+                  {/* 전문가의 시선: 모든 학파를 나열하지 않고, 이 상징과 가장 찰떡궁합인 전문가 1~2명만 깊이 있게 */}
+                  <div className="mt-4 rounded-xl border border-purple-400/20 bg-purple-500/[0.06] p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-purple-400/30 bg-purple-500/15 px-2.5 py-1 text-[11px] font-medium text-purple-200">
+                        {essence.expert_badge}
+                      </span>
+                      <span className="text-xs text-purple-300/80">{essence.selected_expert}의 시선</span>
+                    </div>
+                    <p className="mt-2.5 text-sm leading-relaxed text-slate-300">{essence.expert_insight}</p>
+                  </div>
+
                   {essence.related_keywords.length > 0 && (
                     <div className="mt-4 flex flex-wrap gap-2">
                       {essence.related_keywords.map((word) => (
@@ -560,6 +571,17 @@ export default function DictionaryPage() {
                 <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-5">
                   <p className="text-xs font-medium text-violet-300/80">🔮 심층 해몽</p>
                   <p className="mt-2 text-sm leading-relaxed text-slate-300">{scenarioModal.interpretation}</p>
+                </div>
+
+                {/* 전문가의 시선: 모든 학파를 나열하지 않고, 이 상황과 가장 찰떡궁합인 전문가 1~2명만 깊이 있게 */}
+                <div className="mt-4 rounded-2xl border border-purple-400/20 bg-purple-500/[0.06] p-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-purple-400/30 bg-purple-500/15 px-2.5 py-1 text-[11px] font-medium text-purple-200">
+                      {scenarioModal.expert_badge}
+                    </span>
+                    <span className="text-xs text-purple-300/80">{scenarioModal.selected_expert}의 시선</span>
+                  </div>
+                  <p className="mt-2.5 text-sm leading-relaxed text-slate-300">{scenarioModal.expert_insight}</p>
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-5">
