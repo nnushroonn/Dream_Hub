@@ -254,6 +254,7 @@ export default function DiaryPage() {
                       date: selectedDate,
                       mood: moodBucket,
                       title: lastSurvey.title,
+                      emoji: mood,
                     });
                   }
                   setIsModalOpen(false);

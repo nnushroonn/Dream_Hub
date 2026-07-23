@@ -8,6 +8,8 @@ export interface SavedDream {
   date: string;
   mood: DreamMood;
   title: string;
+  /** 유저가 실제로 고른 감정 이모지. 이전 버전에 저장된 기록에는 없을 수 있다. */
+  emoji?: string;
 }
 
 interface SavedDreamsState {

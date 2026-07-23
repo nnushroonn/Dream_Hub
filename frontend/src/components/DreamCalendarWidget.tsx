@@ -3,16 +3,31 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { getDreamCalendar, type DreamCalendarDay } from "@/api/dream";
+import { getDreamCalendar, type DreamCalendarDay, type DreamMood } from "@/api/dream";
 import { ConstellationDots, ConstellationMoodLegend, type ConstellationEntry } from "@/components/ConstellationCalendar";
 import { useAuthStore } from "@/store/useAuthStore";
 
 const FALLBACK_DAYS_IN_MONTH = 30;
 
+const MOOD_EMOJI_FALLBACK: Record<DreamMood, string> = {
+  good: "😊",
+  neutral: "😐",
+  nightmare: "😱",
+};
+
 function toEntryMap(days: DreamCalendarDay[]): Map<number, ConstellationEntry> {
   return new Map(
-    days.map((d) => [Number(d.date.slice(-2)), { mood: d.mood, date: d.date, tooltip: d.summary }])
+    days.map((d) => [
+      Number(d.date.slice(-2)),
+      { mood: d.mood, date: d.date, tooltip: d.summary, emoji: MOOD_EMOJI_FALLBACK[d.mood] },
+    ])
   );
+}
+
+function startWeekdayOf(monthLabel: string | null): number {
+  if (!monthLabel) return 0;
+  const [year, month] = monthLabel.split("-").map(Number);
+  return new Date(year, month - 1, 1).getDay();
 }
 
 export default function DreamCalendarWidget() {
@@ -42,7 +57,7 @@ export default function DreamCalendarWidget() {
       </p>
 
       <div className="relative mt-10 flex justify-center">
-        <ConstellationDots daysInMonth={daysInMonth} entries={entries} />
+        <ConstellationDots daysInMonth={daysInMonth} startWeekday={startWeekdayOf(month)} entries={entries} />
       </div>
 
       <div className="relative mt-6">

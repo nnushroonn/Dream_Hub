@@ -4,43 +4,70 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConstellationDots, ConstellationMoodLegend, type ConstellationEntry } from "@/components/ConstellationCalendar";
 import { computeStreak } from "@/lib/dreamCalendar";
-import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
+import { useSavedDreamsStore, type SavedDream } from "@/store/useSavedDreamsStore";
 
-const FALLBACK_DAYS_IN_MONTH = 30;
 const CHECK_IN_PULSE_MS = 1600;
+
+const MOOD_EMOJI_FALLBACK: Record<SavedDream["mood"], string> = {
+  good: "😊",
+  neutral: "😐",
+  nightmare: "😱",
+};
 
 function daysInMonthOf(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
 
-function monthLabelOf(date: Date): string {
+function monthKeyOf(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabelOf(date: Date): string {
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
+}
+
+function shiftMonth(date: Date, delta: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + delta, 1);
 }
 
 export default function DiaryCalendarPanel() {
   const entries = useSavedDreamsStore((state) => state.entries);
 
-  // 이번 달 정보는 클라이언트 시각에 의존하므로, 서버/클라이언트 렌더 불일치를 피하려고
-  // 마운트 이후에만 채운다.
-  const [month, setMonth] = useState<string | null>(null);
-  const [daysInMonth, setDaysInMonth] = useState(FALLBACK_DAYS_IN_MONTH);
+  // 조회 중인 달은 클라이언트 시각에 의존하므로, 서버/클라이언트 렌더 불일치를 피하려고
+  // 마운트 이후에만 채운다. 이후 좌우 화살표로 다른 달을 자유롭게 넘나들 수 있다.
+  const [viewDate, setViewDate] = useState<Date | null>(null);
 
   useEffect(() => {
-    const now = new Date();
-    setMonth(monthLabelOf(now));
-    setDaysInMonth(daysInMonthOf(now));
+    setViewDate(new Date());
   }, []);
 
+  const monthKey = viewDate ? monthKeyOf(viewDate) : null;
+  const monthLabel = viewDate ? monthLabelOf(viewDate) : "이번 달";
+  const daysInMonth = viewDate ? daysInMonthOf(viewDate) : 30;
+  const startWeekday = viewDate ? new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay() : 0;
+  const isViewingCurrentMonth = viewDate ? monthKey === monthKeyOf(new Date()) : true;
+
+  const goToPrevMonth = () => setViewDate((prev) => (prev ? shiftMonth(prev, -1) : prev));
+  const goToNextMonth = () => setViewDate((prev) => (prev ? shiftMonth(prev, 1) : prev));
+
   // 기록이 없는 날은 하드코딩 없이 그대로 비어 있어야 하므로, savedDreams에서
-  // 이번 달에 해당하는 항목만 뽑아 도트 좌표로 매핑한다.
+  // 조회 중인 달에 해당하는 항목만 뽑아 도트 좌표로 매핑한다.
   const entryMap = useMemo(() => {
-    if (!month) return new Map<number, ConstellationEntry>();
+    if (!monthKey) return new Map<number, ConstellationEntry>();
     return new Map(
       entries
-        .filter((entry) => entry.date.startsWith(month))
-        .map((entry) => [Number(entry.date.slice(-2)), { mood: entry.mood, date: entry.date, tooltip: entry.title }])
+        .filter((entry) => entry.date.startsWith(monthKey))
+        .map((entry) => [
+          Number(entry.date.slice(-2)),
+          {
+            mood: entry.mood,
+            date: entry.date,
+            tooltip: entry.title,
+            emoji: entry.emoji ?? MOOD_EMOJI_FALLBACK[entry.mood],
+          },
+        ])
     );
-  }, [entries, month]);
+  }, [entries, monthKey]);
 
   const { streakDays, checkedInToday } = useMemo(() => computeStreak(entries), [entries]);
 
@@ -77,10 +104,33 @@ export default function DiaryCalendarPanel() {
       )}
 
       <h2 className="relative mt-4 text-lg font-semibold text-slate-100">🌌 꿈 별자리 캘린더</h2>
-      <p className="relative mt-1 text-xs text-slate-500">{month ?? "이번 달"}, 당신이 기록한 무의식의 궤적</p>
 
-      <div className="relative mt-10 flex justify-center">
-        <ConstellationDots daysInMonth={daysInMonth} entries={entryMap} />
+      {/* 월 네비게이션: 좌우 화살표로 다른 달의 별자리를 자유롭게 조회한다 */}
+      <div className="relative mt-3 flex items-center justify-center gap-4">
+        <button
+          type="button"
+          onClick={goToPrevMonth}
+          disabled={!viewDate}
+          aria-label="이전 달"
+          className="flex h-6 w-6 items-center justify-center rounded-full text-slate-500 transition-colors duration-200 hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-30"
+        >
+          ◀
+        </button>
+        <p className="min-w-[6rem] text-sm font-medium tracking-wide text-slate-200">{monthLabel}</p>
+        <button
+          type="button"
+          onClick={goToNextMonth}
+          disabled={!viewDate || isViewingCurrentMonth}
+          aria-label="다음 달"
+          className="flex h-6 w-6 items-center justify-center rounded-full text-slate-500 transition-colors duration-200 hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-30"
+        >
+          ▶
+        </button>
+      </div>
+      <p className="relative mt-1 text-xs text-slate-500">당신이 기록한 무의식의 궤적</p>
+
+      <div className="relative mt-8 flex justify-center">
+        <ConstellationDots daysInMonth={daysInMonth} startWeekday={startWeekday} entries={entryMap} />
       </div>
 
       <div className="relative mt-6">
