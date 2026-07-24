@@ -18,7 +18,16 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import CommunityPost, CommunityPostReaction, DreamEntry, DreamStatus, Interaction, InteractionType, User
+from models import (
+    CommunityComment,
+    CommunityPost,
+    CommunityPostReaction,
+    DreamEntry,
+    DreamStatus,
+    Interaction,
+    InteractionType,
+    User,
+)
 from routers.auth import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/api/community", tags=["community"])
@@ -178,11 +187,16 @@ class CommunityPostResponse(BaseModel):
     is_liked_by_me: bool
     is_anonymous: bool
     author_display_name: str | None = None
+    comment_count: int
     created_at: str
 
 
 def _post_empathy_count(db: Session, post_id: int) -> int:
     return db.query(CommunityPostReaction).filter(CommunityPostReaction.post_id == post_id).count()
+
+
+def _post_comment_count(db: Session, post_id: int) -> int:
+    return db.query(CommunityComment).filter(CommunityComment.post_id == post_id).count()
 
 
 @router.get("/posts", response_model=list[CommunityPostResponse])
@@ -212,6 +226,7 @@ def list_community_posts(
             "is_liked_by_me": post.id in liked_ids,
             "is_anonymous": post.is_anonymous,
             "author_display_name": _display_name(post.user, post.is_anonymous),
+            "comment_count": _post_comment_count(db, post.id),
             "created_at": post.created_at.isoformat(),
         }
         for post in posts
@@ -239,6 +254,7 @@ def create_community_post(
         "is_liked_by_me": False,
         "is_anonymous": post.is_anonymous,
         "author_display_name": _display_name(current_user, post.is_anonymous),
+        "comment_count": 0,
         "created_at": post.created_at.isoformat(),
     }
 
@@ -268,3 +284,73 @@ def toggle_post_empathy(
         is_liked = True
 
     return {"is_liked_by_me": is_liked, "empathy_count": _post_empathy_count(db, post_id)}
+
+
+# --- 💬 댓글: 자유 광장 게시글에 달리는 댓글 ----------------------------------
+
+
+class CommunityCommentInput(BaseModel):
+    content: str = Field(min_length=1, max_length=500)
+    is_anonymous: bool = False
+
+
+class CommunityCommentResponse(BaseModel):
+    id: int
+    content: str
+    is_anonymous: bool
+    author_display_name: str | None = None
+    created_at: str
+
+
+@router.get("/posts/{post_id}/comments", response_model=list[CommunityCommentResponse])
+def list_post_comments(post_id: int, db: Session = Depends(get_db)) -> list[dict]:
+    post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
+
+    comments = (
+        db.query(CommunityComment)
+        .filter(CommunityComment.post_id == post_id)
+        .order_by(CommunityComment.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": comment.id,
+            "content": comment.content,
+            "is_anonymous": comment.is_anonymous,
+            "author_display_name": _display_name(comment.user, comment.is_anonymous),
+            "created_at": comment.created_at.isoformat(),
+        }
+        for comment in comments
+    ]
+
+
+@router.post("/posts/{post_id}/comments", response_model=CommunityCommentResponse, status_code=status.HTTP_201_CREATED)
+def create_post_comment(
+    post_id: int,
+    payload: CommunityCommentInput,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
+
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="내용을 입력해 주세요.")
+
+    comment = CommunityComment(
+        post_id=post_id, user_id=current_user.id, content=content, is_anonymous=payload.is_anonymous
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return {
+        "id": comment.id,
+        "content": comment.content,
+        "is_anonymous": comment.is_anonymous,
+        "author_display_name": _display_name(current_user, comment.is_anonymous),
+        "created_at": comment.created_at.isoformat(),
+    }

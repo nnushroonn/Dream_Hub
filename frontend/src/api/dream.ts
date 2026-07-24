@@ -236,6 +236,7 @@ export interface CommunityPost {
   is_liked_by_me: boolean;
   is_anonymous: boolean;
   author_display_name: string | null;
+  comment_count: number;
   created_at: string;
 }
 
@@ -251,6 +252,32 @@ export async function createCommunityPost(content: string, isAnonymous: boolean)
 
 export async function togglePostEmpathy(postId: number): Promise<EmpathyResult> {
   const { data } = await api.post<EmpathyResult>(`/api/community/posts/${postId}/empathy`);
+  return data;
+}
+
+// 💬 자유 광장 게시글 댓글. 게시글과 동일한 아이덴티티 선택(익명/닉네임)을 댓글 단위로도 고를 수 있다.
+export interface CommunityComment {
+  id: number;
+  content: string;
+  is_anonymous: boolean;
+  author_display_name: string | null;
+  created_at: string;
+}
+
+export async function getPostComments(postId: number): Promise<CommunityComment[]> {
+  const { data } = await api.get<CommunityComment[]>(`/api/community/posts/${postId}/comments`);
+  return data;
+}
+
+export async function createPostComment(
+  postId: number,
+  content: string,
+  isAnonymous: boolean
+): Promise<CommunityComment> {
+  const { data } = await api.post<CommunityComment>(`/api/community/posts/${postId}/comments`, {
+    content,
+    is_anonymous: isAnonymous,
+  });
   return data;
 }
 

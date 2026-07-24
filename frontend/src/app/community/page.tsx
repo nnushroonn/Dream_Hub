@@ -16,6 +16,7 @@ import {
   type DreamFeedEntry,
   type Trend,
 } from "@/api/dream";
+import CommentSection from "@/components/CommentSection";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -161,6 +162,8 @@ export default function CommunityPage() {
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  // 한 번에 댓글 창을 펼칠 수 있는 게시글은 하나 - 다른 게시글의 댓글을 열면 이전 것은 접힌다.
+  const [openCommentsFor, setOpenCommentsFor] = useState<number | null>(null);
 
   // 사이드바의 "지금 뜨는 꿈 상징" 위젯 - 홈 화면과 같은 실제 집계(trends.py)를 그대로 재사용한다.
   const [trends, setTrends] = useState<Trend[]>([]);
@@ -422,13 +425,28 @@ export default function CommunityPage() {
                         </button>
                         <button
                           type="button"
-                          disabled
-                          title="댓글 기능은 준비 중이에요"
-                          className="cursor-not-allowed rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-500"
+                          onClick={() => setOpenCommentsFor((prev) => (prev === post.id ? null : post.id))}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                            openCommentsFor === post.id
+                              ? "border-violet-400/60 bg-violet-500/25 text-violet-100"
+                              : "border-white/10 text-slate-300 hover:border-violet-400/30 hover:text-slate-100"
+                          }`}
                         >
-                          💬 댓글
+                          💬 댓글{post.comment_count > 0 ? ` ${post.comment_count}` : ""}
                         </button>
                       </div>
+
+                      <CommentSection
+                        postId={post.id}
+                        isOpen={openCommentsFor === post.id}
+                        defaultAnonymous={post.is_anonymous}
+                        nickname={nickname}
+                        isAuthenticated={isAuthenticated}
+                        onRequireLogin={() => router.push("/login")}
+                        onCommentCountChange={(count) =>
+                          setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, comment_count: count } : p)))
+                        }
+                      />
                     </article>
                   ))
                 ) : (
