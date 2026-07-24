@@ -39,6 +39,9 @@ class DreamEntryInput(BaseModel):
     # 목록 화면용 한 줄 요약. 프론트가 Step 1~4 칩 텍스트를 조합해 만들어 보낸다 (AI 재호출 없음).
     summary: str = ""
     is_public: bool = False
+    # 아래 둘은 is_public=False면 의미 없지만, 나중에 공개로 전환할 때를 대비해 항상 받아 저장한다.
+    is_anonymous: bool = True
+    share_with_ai_analysis: bool = False
     survey: DreamSurveyInput
     interpretation: AiInterpretationPayload
 
@@ -50,6 +53,8 @@ class DreamEntryResponse(BaseModel):
     emotion: str
     summary: str
     is_public: bool
+    is_anonymous: bool
+    share_with_ai_analysis: bool
     is_lucid: bool
     survey: DreamSurveyInput
     interpretation: AiInterpretationPayload
@@ -65,6 +70,8 @@ def _to_response(entry: DreamEntry) -> DreamEntryResponse:
         emotion=entry.emotion,
         summary=entry.summary,
         is_public=entry.status == DreamStatus.PUBLIC,
+        is_anonymous=entry.is_anonymous,
+        share_with_ai_analysis=entry.share_with_ai_analysis,
         is_lucid=entry.is_lucid,
         survey=entry.survey,
         interpretation=entry.interpretation,
@@ -78,6 +85,8 @@ def _apply_input(entry: DreamEntry, payload: DreamEntryInput) -> None:
     entry.title = payload.title
     entry.emotion = payload.emotion
     entry.summary = payload.summary
+    entry.is_anonymous = payload.is_anonymous
+    entry.share_with_ai_analysis = payload.share_with_ai_analysis
     entry.survey = payload.survey.model_dump()
     entry.interpretation = payload.interpretation.model_dump()
     entry.is_lucid = payload.survey.is_lucid

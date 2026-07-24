@@ -6,8 +6,11 @@
 
 [💬 자유 광장] 탭은 꿈과 무관한 자유 게시글로, 이 라우터가 새로 관리하는 CommunityPost가
 데이터 원본이다. 두 탭 모두 로그인 없이 조회는 가능하지만(get_current_user_optional), 글 작성과
-공감은 로그인이 필요하다. 어느 응답에도 작성자 식별 정보(user_id/email)를 담지 않아 '익명의
-탐험가' 컨셉을 유지한다.
+공감은 로그인이 필요하다.
+
+아이덴티티 선택 시스템: 글쓴이가 is_anonymous를 고르며, false일 때만 author_display_name을
+내려준다. 아직 별도 닉네임 설정 기능이 없어 이메일 앞부분(@ 이전)을 표시용 닉네임으로 쓴다 -
+실제 이메일 전체나 user_id는 응답 어디에도 담지 않는다.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -24,7 +27,22 @@ DREAM_FEED_LIMIT = 30
 POST_FEED_LIMIT = 50
 
 
+def _display_name(user: User, is_anonymous: bool) -> str | None:
+    """is_anonymous면 None(프론트가 '익명의 탐험가'로 표시). 아니면 이메일 앞부분을 임시
+    닉네임으로 파생시킨다 - 진짜 닉네임 설정 기능이 생기기 전까지의 실데이터 기반 대체값."""
+    if is_anonymous:
+        return None
+    return user.email.split("@")[0]
+
+
 # --- 🔮 무의식 피드: 공개된 실제 꿈 기록 -------------------------------------
+
+
+class DreamFeedAiReport(BaseModel):
+    description: str
+    selected_expert: str
+    expert_badge: str
+    expert_insight: str
 
 
 class DreamFeedEntry(BaseModel):
@@ -36,6 +54,10 @@ class DreamFeedEntry(BaseModel):
     dream_date: str
     empathy_count: int
     is_liked_by_me: bool
+    is_anonymous: bool
+    author_display_name: str | None = None
+    share_with_ai_analysis: bool
+    ai_report: DreamFeedAiReport | None = None
 
 
 class EmpathyResponse(BaseModel):
@@ -77,19 +99,35 @@ def get_dream_feed(
         )
         liked_ids = {row[0] for row in liked_rows}
 
-    return [
-        {
-            "id": entry.id,
-            "title": entry.title,
-            "emotion": entry.emotion,
-            "summary": entry.summary,
-            "tags": entry.interpretation.get("tags", []) if isinstance(entry.interpretation, dict) else [],
-            "dream_date": entry.dream_date.isoformat(),
-            "empathy_count": _dream_empathy_count(db, entry.id),
-            "is_liked_by_me": entry.id in liked_ids,
-        }
-        for entry in entries
-    ]
+    result = []
+    for entry in entries:
+        interpretation = entry.interpretation if isinstance(entry.interpretation, dict) else {}
+        result.append(
+            {
+                "id": entry.id,
+                "title": entry.title,
+                "emotion": entry.emotion,
+                "summary": entry.summary,
+                "tags": interpretation.get("tags", []),
+                "dream_date": entry.dream_date.isoformat(),
+                "empathy_count": _dream_empathy_count(db, entry.id),
+                "is_liked_by_me": entry.id in liked_ids,
+                "is_anonymous": entry.is_anonymous,
+                "author_display_name": _display_name(entry.user, entry.is_anonymous),
+                "share_with_ai_analysis": entry.share_with_ai_analysis,
+                "ai_report": (
+                    {
+                        "description": interpretation.get("description", ""),
+                        "selected_expert": interpretation.get("selected_expert", ""),
+                        "expert_badge": interpretation.get("expert_badge", ""),
+                        "expert_insight": interpretation.get("expert_insight", ""),
+                    }
+                    if entry.share_with_ai_analysis
+                    else None
+                ),
+            }
+        )
+    return result
 
 
 @router.post("/dream-feed/{dream_id}/empathy", response_model=EmpathyResponse)
@@ -130,6 +168,7 @@ def toggle_dream_empathy(
 
 class CommunityPostInput(BaseModel):
     content: str = Field(min_length=1, max_length=1000)
+    is_anonymous: bool = False
 
 
 class CommunityPostResponse(BaseModel):
@@ -137,6 +176,8 @@ class CommunityPostResponse(BaseModel):
     content: str
     empathy_count: int
     is_liked_by_me: bool
+    is_anonymous: bool
+    author_display_name: str | None = None
     created_at: str
 
 
@@ -169,6 +210,8 @@ def list_community_posts(
             "content": post.content,
             "empathy_count": _post_empathy_count(db, post.id),
             "is_liked_by_me": post.id in liked_ids,
+            "is_anonymous": post.is_anonymous,
+            "author_display_name": _display_name(post.user, post.is_anonymous),
             "created_at": post.created_at.isoformat(),
         }
         for post in posts
@@ -185,7 +228,7 @@ def create_community_post(
     if not content:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="내용을 입력해 주세요.")
 
-    post = CommunityPost(user_id=current_user.id, content=content)
+    post = CommunityPost(user_id=current_user.id, content=content, is_anonymous=payload.is_anonymous)
     db.add(post)
     db.commit()
     db.refresh(post)
@@ -194,6 +237,8 @@ def create_community_post(
         "content": post.content,
         "empathy_count": 0,
         "is_liked_by_me": False,
+        "is_anonymous": post.is_anonymous,
+        "author_display_name": _display_name(current_user, post.is_anonymous),
         "created_at": post.created_at.isoformat(),
     }
 

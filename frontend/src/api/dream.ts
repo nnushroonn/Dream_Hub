@@ -143,6 +143,8 @@ export interface DreamEntryRecord {
   emotion: string;
   summary: string;
   is_public: boolean;
+  is_anonymous: boolean;
+  share_with_ai_analysis: boolean;
   is_lucid: boolean;
   survey: DreamSurvey;
   interpretation: AiInterpretation;
@@ -156,6 +158,8 @@ export interface DreamEntryPayload {
   emotion: string;
   summary: string;
   is_public: boolean;
+  is_anonymous: boolean;
+  share_with_ai_analysis: boolean;
   survey: DreamSurvey;
   interpretation: AiInterpretation;
 }
@@ -187,6 +191,13 @@ export async function deleteDream(id: number): Promise<void> {
 }
 
 // 🔮 무의식 피드: 꿈 기록소에서 실제로 "공개"로 저장한 진짜 DreamEntry 목록 (더미 아님).
+export interface DreamFeedAiReport {
+  description: string;
+  selected_expert: string;
+  expert_badge: string;
+  expert_insight: string;
+}
+
 export interface DreamFeedEntry {
   id: number;
   title: string;
@@ -196,6 +207,10 @@ export interface DreamFeedEntry {
   dream_date: string;
   empathy_count: number;
   is_liked_by_me: boolean;
+  is_anonymous: boolean;
+  author_display_name: string | null;
+  share_with_ai_analysis: boolean;
+  ai_report: DreamFeedAiReport | null;
 }
 
 export interface EmpathyResult {
@@ -219,6 +234,8 @@ export interface CommunityPost {
   content: string;
   empathy_count: number;
   is_liked_by_me: boolean;
+  is_anonymous: boolean;
+  author_display_name: string | null;
   created_at: string;
 }
 
@@ -227,8 +244,8 @@ export async function getCommunityPosts(): Promise<CommunityPost[]> {
   return data;
 }
 
-export async function createCommunityPost(content: string): Promise<CommunityPost> {
-  const { data } = await api.post<CommunityPost>("/api/community/posts", { content });
+export async function createCommunityPost(content: string, isAnonymous: boolean): Promise<CommunityPost> {
+  const { data } = await api.post<CommunityPost>("/api/community/posts", { content, is_anonymous: isAnonymous });
   return data;
 }
 

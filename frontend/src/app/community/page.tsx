@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
@@ -12,8 +11,10 @@ import {
   toggleDreamEmpathy,
   togglePostEmpathy,
   type CommunityPost,
+  type DreamFeedAiReport,
   type DreamFeedEntry,
 } from "@/api/dream";
+import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
 import { useAuthStore } from "@/store/useAuthStore";
 
@@ -25,6 +26,72 @@ function toHashtagDisplay(tag: string): string {
 
 function formatPostTime(iso: string): string {
   return new Date(iso).toLocaleString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+// 익명 글은 카드 테두리에 은은한 보랏빛 오라클 광채를 둘러 일반(닉네임) 글과 시각적으로 구분한다.
+function cardClass(isAnonymous: boolean): string {
+  const base = "rounded-xl bg-white/[0.03] p-5 backdrop-blur-md transition-all duration-300";
+  return isAnonymous
+    ? `${base} border border-violet-400/25 shadow-[0_0_18px_rgba(167,139,250,0.12)] hover:border-violet-400/50 hover:shadow-[0_0_28px_rgba(167,139,250,0.22)]`
+    : `${base} border border-white/[0.08] hover:border-violet-400/30 hover:shadow-[0_0_20px_rgba(167,139,250,0.12)]`;
+}
+
+function AuthorLine({ isAnonymous, displayName }: { isAnonymous: boolean; displayName: string | null }) {
+  return (
+    <div className="flex items-center gap-1.5 text-[11px]">
+      {isAnonymous ? (
+        <>
+          <span>🎭</span>
+          <span className="text-violet-300/80">익명의 탐험가</span>
+        </>
+      ) : (
+        <>
+          <span className="text-slate-500">👤</span>
+          <span className="text-slate-400">{displayName}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+// 🔮 AI 무의식 리포트 함께 보기: shareWithAiAnalysis가 true인 카드에서만 노출되는 아코디언.
+function AiReportAccordion({ report }: { report: DreamFeedAiReport }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="flex items-center gap-1.5 text-xs font-medium text-purple-300 transition-colors hover:text-purple-200"
+      >
+        🔮 AI 무의식 리포트 함께 보기
+        <span className={`inline-block transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}>▾</span>
+      </button>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 rounded-lg border border-purple-500/20 bg-purple-950/20 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
+                  {report.expert_badge}
+                </span>
+                <span className="text-xs text-violet-300/80">{report.selected_expert}의 시선</span>
+              </div>
+              <p className="mt-2.5 whitespace-pre-line text-sm leading-relaxed text-slate-300">{report.description}</p>
+              <p className="mt-2.5 text-xs leading-relaxed text-slate-400">{report.expert_insight}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 // 🌀 나도 이런 꿈 꾼 적 있어: 클릭할 때마다 보랏빛 동심원이 밖으로 퍼져나가는 파동을 하나씩 더한다.
@@ -80,6 +147,9 @@ function DreamReactionButton({
 export default function CommunityPage() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authUser = useAuthStore((state) => state.user);
+  // 아직 별도 프로필/닉네임 설정 기능이 없어, 이메일 앞부분을 아이덴티티 스위치 미리보기용 닉네임으로 쓴다.
+  const nickname = authUser?.email.split("@")[0] ?? "탐험가";
 
   const [tab, setTab] = useState<Tab>("dream");
 
@@ -89,7 +159,12 @@ export default function CommunityPage() {
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+
+  // 자유 광장 글쓰기 모달. 기본값은 "닉네임 공개"(isAnonymous: false) - 무의식 피드가
+  // 기본 익명인 것과 대비되는 자유 광장의 기본값이다. 모달을 열 때마다 다시 기본값으로 맞춘다.
+  const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [composeText, setComposeText] = useState("");
+  const [composeIsAnonymous, setComposeIsAnonymous] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
 
@@ -168,15 +243,26 @@ export default function CommunityPage() {
     }
   };
 
+  const openCompose = () => {
+    if (!isAuthenticated) {
+      router.push("/login");
+      return;
+    }
+    setComposeText("");
+    setComposeIsAnonymous(false);
+    setPostError(null);
+    setIsComposeOpen(true);
+  };
+
   const handleCreatePost = async () => {
     const content = composeText.trim();
     if (!content || isPosting) return;
     setPostError(null);
     setIsPosting(true);
     try {
-      const created = await createCommunityPost(content);
+      const created = await createCommunityPost(content, composeIsAnonymous);
       setPosts((prev) => [created, ...prev]);
-      setComposeText("");
+      setIsComposeOpen(false);
     } catch {
       setPostError("게시에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
@@ -253,16 +339,14 @@ export default function CommunityPage() {
                 ))
               ) : filteredDreams.length > 0 ? (
                 filteredDreams.map((dream) => (
-                  <article
-                    key={dream.id}
-                    className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 backdrop-blur-md transition-all duration-300 hover:border-violet-400/30 hover:shadow-[0_0_25px_rgba(167,139,250,0.15)]"
-                  >
+                  <article key={dream.id} className={cardClass(dream.is_anonymous)}>
                     <div className="flex items-center justify-between gap-3">
-                      <h3 className="min-w-0 truncate text-sm font-semibold text-white">
-                        {dream.emotion} {dream.title}
-                      </h3>
+                      <AuthorLine isAnonymous={dream.is_anonymous} displayName={dream.author_display_name} />
                       <span className="shrink-0 text-[11px] text-slate-500">{dream.dream_date}</span>
                     </div>
+                    <h3 className="mt-1.5 truncate text-sm font-semibold text-white">
+                      {dream.emotion} {dream.title}
+                    </h3>
                     {dream.summary && <p className="mt-2 text-xs leading-relaxed text-slate-400">{dream.summary}</p>}
                     {dream.tags.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -273,6 +357,9 @@ export default function CommunityPage() {
                         ))}
                       </div>
                     )}
+
+                    {dream.share_with_ai_analysis && dream.ai_report && <AiReportAccordion report={dream.ai_report} />}
+
                     <div className="mt-4">
                       <DreamReactionButton
                         isLiked={dream.is_liked_by_me}
@@ -293,36 +380,15 @@ export default function CommunityPage() {
           </div>
         ) : (
           <div className="mt-6">
-            {isAuthenticated ? (
-              <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
-                <textarea
-                  value={composeText}
-                  onChange={(event) => setComposeText(event.target.value)}
-                  placeholder="자유롭게 이야기를 나눠보세요..."
-                  rows={3}
-                  maxLength={1000}
-                  className="w-full resize-none rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
-                />
-                {postError && <p className="mt-2 text-xs text-red-300">{postError}</p>}
-                <div className="mt-2 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleCreatePost}
-                    disabled={!composeText.trim() || isPosting}
-                    className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-4 py-1.5 text-xs font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isPosting ? "게시 중..." : "게시하기"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 text-center text-xs text-slate-400">
-                로그인하면 자유 광장에 글을 남길 수 있어요.{" "}
-                <Link href="/login" className="text-violet-300 underline-offset-2 hover:underline">
-                  로그인하기
-                </Link>
-              </div>
-            )}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={openCompose}
+                className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-4 py-2 text-xs font-semibold text-white transition-transform hover:-translate-y-0.5"
+              >
+                ✏️ 글쓰기
+              </button>
+            </div>
 
             <div className="mt-5 flex flex-col gap-3">
               {isLoadingPosts ? (
@@ -331,11 +397,9 @@ export default function CommunityPage() {
                 ))
               ) : posts.length > 0 ? (
                 posts.map((post) => (
-                  <article
-                    key={post.id}
-                    className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 transition-all duration-300 hover:border-violet-400/30 hover:shadow-[0_0_20px_rgba(167,139,250,0.12)]"
-                  >
-                    <p className="whitespace-pre-line text-sm leading-relaxed text-slate-200">{post.content}</p>
+                  <article key={post.id} className={cardClass(post.is_anonymous)}>
+                    <AuthorLine isAnonymous={post.is_anonymous} displayName={post.author_display_name} />
+                    <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-200">{post.content}</p>
                     <p className="mt-3 text-[11px] text-slate-500">{formatPostTime(post.created_at)}</p>
                     <div className="mt-3 flex items-center gap-2">
                       <button
@@ -369,6 +433,55 @@ export default function CommunityPage() {
           </div>
         )}
       </main>
+
+      {/* 자유 광장 글쓰기 모달: CommunityPostForm - 아이덴티티 선택 시스템 포함 */}
+      {isComposeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !isPosting && setIsComposeOpen(false)} />
+
+          <div className="relative w-full max-w-md rounded-3xl border border-violet-400/30 bg-white/10 p-7 shadow-[0_0_60px_rgba(139,92,246,0.25)] backdrop-blur-2xl">
+            <button
+              type="button"
+              onClick={() => setIsComposeOpen(false)}
+              aria-label="닫기"
+              className="absolute right-5 top-5 text-slate-400 transition-colors hover:text-white"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-lg font-semibold text-white">✏️ 자유 광장에 글쓰기</h2>
+
+            <div className="mt-4">
+              <label className="text-xs text-indigo-300/70">어떤 이름으로 남길까요?</label>
+              <div className="mt-2">
+                <IdentitySwitch isAnonymous={composeIsAnonymous} onChange={setComposeIsAnonymous} nickname={nickname} />
+              </div>
+            </div>
+
+            <textarea
+              value={composeText}
+              onChange={(event) => setComposeText(event.target.value)}
+              placeholder="자유롭게 이야기를 나눠보세요..."
+              rows={4}
+              maxLength={1000}
+              autoFocus
+              className="mt-4 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+            />
+            {postError && <p className="mt-2 text-xs text-red-300">{postError}</p>}
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={handleCreatePost}
+                disabled={!composeText.trim() || isPosting}
+                className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isPosting ? "게시 중..." : "게시하기"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

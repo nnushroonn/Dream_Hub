@@ -139,6 +139,12 @@ class DreamEntry(Base):
     status: Mapped[DreamStatus] = mapped_column(
         SAEnum(DreamStatus, name="dream_status"), nullable=False, default=DreamStatus.PRIVATE
     )
+    # 공개(PUBLIC) 상태일 때만 의미 있음: 무의식 피드에 카드가 뜰 때 익명 실루엣으로 낼지,
+    # 유저의 (이메일 기반) 닉네임으로 낼지. 기본값은 프라이버시를 보수적으로 잡아 익명.
+    is_anonymous: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+    # 공개(PUBLIC) 상태일 때만 의미 있음: 체크하면 무의식 피드 카드에 AI 해몽 리포트 아코디언이
+    # 함께 노출된다. 기본값은 보수적으로 비공개(false) - 명시적으로 동의한 경우에만 공유.
+    share_with_ai_analysis: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     is_lucid: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -200,15 +206,22 @@ class Interaction(Base):
 
 
 class CommunityPost(Base):
-    """무의식 광장의 '자유 광장' 탭 - 꿈과 무관한 자유 게시글. 익명 컨셉을 유지하기 위해
-    API 응답에는 글쓴이 식별 정보(user_id/email)를 담지 않는다."""
+    """무의식 광장의 '자유 광장' 탭 - 꿈과 무관한 자유 게시글.
+
+    아이덴티티 선택 시스템: is_anonymous가 false면 응답에 이메일 앞부분으로 만든 표시용
+    닉네임(author_display_name)을 함께 내려준다 - 아직 별도 프로필/닉네임 설정 기능이 없어
+    이메일에서 파생시킨 값이며, 실제 이메일 전체는 절대 노출하지 않는다."""
 
     __tablename__ = "community_posts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     content: Mapped[str] = mapped_column(String(1000), nullable=False)
+    # 기본값은 자유 광장의 기본 모드(닉네임 공개)에 맞춰 false.
+    is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user: Mapped["User"] = relationship()
 
 
 class CommunityPostReaction(Base):

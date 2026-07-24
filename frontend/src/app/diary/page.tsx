@@ -20,6 +20,7 @@ import {
 import DiaryCalendarPanel from "@/components/DiaryCalendarPanel";
 import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
 import DreamWizard from "@/components/DreamWizard";
+import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
 import { emojiForMoodBucket, MOOD_OPTIONS } from "@/lib/moodBucket";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -68,13 +69,20 @@ function isWizardDraftDirty(draft: DreamSurvey | null): boolean {
 export default function DiaryPage() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authUser = useAuthStore((state) => state.user);
   const upsertEntry = useSavedDreamsStore((state) => state.upsertEntry);
   const removeEntry = useSavedDreamsStore((state) => state.removeEntry);
+  // 아직 별도 프로필/닉네임 설정 기능이 없어, 이메일 앞부분을 아이덴티티 스위치 미리보기용
+  // 표시 닉네임으로 쓴다.
+  const nickname = authUser?.email.split("@")[0] ?? "탐험가";
 
   // 날짜는 서버/클라이언트 렌더 결과가 달라지는 걸 피하려고 마운트 이후에만 오늘 날짜로 채운다.
   const [selectedDate, setSelectedDate] = useState("");
   const [mood, setMood] = useState(MOOD_OPTIONS[3].emoji);
   const [isPublic, setIsPublic] = useState(false);
+  // 무의식 피드 기본값은 프라이버시를 보수적으로 잡아 익명, AI 리포트 공유는 기본 비공개.
+  const [isAnonymous, setIsAnonymous] = useState(true);
+  const [shareWithAiAnalysis, setShareWithAiAnalysis] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [interpretation, setInterpretation] = useState<AiInterpretation | null>(null);
@@ -374,6 +382,8 @@ export default function DiaryPage() {
         emotion: mood,
         summary: buildDreamOneLineSummary(lastSurvey),
         is_public: isPublic,
+        is_anonymous: isAnonymous,
+        share_with_ai_analysis: shareWithAiAnalysis,
         survey: lastSurvey,
         interpretation,
       };
@@ -405,6 +415,8 @@ export default function DiaryPage() {
     setSelectedDate(entry.dream_date);
     setMood(entry.emotion);
     setIsPublic(entry.is_public);
+    setIsAnonymous(entry.is_anonymous);
+    setShareWithAiAnalysis(entry.share_with_ai_analysis);
     setInterpretation(null);
     setErrorMessage(null);
     setSaveError(null);
@@ -424,6 +436,8 @@ export default function DiaryPage() {
     setSelectedDate(todayDateInputValue());
     setMood(MOOD_OPTIONS[3].emoji);
     setIsPublic(false);
+    setIsAnonymous(true);
+    setShareWithAiAnalysis(false);
     setInterpretation(null);
     setErrorMessage(null);
     setSaveError(null);
@@ -610,9 +624,42 @@ export default function DiaryPage() {
                         : "text-slate-400 hover:text-slate-200"
                     }`}
                   >
-                    🌐 커뮤니티에 익명으로 공유
+                    🌐 커뮤니티에 공유
                   </button>
                 </div>
+
+                {/* 공개로 공유할 때만 의미 있는 두 가지 세부 설정: 어떤 이름으로 낼지, AI 리포트도 함께 낼지 */}
+                {isPublic && (
+                  <div className="mt-4 space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div>
+                      <label className="text-xs text-indigo-300/70">어떤 이름으로 공유할까요?</label>
+                      <div className="mt-2">
+                        <IdentitySwitch isAnonymous={isAnonymous} onChange={setIsAnonymous} nickname={nickname} />
+                      </div>
+                    </div>
+
+                    <label className="flex cursor-pointer items-center justify-between gap-3">
+                      <span className="text-xs leading-relaxed text-slate-300">
+                        체크 시 AI 해몽 결과도 피드에 함께 공개합니다
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={shareWithAiAnalysis}
+                        onClick={() => setShareWithAiAnalysis((prev) => !prev)}
+                        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${
+                          shareWithAiAnalysis ? "bg-violet-500" : "bg-white/15"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
+                            shareWithAiAnalysis ? "translate-x-[18px]" : "translate-x-0.5"
+                          }`}
+                        />
+                      </button>
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
 
