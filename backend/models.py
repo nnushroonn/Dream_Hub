@@ -100,6 +100,22 @@ class DictionaryAlias(Base):
     user: Mapped[Optional["User"]] = relationship(back_populates="dictionary_aliases")
 
 
+class DreamDictionaryCache(Base):
+    """꿈해몽 사전 AI 응답(검색/시나리오 목록/시나리오 심층 해몽) 캐시.
+
+    cache_key는 호출 종류+정규화된 입력값으로 만든 결정적 문자열(예: "search:뱀")이라 완전히
+    같은 요청이 재입력되면 Claude를 다시 호출하지 않고 payload를 그대로 재사용한다 - 토큰 비용 절감용.
+    """
+
+    __tablename__ = "dream_dictionary_caches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cache_key: Mapped[str] = mapped_column(String(300), unique=True, index=True, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=False)
+    hit_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class DreamEntry(Base):
     """꿈 기록소의 꿈 일기 한 건. 6단계 위저드 응답 원본과 AI 해몽 결과를 함께 저장해,
     수정 시 폼 프리필과 상세 보기 화면에 그대로 재사용할 수 있게 한다.
@@ -114,6 +130,8 @@ class DreamEntry(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     # 유저가 고른 감정 이모지 (예: "😨", "😊")
     emotion: Mapped[str] = mapped_column(String(8), nullable=False)
+    # 목록 화면용 한 줄 요약. AI를 다시 부르지 않고 프론트가 Step 1~4 칩 텍스트를 조합해 만들어 그대로 저장한다.
+    summary: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
     # 6단계 위저드 응답 원본 (DreamSurveyInput과 동일한 형태) - 수정 모드 프리필에 사용
     survey: Mapped[dict[str, Any]] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=False)
     # AI 해몽 결과 원본 (tags/description/lucky_* 등) - 상세 보기에 그대로 재사용

@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database import get_db, get_settings
-from models import DreamStatus, DreamEntry, StandardKeyword
+from models import DreamDictionaryCache, DreamStatus, DreamEntry, StandardKeyword
 from routers.ai_interpretation import EXPERT_MATRIX_BLOCK
 
 router = APIRouter(prefix="/api/dictionary", tags=["dictionary"])
@@ -70,12 +70,11 @@ RESPONSE_SCHEMA = {
     "additionalProperties": False,
 }
 
-SYSTEM_PROMPT_TEMPLATE = """당신은 한국 전통 꿈해몽과 현대 심리학 양쪽에 모두 정통한 '꿈해몽 사전' 편찬자입니다.
-유저가 검색한 단어 하나에 대해, 전통적 해몽 관점과 심리학적 해몽 관점을 나란히 제공하는 사전 표제어를
-작성하세요.
-
-[검색어]
-{keyword}
+# 토큰 비용 절감을 위해 프롬프트를 두 블록으로 나눈다: STATIC은 검색어와 무관하게 항상 동일해
+# Claude 프롬프트 캐싱(cache_control: ephemeral) 대상이 되고, DATA_TEMPLATE만 매 요청 새로 채워진다.
+SYSTEM_PROMPT_STATIC = """당신은 한국 전통 꿈해몽과 현대 심리학 양쪽에 모두 정통한 '꿈해몽 사전' 편찬자입니다.
+곧이어 유저가 검색한 단어 하나가 주어지면, 전통적 해몽 관점과 심리학적 해몽 관점을 나란히 제공하는
+사전 표제어를 작성하세요.
 
 {expert_matrix}
 
@@ -98,6 +97,9 @@ SYSTEM_PROMPT_TEMPLATE = """당신은 한국 전통 꿈해몽과 현대 심리�
    몽환적인 분위기를 살짝 곁들이세요.
 6. 다양성: 같은 검색어라도 매번 완전히 동일한 문장을 반복하지 말고, 표현을 조금씩 다르게 창작하세요.
 7. 엄격한 응답 포맷: 서론/결론 없이 반드시 지정된 JSON 스키마 구조로만 답변하세요."""
+
+SYSTEM_PROMPT_DATA_TEMPLATE = """[검색어]
+{keyword}"""
 
 FALLBACK_RESULT = {
     "summary": "아직 풀이가 도착하지 않은 상징이에요.",
@@ -369,7 +371,38 @@ def _record_search(db: Session, keyword: str) -> None:
         db.rollback()
 
 
-def _request_entry(keyword: str) -> dict:
+def _normalize_cache_input(value: str) -> str:
+    """캐시 키 충돌을 줄이기 위해 앞뒤/연속 공백만 정리한다 (의미는 바꾸지 않는다)."""
+    return " ".join(value.split())
+
+
+def _get_cached(db: Session, cache_key: str) -> dict | None:
+    """캐시 테이블에서 완전히 일치하는 이전 AI 응답을 찾는다. 있으면 Claude를 다시 호출하지 않고 그대로 반환한다."""
+    row = db.execute(
+        select(DreamDictionaryCache).where(DreamDictionaryCache.cache_key == cache_key)
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    try:
+        row.hit_count += 1
+        db.commit()
+    except Exception:
+        db.rollback()
+    return row.payload
+
+
+def _store_cache(db: Session, cache_key: str, payload: dict) -> None:
+    """새로 생성한 AI 응답을 캐시 테이블에 저장한다. 부가 작업이므로 실패해도 응답 자체를 막지 않는다."""
+    try:
+        db.add(DreamDictionaryCache(cache_key=cache_key, payload=payload))
+        db.commit()
+    except Exception:
+        logger.warning("사전 캐시 저장 실패: %s", cache_key, exc_info=True)
+        db.rollback()
+
+
+def _request_entry(keyword: str) -> dict | None:
+    """실패 시 None을 반환한다 (폴백은 라우트에서 합성) - 폴백 데이터가 캐시 테이블에 영구 저장되는 걸 막기 위해."""
     try:
         settings = get_settings()
         if not settings.anthropic_api_key:
@@ -379,7 +412,14 @@ def _request_entry(keyword: str) -> dict:
         response = client.messages.create(
             model=MODEL,
             max_tokens=1024,
-            system=SYSTEM_PROMPT_TEMPLATE.format(keyword=keyword, expert_matrix=EXPERT_MATRIX_BLOCK),
+            system=[
+                {
+                    "type": "text",
+                    "text": SYSTEM_PROMPT_STATIC.format(expert_matrix=EXPERT_MATRIX_BLOCK),
+                    "cache_control": {"type": "ephemeral"},
+                },
+                {"type": "text", "text": SYSTEM_PROMPT_DATA_TEMPLATE.format(keyword=keyword)},
+            ],
             output_config={"format": {"type": "json_schema", "schema": RESPONSE_SCHEMA}},
             messages=[{"role": "user", "content": f"'{keyword}'의 꿈해몽 사전 표제어를 JSON으로 작성해 주세요."}],
         )
@@ -393,7 +433,7 @@ def _request_entry(keyword: str) -> dict:
         json.JSONDecodeError,
     ) as exc:
         logger.warning("꿈해몽 사전 검색 실패, 폴백으로 대체합니다: %s", exc)
-        return {"keyword": keyword, **FALLBACK_RESULT}
+        return None
 
 
 def _parse_query(query: str) -> dict:
@@ -425,7 +465,8 @@ def _parse_query(query: str) -> dict:
         return {"keyword": query, "context": ""}
 
 
-def _request_scenarios(keyword: str, context: str = "") -> list[dict]:
+def _request_scenarios(keyword: str, context: str = "") -> list[dict] | None:
+    """실패 시 None을 반환한다 (폴백은 라우트에서 합성) - 폴백 데이터가 캐시 테이블에 영구 저장되는 걸 막기 위해."""
     try:
         settings = get_settings()
         if not settings.anthropic_api_key:
@@ -452,10 +493,11 @@ def _request_scenarios(keyword: str, context: str = "") -> list[dict]:
         KeyError,
     ) as exc:
         logger.warning("시나리오 목록 생성 실패, 폴백으로 대체합니다: %s", exc)
-        return _scenario_list_fallback(keyword)
+        return None
 
 
-def _request_scenario_detail(keyword: str, scenario_title: str) -> dict:
+def _request_scenario_detail(keyword: str, scenario_title: str) -> dict | None:
+    """실패 시 None을 반환한다 (폴백은 라우트에서 합성) - 폴백 데이터가 캐시 테이블에 영구 저장되는 걸 막기 위해."""
     try:
         settings = get_settings()
         if not settings.anthropic_api_key:
@@ -481,7 +523,7 @@ def _request_scenario_detail(keyword: str, scenario_title: str) -> dict:
         json.JSONDecodeError,
     ) as exc:
         logger.warning("시나리오 심층 해몽 실패, 폴백으로 대체합니다: %s", exc)
-        return dict(SCENARIO_DETAIL_FALLBACK)
+        return None
 
 
 @router.post("/search", response_model=DictionaryEntry)
@@ -490,7 +532,14 @@ def search_dictionary(payload: SearchRequest, db: Session = Depends(get_db)) -> 
     if not keyword:
         return {"keyword": "", **FALLBACK_RESULT}
 
-    entry = _request_entry(keyword)
+    cache_key = f"search:{_normalize_cache_input(keyword)}"
+    entry = _get_cached(db, cache_key)
+    if entry is None:
+        entry = _request_entry(keyword)
+        if entry is not None:
+            _store_cache(db, cache_key, entry)
+        else:
+            entry = {"keyword": keyword, **FALLBACK_RESULT}
     if payload.record:
         _record_search(db, keyword)
     return entry
@@ -507,21 +556,40 @@ def parse_dictionary_query(payload: QueryParseRequest, db: Session = Depends(get
 
 
 @router.post("/scenarios", response_model=ScenarioListResponse)
-def get_dictionary_scenarios(payload: ScenarioListRequest) -> dict:
+def get_dictionary_scenarios(payload: ScenarioListRequest, db: Session = Depends(get_db)) -> dict:
     keyword = payload.keyword.strip()
     if not keyword:
         return {"keyword": "", "scenarios": []}
-    return {"keyword": keyword, "scenarios": _request_scenarios(keyword, payload.context.strip())}
+
+    context = payload.context.strip()
+    cache_key = f"scenarios:{_normalize_cache_input(keyword)}|{_normalize_cache_input(context)}"
+    cached = _get_cached(db, cache_key)
+    if cached is not None:
+        return {"keyword": keyword, "scenarios": cached["scenarios"]}
+
+    scenarios = _request_scenarios(keyword, context)
+    if scenarios is not None:
+        _store_cache(db, cache_key, {"scenarios": scenarios})
+    else:
+        scenarios = _scenario_list_fallback(keyword)
+    return {"keyword": keyword, "scenarios": scenarios}
 
 
 @router.post("/scenario-detail", response_model=ScenarioDetailResponse)
-def get_scenario_detail(payload: ScenarioDetailRequest) -> dict:
+def get_scenario_detail(payload: ScenarioDetailRequest, db: Session = Depends(get_db)) -> dict:
     keyword = payload.keyword.strip()
     scenario_title = payload.scenario_title.strip()
     if not keyword or not scenario_title:
         return {"title": scenario_title, **SCENARIO_DETAIL_FALLBACK}
 
-    detail = _request_scenario_detail(keyword, scenario_title)
+    cache_key = f"detail:{_normalize_cache_input(keyword)}|{_normalize_cache_input(scenario_title)}"
+    detail = _get_cached(db, cache_key)
+    if detail is None:
+        detail = _request_scenario_detail(keyword, scenario_title)
+        if detail is not None:
+            _store_cache(db, cache_key, detail)
+        else:
+            detail = dict(SCENARIO_DETAIL_FALLBACK)
     return {"title": scenario_title, **detail}
 
 

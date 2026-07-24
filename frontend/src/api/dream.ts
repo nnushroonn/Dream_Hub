@@ -90,6 +90,22 @@ export interface DreamEntryInput {
   survey: DreamSurvey;
 }
 
+const ONE_LINE_SUMMARY_MAX_LENGTH = 90;
+
+// 목록 화면용 한 줄 요약을 AI 재호출 없이 만든다. Step 1~4(배경/공간/대상/행동)에서 고른 칩은
+// 이미 완결된 구어체 문장이라 이어 붙이기만 해도 자연스럽다. 칩 선택 없이 자유 서술만 남긴
+// ⚡ 빠른 기록 모드에서는 그 서술(action_detail) 또는 제목으로 대체한다.
+export function buildDreamOneLineSummary(survey: DreamSurvey): string {
+  const chipParts = [survey.brightness, survey.space_depth, survey.identity_factor, survey.action_physics]
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+  const raw = chipParts.length > 0 ? chipParts.join(" · ") : survey.action_detail.trim() || survey.title.trim();
+
+  if (raw.length <= ONE_LINE_SUMMARY_MAX_LENGTH) return raw;
+  return `${raw.slice(0, ONE_LINE_SUMMARY_MAX_LENGTH - 1).trimEnd()}…`;
+}
+
 export interface AiInterpretation {
   tags: string[];
   description: string;
@@ -124,6 +140,7 @@ export interface DreamEntryRecord {
   dream_date: string;
   title: string;
   emotion: string;
+  summary: string;
   is_public: boolean;
   is_lucid: boolean;
   survey: DreamSurvey;
@@ -136,6 +153,7 @@ export interface DreamEntryPayload {
   dream_date: string;
   title: string;
   emotion: string;
+  summary: string;
   is_public: boolean;
   survey: DreamSurvey;
   interpretation: AiInterpretation;

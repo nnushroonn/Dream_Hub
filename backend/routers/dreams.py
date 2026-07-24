@@ -36,6 +36,8 @@ class DreamEntryInput(BaseModel):
     dream_date: PyDate
     title: str
     emotion: str
+    # 목록 화면용 한 줄 요약. 프론트가 Step 1~4 칩 텍스트를 조합해 만들어 보낸다 (AI 재호출 없음).
+    summary: str = ""
     is_public: bool = False
     survey: DreamSurveyInput
     interpretation: AiInterpretationPayload
@@ -46,6 +48,7 @@ class DreamEntryResponse(BaseModel):
     dream_date: PyDate
     title: str
     emotion: str
+    summary: str
     is_public: bool
     is_lucid: bool
     survey: DreamSurveyInput
@@ -60,6 +63,7 @@ def _to_response(entry: DreamEntry) -> DreamEntryResponse:
         dream_date=entry.dream_date,
         title=entry.title,
         emotion=entry.emotion,
+        summary=entry.summary,
         is_public=entry.status == DreamStatus.PUBLIC,
         is_lucid=entry.is_lucid,
         survey=entry.survey,
@@ -73,6 +77,7 @@ def _apply_input(entry: DreamEntry, payload: DreamEntryInput) -> None:
     entry.dream_date = payload.dream_date
     entry.title = payload.title
     entry.emotion = payload.emotion
+    entry.summary = payload.summary
     entry.survey = payload.survey.model_dump()
     entry.interpretation = payload.interpretation.model_dump()
     entry.is_lucid = payload.survey.is_lucid

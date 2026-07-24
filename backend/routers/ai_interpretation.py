@@ -100,16 +100,9 @@ RESPONSE_SCHEMA = {
     "additionalProperties": False,
 }
 
-SYSTEM_PROMPT_TEMPLATE = """당신은 깊은 통찰력과 감성적인 언어 해설 능력을 겸비한 세계 최고의 심층 심리학자이자 꿈 분석 전문가(Dream Analyst)입니다. 프로이트, 융, 아들러, 게슈탈트 심리학 등 여러 학파에 두루 정통하며, 유저가 제공한 6단계 정밀 무의식 조각(객관식 선택 + 주관식 서술)을 분석해 신뢰감 있고 몽환적인 꿈해몽 보고서를 작성해야 합니다.
-
-[유저의 6단계 무의식 데이터 리포트]
-0. 꿈의 제목: {title}
-1. 배경의 조도 (Atmosphere & Light): {brightness}
-2. 공간의 밀도와 장소 (Space Depth): {space_depth} — 상세 묘사: {space_detail}
-3. 시선을 끈 핵심 대상 (Target Factor): {identity_factor} — 상세 묘사: {target_detail}
-4. 무의식 속 핵심 행동 (Action & Physics): {action_physics} — 상세 묘사: {action_detail}
-5. 현실과의 공명 (Reality Resonance): {reality_link} — 상세 서술: {reality_detail}
-6. 차원 제어 지수 (Vividness & Lucid): 선명도 {vividness}%, 자각몽 여부 {is_lucid}, 추가 잔상 메모: {final_memo}
+# 토큰 비용 절감을 위해 프롬프트를 두 블록으로 나눈다: STATIC은 어떤 꿈이 오든 항상 동일해
+# Claude 프롬프트 캐싱(cache_control: ephemeral) 대상이 되고, DATA_TEMPLATE만 매 요청 새로 채워진다.
+SYSTEM_PROMPT_STATIC = """당신은 깊은 통찰력과 감성적인 언어 해설 능력을 겸비한 세계 최고의 심층 심리학자이자 꿈 분석 전문가(Dream Analyst)입니다. 프로이트, 융, 아들러, 게슈탈트 심리학 등 여러 학파에 두루 정통하며, 곧이어 주어지는 유저의 6단계 정밀 무의식 조각(객관식 선택 + 주관식 서술)을 분석해 신뢰감 있고 몽환적인 꿈해몽 보고서를 작성해야 합니다.
 
 {expert_matrix}
 
@@ -121,6 +114,15 @@ SYSTEM_PROMPT_TEMPLATE = """당신은 깊은 통찰력과 감성적인 언어 �
 5. 톤앤매너: 'Dream_Hub' 서비스의 정체성에 맞게 신비롭고 몽환적이면서도, 내면을 꿰뚫어 보는 듯한 차분하고 세련된 어조를 유지하세요.
 6. 다양성과 동적 생성: 고정된 결과는 절대 금지합니다. 입력값들의 상호작용을 계산하여 매번 유니크한 키워드 태그와 행운의 요소를 실시간으로 창작하세요.
 7. 엄격한 응답 포맷: 대화형 답변이나 서론/결론은 모두 배제하고, 반드시 지정된 JSON 스키마 구조로만 정확히 답변하세요."""
+
+SYSTEM_PROMPT_DATA_TEMPLATE = """[유저의 6단계 무의식 데이터 리포트]
+0. 꿈의 제목: {title}
+1. 배경의 조도 (Atmosphere & Light): {brightness}
+2. 공간의 밀도와 장소 (Space Depth): {space_depth} — 상세 묘사: {space_detail}
+3. 시선을 끈 핵심 대상 (Target Factor): {identity_factor} — 상세 묘사: {target_detail}
+4. 무의식 속 핵심 행동 (Action & Physics): {action_physics} — 상세 묘사: {action_detail}
+5. 현실과의 공명 (Reality Resonance): {reality_link} — 상세 서술: {reality_detail}
+6. 차원 제어 지수 (Vividness & Lucid): 선명도 {vividness}%, 자각몽 여부 {is_lucid}, 추가 잔상 메모: {final_memo}"""
 
 # API 오류·JSON 파싱 실패 시에만 쓰이는 최소한의 안전장치 (정적 케이스 데이터가 아님).
 FALLBACK_RESULT = {
@@ -141,22 +143,22 @@ FALLBACK_RESULT = {
 }
 
 
-QUICK_SYSTEM_PROMPT_TEMPLATE = """당신은 깊은 통찰력과 감성적인 언어 해설 능력을 겸비한 세계 최고의 심층 심리학자이자 꿈 분석 전문가(Dream Analyst)입니다. 프로이트, 융, 아들러, 게슈탈트 심리학 등 여러 학파에 두루 정통하며, 유저가 형식 없이 자유롭게 적은 꿈 서술 한 편을 분석해 신뢰감 있고 몽환적인 꿈해몽 보고서를 작성해야 합니다.
-
-[유저가 자유롭게 적은 꿈 서술]
-제목: {title}
-내용: {raw_text}
+QUICK_SYSTEM_PROMPT_STATIC = """당신은 깊은 통찰력과 감성적인 언어 해설 능력을 겸비한 세계 최고의 심층 심리학자이자 꿈 분석 전문가(Dream Analyst)입니다. 프로이트, 융, 아들러, 게슈탈트 심리학 등 여러 학파에 두루 정통하며, 곧이어 주어지는 유저가 형식 없이 자유롭게 적은 꿈 서술 한 편을 분석해 신뢰감 있고 몽환적인 꿈해몽 보고서를 작성해야 합니다.
 
 {expert_matrix}
 
 [수행 지시사항]
-1. 유저는 6단계 정밀 문답을 거치지 않고 이 짧은 서술 하나만 남겼습니다. 문장 속에서 조도·공간·등장 인물/사물·행동·감정의 단서를 스스로 찾아내 6단계 정밀 분석에 준하는 깊이의 해몽을 작성하세요. 단서가 부족한 부분은 서술의 전체 분위기에서 합리적으로 추론하세요.
+1. 유저는 6단계 정밀 문답을 거치지 않고 짧은 서술 하나만 남겼습니다. 문장 속에서 조도·공간·등장 인물/사물·행동·감정의 단서를 스스로 찾아내 6단계 정밀 분석에 준하는 깊이의 해몽을 작성하세요. 단서가 부족한 부분은 서술의 전체 분위기에서 합리적으로 추론하세요.
 2. 본문 구조: description은 반드시 '무의식 상태 → 상징 분석 → 자아의 메시지' 3개 문단으로 구성하고, 문단 사이는 빈 줄로 구분하세요. 전체 5~6문장 이상의 풍부한 분량으로 작성해 "짧게 적었을 뿐인데도 내 꿈을 제대로 읽어내는구나"라는 신뢰를 주세요.
 3. 전문가 동적 매칭: 위 [주제별 전문가 동적 매칭 규칙]에 따라 이 서술의 핵심 주제를 근거로 가장 적합한 전문가를 selected_expert/expert_badge/expert_insight에 채워 넣으세요.
 4. 행운의 요소 근거: lucky_item_reason과 lucky_number_reason은 유저의 서술에 등장한 구체적인 소재나 감정을 직접 인용하며 왜 지금 이 아이템/숫자가 필요한지 설득력 있게 설명하세요. 막연한 미사여구는 금지합니다.
 5. 톤앤매너: 'Dream_Hub' 서비스의 정체성에 맞게 신비롭고 몽환적이면서도, 내면을 꿰뚫어 보는 듯한 차분하고 세련된 어조를 유지하세요.
 6. 다양성과 동적 생성: 고정된 결과는 절대 금지합니다. 서술 내용에 맞춰 매번 유니크한 키워드 태그와 행운의 요소를 실시간으로 창작하세요.
 7. 엄격한 응답 포맷: 대화형 답변이나 서론/결론은 모두 배제하고, 반드시 지정된 JSON 스키마 구조로만 정확히 답변하세요."""
+
+QUICK_SYSTEM_PROMPT_DATA_TEMPLATE = """[유저가 자유롭게 적은 꿈 서술]
+제목: {title}
+내용: {raw_text}"""
 
 
 class DreamSurveyInput(BaseModel):
@@ -190,9 +192,10 @@ class QuickDreamInterpretationRequest(BaseModel):
 # --- 비즈니스 로직: 프롬프트 주입 / Claude 호출 -----------------------------
 
 
-def build_system_prompt(survey: DreamSurveyInput) -> str:
-    """6단계 문답 응답을 시스템 프롬프트 템플릿의 각 자리표시자에 문자열 치환한다."""
-    return SYSTEM_PROMPT_TEMPLATE.format(
+def build_system_prompt(survey: DreamSurveyInput) -> tuple[str, str]:
+    """6단계 문답 응답을 (캐시 가능한 STATIC 블록, 매번 바뀌는 DATA 블록) 튜플로 나눠 반환한다."""
+    static_block = SYSTEM_PROMPT_STATIC.format(expert_matrix=EXPERT_MATRIX_BLOCK)
+    data_block = SYSTEM_PROMPT_DATA_TEMPLATE.format(
         title=survey.title,
         brightness=survey.brightness,
         space_depth=survey.space_depth,
@@ -206,17 +209,22 @@ def build_system_prompt(survey: DreamSurveyInput) -> str:
         vividness=survey.vividness,
         is_lucid="True" if survey.is_lucid else "False",
         final_memo=survey.final_memo or "(없음)",
-        expert_matrix=EXPERT_MATRIX_BLOCK,
     )
+    return static_block, data_block
 
 
-def build_quick_system_prompt(title: str, raw_text: str) -> str:
-    """⚡ 10초 미니멀 빠른 기록 모드: 6단계 문답 없이 자유 서술 한 편만으로 프롬프트를 구성한다."""
-    return QUICK_SYSTEM_PROMPT_TEMPLATE.format(title=title, raw_text=raw_text, expert_matrix=EXPERT_MATRIX_BLOCK)
+def build_quick_system_prompt(title: str, raw_text: str) -> tuple[str, str]:
+    """⚡ 10초 미니멀 빠른 기록 모드: 6단계 문답 없이 자유 서술 한 편만으로 DATA 블록을 구성한다."""
+    static_block = QUICK_SYSTEM_PROMPT_STATIC.format(expert_matrix=EXPERT_MATRIX_BLOCK)
+    data_block = QUICK_SYSTEM_PROMPT_DATA_TEMPLATE.format(title=title, raw_text=raw_text)
+    return static_block, data_block
 
 
-def request_interpretation(system_prompt: str) -> dict:
-    """Claude에 구조화 출력(JSON Schema)을 요청한다. 실패 시 최소 폴백 데이터로 대체한다."""
+def request_interpretation(static_block: str, data_block: str) -> dict:
+    """Claude에 구조화 출력(JSON Schema)을 요청한다. 실패 시 최소 폴백 데이터로 대체한다.
+
+    static_block(꿈 종류와 무관하게 항상 동일한 페르소나/지시사항)은 cache_control로 표시해,
+    Claude 프롬프트 캐싱이 반복 호출 시 그 부분의 입력 토큰 비용을 절감하게 한다."""
     try:
         settings = get_settings()
         if not settings.anthropic_api_key:
@@ -226,7 +234,10 @@ def request_interpretation(system_prompt: str) -> dict:
         response = client.messages.create(
             model=MODEL,
             max_tokens=2048,
-            system=system_prompt,
+            system=[
+                {"type": "text", "text": static_block, "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": data_block},
+            ],
             output_config={"format": {"type": "json_schema", "schema": RESPONSE_SCHEMA}},
             messages=[{"role": "user", "content": "위 데이터를 기반으로 꿈해몽 리포트를 JSON으로 작성해 주세요."}],
         )
@@ -248,11 +259,11 @@ def request_interpretation(system_prompt: str) -> dict:
 
 @router.post("/dream-interpretation")
 def create_dream_interpretation(payload: DreamInterpretationRequest) -> dict:
-    system_prompt = build_system_prompt(payload.survey)
-    return request_interpretation(system_prompt)
+    static_block, data_block = build_system_prompt(payload.survey)
+    return request_interpretation(static_block, data_block)
 
 
 @router.post("/dream-interpretation-quick")
 def create_quick_dream_interpretation(payload: QuickDreamInterpretationRequest) -> dict:
-    system_prompt = build_quick_system_prompt(payload.title, payload.raw_text)
-    return request_interpretation(system_prompt)
+    static_block, data_block = build_quick_system_prompt(payload.title, payload.raw_text)
+    return request_interpretation(static_block, data_block)

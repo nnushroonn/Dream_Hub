@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { getAuthErrorMessage } from "@/api/auth";
 import {
+  buildDreamOneLineSummary,
   createDream,
   deleteDream,
   requestAiInterpretation,
@@ -364,6 +365,7 @@ export default function DiaryPage() {
         dream_date: selectedDate,
         title: lastSurvey.title,
         emotion: mood,
+        summary: buildDreamOneLineSummary(lastSurvey),
         is_public: isPublic,
         survey: lastSurvey,
         interpretation,
