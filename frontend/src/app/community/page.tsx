@@ -32,11 +32,12 @@ function formatPostTime(iso: string): string {
 }
 
 // 익명 글은 카드 테두리에 은은한 보랏빛 오라클 광채를 둘러 일반(닉네임) 글과 시각적으로 구분한다.
+// bg-white/[0.02] + backdrop-blur-md로 어두운 배경 위에서 카드가 확실한 레이어로 분리되게 한다.
 function cardClass(isAnonymous: boolean): string {
-  const base = "rounded-xl bg-white/[0.03] p-5 backdrop-blur-md transition-all duration-300";
+  const base = "rounded-xl bg-white/[0.02] p-5 backdrop-blur-md transition-all duration-300";
   return isAnonymous
     ? `${base} border border-violet-400/25 shadow-[0_0_18px_rgba(167,139,250,0.12)] hover:border-violet-400/50 hover:shadow-[0_0_28px_rgba(167,139,250,0.22)]`
-    : `${base} border border-white/[0.08] hover:border-violet-400/30 hover:shadow-[0_0_20px_rgba(167,139,250,0.12)]`;
+    : `${base} border border-white/[0.06] hover:border-violet-400/30 hover:shadow-[0_0_20px_rgba(167,139,250,0.12)]`;
 }
 
 function AuthorLine({ isAnonymous, displayName }: { isAnonymous: boolean; displayName: string | null }) {
@@ -316,8 +317,10 @@ export default function CommunityPage() {
           />
         </div>
 
-        {/* 2단 대시보드: 좌측은 활성 탭의 피드, 우측은 탭과 무관하게 항상 떠 있는 사이드바 */}
-        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* 2단 대시보드: 좌측은 활성 탭의 피드, 우측은 탭과 무관하게 항상 떠 있는 사이드바.
+            max-w-6xl로 이 아래 영역만의 가로폭을 고정해 탭 바 위 헤더와 무관하게 화면 중심이
+            흔들리지 않게 하고, items-start로 두 컬럼이 서로의 높이에 맞춰 늘어나지 않게 한다. */}
+        <div className="mx-auto mt-6 grid max-w-6xl grid-cols-1 items-start gap-6 lg:grid-cols-12">
           <div className="lg:col-span-8">
             {tab === "dream" ? (
               <div>
@@ -355,7 +358,7 @@ export default function CommunityPage() {
                 <div className="flex flex-col gap-3">
                   {isLoadingDreams ? (
                     Array.from({ length: 3 }, (_, index) => (
-                      <div key={index} className="h-28 animate-pulse rounded-xl border border-white/[0.08] bg-white/[0.03]" />
+                      <div key={index} className="h-28 animate-pulse rounded-xl border border-white/[0.06] bg-white/[0.02]" />
                     ))
                   ) : filteredDreams.length > 0 ? (
                     filteredDreams.map((dream) => (
@@ -390,7 +393,7 @@ export default function CommunityPage() {
                       </article>
                     ))
                   ) : (
-                    <p className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-8 text-center text-xs text-slate-500">
+                    <p className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-8 text-center text-xs text-slate-500">
                       {activeTag
                         ? `${toHashtagDisplay(activeTag)} 태그의 공개된 꿈이 아직 없어요.`
                         : "아직 공개된 꿈이 없어요. 꿈 기록소에서 첫 공개 기록을 남겨보세요 ✨"}
@@ -402,14 +405,17 @@ export default function CommunityPage() {
               <div className="flex flex-col gap-3">
                 {isLoadingPosts ? (
                   Array.from({ length: 3 }, (_, index) => (
-                    <div key={index} className="h-20 animate-pulse rounded-xl border border-white/[0.08] bg-white/[0.03]" />
+                    <div key={index} className="h-20 animate-pulse rounded-xl border border-white/[0.06] bg-white/[0.02]" />
                   ))
                 ) : posts.length > 0 ? (
                   posts.map((post) => (
                     <article key={post.id} className={cardClass(post.is_anonymous)}>
-                      <AuthorLine isAnonymous={post.is_anonymous} displayName={post.author_display_name} />
-                      <p className="mt-1.5 mb-3 whitespace-pre-line text-sm leading-relaxed text-slate-200">{post.content}</p>
-                      <p className="text-[11px] text-slate-500">{formatPostTime(post.created_at)}</p>
+                      <p className="flex items-center gap-1.5 text-xs font-normal text-slate-400">
+                        <span>{post.is_anonymous ? "🎭" : "👤"}</span>
+                        {post.is_anonymous ? "익명의 탐험가" : post.author_display_name}
+                      </p>
+                      <p className="my-2 whitespace-pre-line text-base font-medium text-slate-100">{post.content}</p>
+                      <p className="text-xs text-slate-500">{formatPostTime(post.created_at)}</p>
                       <div className="mt-3 flex items-center gap-3">
                         <button
                           type="button"
@@ -449,7 +455,7 @@ export default function CommunityPage() {
                     </article>
                   ))
                 ) : (
-                  <p className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-8 text-center text-xs text-slate-500">
+                  <p className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-8 text-center text-xs text-slate-500">
                     아직 작성된 글이 없어요. 첫 이야기를 남겨보세요 ✨
                   </p>
                 )}
@@ -457,9 +463,10 @@ export default function CommunityPage() {
             )}
           </div>
 
-          {/* 사이드바: 탭과 무관하게 항상 노출 - 메인 글쓰기 액션 + 실시간 트렌드 위젯 */}
+          {/* 사이드바: 탭과 무관하게 항상 노출 - 메인 글쓰기 액션 + 실시간 트렌드 위젯.
+              flex flex-col gap-4로 묶어 두 박스의 가로 너비를 완벽히 일치시키고 수직 간격을 통일한다. */}
           <aside className="lg:col-span-4">
-            <div className="lg:sticky lg:top-6">
+            <div className="flex flex-col gap-4 lg:sticky lg:top-6">
               <button
                 type="button"
                 onClick={openCompose}
@@ -468,7 +475,7 @@ export default function CommunityPage() {
                 🖊️ 글쓰기
               </button>
 
-              <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.02] p-4">
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
                 <p className="mb-4 text-lg font-bold text-white">🔥 지금 뜨는 꿈 상징</p>
                 <div className="flex flex-col gap-2">
                   {trends.length > 0 ? (
