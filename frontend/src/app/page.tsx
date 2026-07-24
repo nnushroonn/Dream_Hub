@@ -117,8 +117,8 @@ export default function HomePage() {
     if (!token) return;
 
     const payload = decodeAccessToken(token);
-    if (payload?.email) {
-      login({ id: Number(payload.sub), email: payload.email }, token);
+    if (payload?.email && payload.nickname) {
+      login({ id: Number(payload.sub), email: payload.email, nickname: payload.nickname }, token);
     }
     window.history.replaceState({}, "", window.location.pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps

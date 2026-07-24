@@ -151,8 +151,7 @@ export default function CommunityPage() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const authUser = useAuthStore((state) => state.user);
-  // 아직 별도 프로필/닉네임 설정 기능이 없어, 이메일 앞부분을 아이덴티티 스위치 미리보기용 닉네임으로 쓴다.
-  const nickname = authUser?.email.split("@")[0] ?? "탐험가";
+  const nickname = authUser?.nickname ?? "탐험가";
 
   const [tab, setTab] = useState<Tab>("dream");
 

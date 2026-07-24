@@ -1,10 +1,22 @@
 from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
+NICKNAME_MIN_LENGTH = 2
+NICKNAME_MAX_LENGTH = 20
+
 
 class UserCreate(BaseModel):
     email: EmailStr
+    nickname: str
     password: str
     password_confirm: str
+
+    @field_validator("nickname")
+    @classmethod
+    def validate_nickname(cls, value: str) -> str:
+        trimmed = value.strip()
+        if len(trimmed) < NICKNAME_MIN_LENGTH or len(trimmed) > NICKNAME_MAX_LENGTH:
+            raise ValueError(f"닉네임은 {NICKNAME_MIN_LENGTH}~{NICKNAME_MAX_LENGTH}자로 입력해 주세요.")
+        return trimmed
 
     @field_validator("password")
     @classmethod
@@ -34,6 +46,7 @@ class VerifyEmailRequest(BaseModel):
 class UserResponse(BaseModel):
     id: int
     email: str
+    nickname: str
     is_verified: bool
 
     model_config = {"from_attributes": True}
@@ -47,3 +60,7 @@ class TokenResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class NicknameAvailability(BaseModel):
+    available: bool

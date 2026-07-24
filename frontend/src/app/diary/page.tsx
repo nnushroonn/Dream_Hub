@@ -72,9 +72,7 @@ export default function DiaryPage() {
   const authUser = useAuthStore((state) => state.user);
   const upsertEntry = useSavedDreamsStore((state) => state.upsertEntry);
   const removeEntry = useSavedDreamsStore((state) => state.removeEntry);
-  // 아직 별도 프로필/닉네임 설정 기능이 없어, 이메일 앞부분을 아이덴티티 스위치 미리보기용
-  // 표시 닉네임으로 쓴다.
-  const nickname = authUser?.email.split("@")[0] ?? "탐험가";
+  const nickname = authUser?.nickname ?? "탐험가";
 
   // 날짜는 서버/클라이언트 렌더 결과가 달라지는 걸 피하려고 마운트 이후에만 오늘 날짜로 채운다.
   const [selectedDate, setSelectedDate] = useState("");

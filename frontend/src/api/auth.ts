@@ -5,6 +5,7 @@ import api from "./axios";
 export interface AuthUser {
   id: number;
   email: string;
+  nickname: string;
   is_verified?: boolean;
 }
 
@@ -18,17 +19,29 @@ export interface MessageResponse {
   message: string;
 }
 
+export interface NicknameAvailability {
+  available: boolean;
+}
+
 export async function registerUser(
   email: string,
+  nickname: string,
   password: string,
   passwordConfirm: string
 ): Promise<MessageResponse> {
   const { data } = await api.post<MessageResponse>("/auth/register", {
     email,
+    nickname,
     password,
     password_confirm: passwordConfirm,
   });
   return data;
+}
+
+// 회원가입 폼이 입력 중 실시간으로 호출하는 닉네임 중복 체크.
+export async function checkNicknameAvailability(nickname: string): Promise<boolean> {
+  const { data } = await api.get<NicknameAvailability>("/auth/check-nickname", { params: { nickname } });
+  return data.available;
 }
 
 export async function loginUser(email: string, password: string): Promise<AuthResponse> {
@@ -46,7 +59,7 @@ export async function verifyEmail(token: string): Promise<MessageResponse> {
  * 여기서는 서버가 이미 서명한 access_token에서 화면 표시용 사용자 정보만 꺼내 쓰는 용도로,
  * 실제 인가(authorization)는 항상 백엔드가 서명을 검증해 처리한다.
  */
-export function decodeAccessToken(token: string): { sub: string; email?: string } | null {
+export function decodeAccessToken(token: string): { sub: string; email?: string; nickname?: string } | null {
   try {
     const payloadSegment = token.split(".")[1];
     const normalized = payloadSegment.replace(/-/g, "+").replace(/_/g, "/");

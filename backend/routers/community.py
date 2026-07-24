@@ -9,8 +9,8 @@
 공감은 로그인이 필요하다.
 
 아이덴티티 선택 시스템: 글쓴이가 is_anonymous를 고르며, false일 때만 author_display_name을
-내려준다. 아직 별도 닉네임 설정 기능이 없어 이메일 앞부분(@ 이전)을 표시용 닉네임으로 쓴다 -
-실제 이메일 전체나 user_id는 응답 어디에도 담지 않는다.
+내려준다(회원가입 때 정한 꿈 페르소나 닉네임, User.nickname) - 실제 이메일이나 user_id는
+응답 어디에도 담지 않는다.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -37,11 +37,11 @@ POST_FEED_LIMIT = 50
 
 
 def _display_name(user: User, is_anonymous: bool) -> str | None:
-    """is_anonymous면 None(프론트가 '익명의 탐험가'로 표시). 아니면 이메일 앞부분을 임시
-    닉네임으로 파생시킨다 - 진짜 닉네임 설정 기능이 생기기 전까지의 실데이터 기반 대체값."""
+    """is_anonymous면 None(프론트가 '익명의 탐험가'로 표시). 아니면 회원가입 때 정한
+    꿈 페르소나 닉네임을 그대로 쓴다."""
     if is_anonymous:
         return None
-    return user.email.split("@")[0]
+    return user.nickname
 
 
 # --- 🔮 무의식 피드: 공개된 실제 꿈 기록 -------------------------------------

@@ -1,4 +1,5 @@
 import logging
+import random
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -13,7 +14,15 @@ from sqlalchemy.orm import Session
 
 from database import get_db, get_settings
 from models import User
-from schemas import LoginRequest, MessageResponse, TokenResponse, UserCreate, UserResponse, VerifyEmailRequest
+from schemas import (
+    LoginRequest,
+    MessageResponse,
+    NicknameAvailability,
+    TokenResponse,
+    UserCreate,
+    UserResponse,
+    VerifyEmailRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +54,31 @@ oauth.register(
 )
 
 
-def create_access_token(user_id: int, email: str) -> str:
+def create_access_token(user_id: int, email: str, nickname: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
     # 구글 로그인은 리다이렉트로 토큰만 전달하므로, 프론트엔드가 별도 조회 없이
-    # 화면 표시용 이메일을 바로 읽을 수 있도록 payload에 포함시켜 둔다.
-    payload = {"sub": str(user_id), "email": email, "type": "access", "exp": expire}
+    # 화면 표시용 이메일/닉네임을 바로 읽을 수 있도록 payload에 포함시켜 둔다.
+    payload = {"sub": str(user_id), "email": email, "nickname": nickname, "type": "access", "exp": expire}
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+# 꿈 페르소나 닉네임 자동 생성기. 회원가입 폼의 🎲 버튼과 같은 컨셉의 조합을 서버에서도
+# 재사용해, 구글 로그인처럼 유저가 직접 닉네임을 고르지 않는 가입 경로에서 fallback으로 쓴다.
+_PERSONA_ADJECTIVES = ["보랏빛", "자각몽을 꾸는", "달빛 아래", "새벽녘의"]
+_PERSONA_NOUNS = ["탐험가", "몽상가", "추적자", "나비"]
+
+
+def _generate_persona_nickname() -> str:
+    return f"{random.choice(_PERSONA_ADJECTIVES)} {random.choice(_PERSONA_NOUNS)}"
+
+
+def _unique_persona_nickname(db: Session) -> str:
+    for _ in range(20):
+        candidate = _generate_persona_nickname()
+        if db.query(User).filter(User.nickname == candidate).first() is None:
+            return candidate
+    # 극히 드문 연속 충돌 시에는 짧은 랜덤 접미사를 붙여 확정적으로 유니크하게 만든다.
+    return f"{_generate_persona_nickname()}-{secrets.token_hex(2)}"
 
 
 def create_email_verification_token(user_id: int) -> str:
@@ -128,6 +156,17 @@ async def send_verification_email(email: str, token: str) -> None:
     await fm.send_message(message)
 
 
+@router.get("/check-nickname", response_model=NicknameAvailability)
+def check_nickname(nickname: str, db: Session = Depends(get_db)):
+    """회원가입 폼이 입력 중 실시간으로 호출하는 중복 체크. 길이 제약은 프론트/스키마가
+    이미 따로 검증하므로 여기서는 순수하게 사용 가능 여부만 본다."""
+    trimmed = nickname.strip()
+    if not trimmed:
+        return NicknameAvailability(available=False)
+    exists = db.query(User).filter(User.nickname == trimmed).first() is not None
+    return NicknameAvailability(available=not exists)
+
+
 @router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: UserCreate, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.email == payload.email).first()
@@ -137,7 +176,19 @@ async def register(payload: UserCreate, db: Session = Depends(get_db)):
             detail="이미 가입된 이메일입니다.",
         )
 
-    user = User(email=payload.email, hashed_password=pwd_context.hash(payload.password), is_verified=False)
+    existing_nickname = db.query(User).filter(User.nickname == payload.nickname).first()
+    if existing_nickname is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미 사용 중인 닉네임입니다.",
+        )
+
+    user = User(
+        email=payload.email,
+        nickname=payload.nickname,
+        hashed_password=pwd_context.hash(payload.password),
+        is_verified=False,
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -168,7 +219,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             detail="이메일 인증이 필요합니다. 메일함을 확인해 주세요.",
         )
 
-    token = create_access_token(user.id, user.email)
+    token = create_access_token(user.id, user.email, user.nickname)
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
 
@@ -217,9 +268,12 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == email).first()
 
     if user is None:
+        # 구글 로그인은 회원가입 폼의 닉네임 입력 단계를 거치지 않으므로, 같은 페르소나
+        # 생성기로 즉석에서 유니크한 닉네임을 하나 배정한다 (나중에 원하면 바꿀 수 있다).
         # 구글 로그인 전용 계정은 사용할 수 없는 임의의 비밀번호 해시를 넣어둔다 (직접 로그인 불가).
         user = User(
             email=email,
+            nickname=_unique_persona_nickname(db),
             hashed_password=pwd_context.hash(secrets.token_urlsafe(32)),
             is_verified=True,
         )
@@ -231,5 +285,5 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         user.is_verified = True
         db.commit()
 
-    access_token = create_access_token(user.id, user.email)
+    access_token = create_access_token(user.id, user.email, user.nickname)
     return RedirectResponse(url=f"{settings.frontend_origin}/?token={access_token}")
