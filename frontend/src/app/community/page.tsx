@@ -8,11 +8,13 @@ import {
   createCommunityPost,
   getCommunityPosts,
   getDreamFeed,
+  getTrends,
   toggleDreamEmpathy,
   togglePostEmpathy,
   type CommunityPost,
   type DreamFeedAiReport,
   type DreamFeedEntry,
+  type Trend,
 } from "@/api/dream";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
@@ -160,6 +162,9 @@ export default function CommunityPage() {
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
 
+  // 사이드바의 "지금 뜨는 꿈 상징" 위젯 - 홈 화면과 같은 실제 집계(trends.py)를 그대로 재사용한다.
+  const [trends, setTrends] = useState<Trend[]>([]);
+
   // 자유 광장 글쓰기 모달. 기본값은 "닉네임 공개"(isAnonymous: false) - 무의식 피드가
   // 기본 익명인 것과 대비되는 자유 광장의 기본값이다. 모달을 열 때마다 다시 기본값으로 맞춘다.
   const [isComposeOpen, setIsComposeOpen] = useState(false);
@@ -177,6 +182,7 @@ export default function CommunityPage() {
       .then(setPosts)
       .catch(() => {})
       .finally(() => setIsLoadingPosts(false));
+    getTrends().then(setTrends).catch(() => {});
   }, []);
 
   // 무의식 피드에 실제로 등장한 상징 태그만 필터 칩으로 보여준다 - 등장 빈도순.
@@ -274,12 +280,12 @@ export default function CommunityPage() {
     <div className="relative min-h-screen bg-slate-950 text-slate-100">
       <NavBar />
 
-      <main className="mx-auto max-w-3xl px-6 py-12">
+      <main className="mx-auto max-w-7xl px-4 py-12">
         <h1 className="text-2xl font-semibold text-white">🌌 무의식 광장</h1>
         <p className="mt-1.5 text-sm text-slate-400">다른 탐험가들의 꿈을 둘러보고, 자유롭게 이야기를 나눠보세요.</p>
 
         {/* 이원화 탭: 활성 탭 아래로 보랏빛 언더라인 글로우가 슬라이드한다 */}
-        <div className="relative mt-8">
+        <div className="relative mt-8 max-w-md">
           <div className="grid grid-cols-2">
             <button
               type="button"
@@ -308,130 +314,171 @@ export default function CommunityPage() {
           />
         </div>
 
-        {tab === "dream" ? (
-          <div className="mt-6">
-            {availableTags.length > 0 && (
-              <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-                {availableTags.map((tag) => {
-                  const isActive = activeTag === tag;
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => setActiveTag(isActive ? null : tag)}
-                      className={`shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all duration-200 ${
-                        isActive
-                          ? "border-purple-500 bg-purple-600/30 text-purple-300"
-                          : "border-white/10 bg-white/5 text-slate-400 hover:border-purple-400/30 hover:text-slate-200"
-                      }`}
-                    >
-                      {toHashtagDisplay(tag)}
-                    </button>
-                  );
-                })}
+        {/* 2단 대시보드: 좌측은 활성 탭의 피드, 우측은 탭과 무관하게 항상 떠 있는 사이드바 */}
+        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-8">
+            {tab === "dream" ? (
+              <div>
+                <div className="no-scrollbar flex gap-2 overflow-x-auto pb-3">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTag(null)}
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      activeTag === null
+                        ? "border-purple-500 bg-purple-600/30 text-purple-300"
+                        : "border-white/10 bg-white/5 text-slate-400 hover:border-purple-500/50"
+                    }`}
+                  >
+                    #전체
+                  </button>
+                  {availableTags.map((tag) => {
+                    const isActive = activeTag === tag;
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => setActiveTag(isActive ? null : tag)}
+                        className={`shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                          isActive
+                            ? "border-purple-500 bg-purple-600/30 text-purple-300"
+                            : "border-white/10 bg-white/5 text-slate-400 hover:border-purple-500/50"
+                        }`}
+                      >
+                        {toHashtagDisplay(tag)}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  {isLoadingDreams ? (
+                    Array.from({ length: 3 }, (_, index) => (
+                      <div key={index} className="h-28 animate-pulse rounded-xl border border-white/[0.08] bg-white/[0.03]" />
+                    ))
+                  ) : filteredDreams.length > 0 ? (
+                    filteredDreams.map((dream) => (
+                      <article key={dream.id} className={cardClass(dream.is_anonymous)}>
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <AuthorLine isAnonymous={dream.is_anonymous} displayName={dream.author_display_name} />
+                          <span className="shrink-0 text-[11px] text-slate-500">{dream.dream_date}</span>
+                        </div>
+                        <h3 className="truncate text-sm font-semibold text-white">
+                          {dream.emotion} {dream.title}
+                        </h3>
+                        {dream.summary && <p className="mt-2 text-xs leading-relaxed text-slate-400">{dream.summary}</p>}
+                        {dream.tags.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {dream.tags.map((tag) => (
+                              <span key={tag} className="text-[11px] text-violet-300/70">
+                                {toHashtagDisplay(tag)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {dream.share_with_ai_analysis && dream.ai_report && <AiReportAccordion report={dream.ai_report} />}
+
+                        <div className="mt-4">
+                          <DreamReactionButton
+                            isLiked={dream.is_liked_by_me}
+                            count={dream.empathy_count}
+                            onToggle={() => handleDreamToggle(dream.id)}
+                          />
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <p className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-8 text-center text-xs text-slate-500">
+                      {activeTag
+                        ? `${toHashtagDisplay(activeTag)} 태그의 공개된 꿈이 아직 없어요.`
+                        : "아직 공개된 꿈이 없어요. 꿈 기록소에서 첫 공개 기록을 남겨보세요 ✨"}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {isLoadingPosts ? (
+                  Array.from({ length: 3 }, (_, index) => (
+                    <div key={index} className="h-20 animate-pulse rounded-xl border border-white/[0.08] bg-white/[0.03]" />
+                  ))
+                ) : posts.length > 0 ? (
+                  posts.map((post) => (
+                    <article key={post.id} className={cardClass(post.is_anonymous)}>
+                      <AuthorLine isAnonymous={post.is_anonymous} displayName={post.author_display_name} />
+                      <p className="mt-1.5 mb-3 whitespace-pre-line text-sm leading-relaxed text-slate-200">{post.content}</p>
+                      <p className="text-[11px] text-slate-500">{formatPostTime(post.created_at)}</p>
+                      <div className="mt-3 flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handlePostToggle(post.id)}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                            post.is_liked_by_me
+                              ? "border-violet-400/60 bg-violet-500/25 text-violet-100"
+                              : "border-white/10 text-slate-300 hover:border-violet-400/30 hover:text-slate-100"
+                          }`}
+                        >
+                          ✨ 공감{post.empathy_count > 0 ? ` ${post.empathy_count}` : ""}
+                        </button>
+                        <button
+                          type="button"
+                          disabled
+                          title="댓글 기능은 준비 중이에요"
+                          className="cursor-not-allowed rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-500"
+                        >
+                          💬 댓글
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <p className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-8 text-center text-xs text-slate-500">
+                    아직 작성된 글이 없어요. 첫 이야기를 남겨보세요 ✨
+                  </p>
+                )}
               </div>
             )}
-
-            <div className="mt-5 flex flex-col gap-3">
-              {isLoadingDreams ? (
-                Array.from({ length: 3 }, (_, index) => (
-                  <div key={index} className="h-28 animate-pulse rounded-xl border border-white/[0.08] bg-white/[0.03]" />
-                ))
-              ) : filteredDreams.length > 0 ? (
-                filteredDreams.map((dream) => (
-                  <article key={dream.id} className={cardClass(dream.is_anonymous)}>
-                    <div className="flex items-center justify-between gap-3">
-                      <AuthorLine isAnonymous={dream.is_anonymous} displayName={dream.author_display_name} />
-                      <span className="shrink-0 text-[11px] text-slate-500">{dream.dream_date}</span>
-                    </div>
-                    <h3 className="mt-1.5 truncate text-sm font-semibold text-white">
-                      {dream.emotion} {dream.title}
-                    </h3>
-                    {dream.summary && <p className="mt-2 text-xs leading-relaxed text-slate-400">{dream.summary}</p>}
-                    {dream.tags.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {dream.tags.map((tag) => (
-                          <span key={tag} className="text-[11px] text-violet-300/70">
-                            {toHashtagDisplay(tag)}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {dream.share_with_ai_analysis && dream.ai_report && <AiReportAccordion report={dream.ai_report} />}
-
-                    <div className="mt-4">
-                      <DreamReactionButton
-                        isLiked={dream.is_liked_by_me}
-                        count={dream.empathy_count}
-                        onToggle={() => handleDreamToggle(dream.id)}
-                      />
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <p className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-8 text-center text-xs text-slate-500">
-                  {activeTag
-                    ? `${toHashtagDisplay(activeTag)} 태그의 공개된 꿈이 아직 없어요.`
-                    : "아직 공개된 꿈이 없어요. 꿈 기록소에서 첫 공개 기록을 남겨보세요 ✨"}
-                </p>
-              )}
-            </div>
           </div>
-        ) : (
-          <div className="mt-6">
-            <div className="flex justify-end">
+
+          {/* 사이드바: 탭과 무관하게 항상 노출 - 메인 글쓰기 액션 + 실시간 트렌드 위젯 */}
+          <aside className="lg:col-span-4">
+            <div className="lg:sticky lg:top-6">
               <button
                 type="button"
                 onClick={openCompose}
-                className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-4 py-2 text-xs font-semibold text-white transition-transform hover:-translate-y-0.5"
+                className="w-full rounded-xl bg-purple-600 py-3 font-medium text-white shadow-lg transition-all hover:bg-purple-700"
               >
-                ✏️ 글쓰기
+                🖊️ 글쓰기
               </button>
-            </div>
 
-            <div className="mt-5 flex flex-col gap-3">
-              {isLoadingPosts ? (
-                Array.from({ length: 3 }, (_, index) => (
-                  <div key={index} className="h-20 animate-pulse rounded-xl border border-white/[0.08] bg-white/[0.03]" />
-                ))
-              ) : posts.length > 0 ? (
-                posts.map((post) => (
-                  <article key={post.id} className={cardClass(post.is_anonymous)}>
-                    <AuthorLine isAnonymous={post.is_anonymous} displayName={post.author_display_name} />
-                    <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-200">{post.content}</p>
-                    <p className="mt-3 text-[11px] text-slate-500">{formatPostTime(post.created_at)}</p>
-                    <div className="mt-3 flex items-center gap-2">
+              <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.02] p-4">
+                <p className="text-xs font-semibold text-slate-300">🔥 지금 뜨는 꿈 상징</p>
+                <div className="mt-3 flex flex-col gap-2">
+                  {trends.length > 0 ? (
+                    trends.slice(0, 6).map((trend, index) => (
                       <button
+                        key={trend.keyword}
                         type="button"
-                        onClick={() => handlePostToggle(post.id)}
-                        className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                          post.is_liked_by_me
-                            ? "border-violet-400/60 bg-violet-500/20 text-violet-200"
-                            : "border-white/10 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
-                        }`}
+                        onClick={() => router.push(`/dictionary?search=${encodeURIComponent(trend.keyword)}`)}
+                        className="group flex items-center justify-between gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-white/5"
                       >
-                        ✨ 공감{post.empathy_count > 0 ? ` ${post.empathy_count}` : ""}
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="w-4 shrink-0 text-[11px] font-semibold text-violet-400/70">{index + 1}</span>
+                          <span className="truncate text-xs text-slate-300 group-hover:text-white">
+                            {toHashtagDisplay(trend.keyword)}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-[11px] text-violet-300/60">{trend.count}회</span>
                       </button>
-                      <button
-                        type="button"
-                        disabled
-                        title="댓글 기능은 준비 중이에요"
-                        className="cursor-not-allowed rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-600"
-                      >
-                        💬 댓글
-                      </button>
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <p className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-8 text-center text-xs text-slate-500">
-                  아직 작성된 글이 없어요. 첫 이야기를 남겨보세요 ✨
-                </p>
-              )}
+                    ))
+                  ) : (
+                    <p className="px-1.5 py-1 text-[11px] text-slate-500">아직 집계된 트렌드가 없어요.</p>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          </aside>
+        </div>
       </main>
 
       {/* 자유 광장 글쓰기 모달: CommunityPostForm - 아이덴티티 선택 시스템 포함 */}
