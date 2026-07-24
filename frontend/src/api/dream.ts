@@ -33,6 +33,7 @@ export interface Trend {
 }
 
 export interface LiveTickerEntry {
+  id: number;
   keyword: string;
 }
 
@@ -161,6 +162,13 @@ export interface DreamEntryPayload {
 
 export async function listDreams(): Promise<DreamEntryRecord[]> {
   const { data } = await api.get<DreamEntryRecord[]>("/api/dreams");
+  return data;
+}
+
+// 커뮤니티 상세 페이지용 익명 공개 조회. 로그인 불필요 - PUBLIC 상태가 아니거나 없는 글이면
+// 404를 던진다 (호출부에서 "글을 찾을 수 없어요" 상태로 처리).
+export async function getPublicDream(id: number): Promise<DreamEntryRecord> {
+  const { data } = await api.get<DreamEntryRecord>(`/api/dreams/public/${id}`);
   return data;
 }
 

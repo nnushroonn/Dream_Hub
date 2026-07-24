@@ -6,7 +6,12 @@ import math
 from datetime import date, datetime, time, timedelta, timezone
 
 import ephem
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from database import get_db
+from models import DreamEntry, DreamStatus
 
 router = APIRouter(prefix="/api/home", tags=["home"])
 
@@ -314,23 +319,24 @@ def get_best_dreams():
 
 
 @router.get("/live-ticker")
-def get_live_ticker():
-    """실시간 꿈 매칭 티커: 방금 누군가 어떤 꿈을 기록했는지 보여주는 더미 활동 피드.
+def get_live_ticker(db: Session = Depends(get_db)):
+    """실시간 꿈 매칭 티커: 방금 공개로 저장된 실제 유저 꿈 제목을 보여준다 (더미 아님).
 
-    서비스의 몽환적인 세계관을 지키기 위해 현실 지역명은 노출하지 않고 꿈 키워드만 전달한다.
+    id를 함께 내려줘 프론트가 클릭 시 그 꿈의 커뮤니티 상세 페이지(/community/post/{id})로
+    바로 이동할 수 있게 한다. 서비스의 몽환적인 세계관을 지키기 위해 현실 지역명이나 작성자
+    정보는 노출하지 않고 꿈 제목만 전달한다.
     """
-    return {
-        "entries": [
-            {"keyword": "하늘을 나는 꿈"},
-            {"keyword": "이빨이 빠지는 꿈"},
-            {"keyword": "물에 빠지는 꿈"},
-            {"keyword": "누군가에게 쫓기는 꿈"},
-            {"keyword": "돌아가신 분을 만나는 꿈"},
-            {"keyword": "시험 보는 꿈"},
-            {"keyword": "길을 잃는 꿈"},
-            {"keyword": "돈을 줍는 꿈"},
-        ]
-    }
+    rows = (
+        db.execute(
+            select(DreamEntry)
+            .where(DreamEntry.status == DreamStatus.PUBLIC)
+            .order_by(DreamEntry.created_at.desc())
+            .limit(8)
+        )
+        .scalars()
+        .all()
+    )
+    return {"entries": [{"id": row.id, "keyword": row.title} for row in rows]}
 
 
 _EXPLORER_BASE_COUNT = 3421

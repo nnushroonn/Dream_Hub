@@ -108,6 +108,21 @@ def list_dreams(current_user: User = Depends(get_current_user), db: Session = De
     return [_to_response(entry) for entry in entries]
 
 
+@router.get("/public/{dream_id}", response_model=DreamEntryResponse)
+def get_public_dream(dream_id: int, db: Session = Depends(get_db)):
+    """커뮤니티 상세 페이지용 익명 공개 조회 - 로그인 불필요. 소유자 정보는 응답에 담기지
+    않으므로(_to_response에 user_id가 없음) 그대로 반환해도 '익명의 탐험가' 컨셉이 유지된다.
+    PUBLIC 상태가 아닌 글은 존재 자체를 노출하지 않기 위해 404로 통일한다."""
+    entry = (
+        db.query(DreamEntry)
+        .filter(DreamEntry.id == dream_id, DreamEntry.status == DreamStatus.PUBLIC)
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공개된 꿈 기록을 찾을 수 없습니다.")
+    return _to_response(entry)
+
+
 @router.post("", response_model=DreamEntryResponse, status_code=status.HTTP_201_CREATED)
 def create_dream(
     payload: DreamEntryInput,

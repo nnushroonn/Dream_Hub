@@ -52,10 +52,11 @@ export default function LiveTicker() {
 
   const current = entries[index];
 
-  // 클릭하면 방금 기록된 키워드가 적용된 꿈해몽 사전 검색 결과로 이동한다 - 커뮤니티 피드는 아직
-  // 더미 데이터라 실제로 이 키워드로 뭔가를 보여줄 수 있는 곳은 사전 검색뿐이다.
+  // 클릭하면 방금 공개로 기록된 그 꿈의 커뮤니티 상세 페이지로 이동한다. id는 실제 DreamEntry의
+  // 고유 ID다 (백엔드가 PUBLIC 상태인 실제 꿈만 골라 내려준다 - 더미 활동 아님). 정적 export
+  // 배포라 동적 경로 세그먼트 대신 사전 검색과 같은 쿼리 파라미터 방식을 쓴다.
   const handleClick = () => {
-    router.push(`/dictionary?search=${encodeURIComponent(current.keyword)}`);
+    router.push(`/community/post?id=${current.id}`);
   };
 
   return (
