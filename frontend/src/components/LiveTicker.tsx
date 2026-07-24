@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { getLiveTicker, type LiveTickerEntry } from "@/api/dream";
 
@@ -18,6 +19,7 @@ const PHASE_CLASS: Record<Phase, string> = {
 };
 
 export default function LiveTicker() {
+  const router = useRouter();
   const [entries, setEntries] = useState<LiveTickerEntry[]>([]);
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("visible");
@@ -50,13 +52,21 @@ export default function LiveTicker() {
 
   const current = entries[index];
 
+  // 클릭하면 방금 기록된 키워드가 적용된 꿈해몽 사전 검색 결과로 이동한다 - 커뮤니티 피드는 아직
+  // 더미 데이터라 실제로 이 키워드로 뭔가를 보여줄 수 있는 곳은 사전 검색뿐이다.
+  const handleClick = () => {
+    router.push(`/dictionary?search=${encodeURIComponent(current.keyword)}`);
+  };
+
   return (
-    <div
-      className="fixed right-6 bottom-6 z-40 max-w-xs"
+    <button
+      type="button"
+      onClick={handleClick}
+      className="fixed right-6 bottom-6 z-40 max-w-xs cursor-pointer text-left"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
-      <div className="flex items-center gap-2.5 overflow-hidden rounded-2xl border border-violet-400/20 bg-white/5 px-4 py-3 shadow-lg backdrop-blur-md transition-colors duration-300 hover:border-violet-300/40 hover:bg-white/10">
+      <div className="flex items-center gap-2.5 overflow-hidden rounded-2xl border border-violet-400/20 bg-white/5 px-4 py-3 shadow-lg backdrop-blur-md transition-all duration-300 hover:border-violet-300/40 hover:bg-white/10 active:scale-[0.98]">
         <span className="shrink-0 animate-pulse text-sm">✨</span>
         <p className={`text-xs leading-relaxed text-indigo-100 ${PHASE_CLASS[phase]}`}>
           방금 익명의 탐험가가 &lsquo;
@@ -64,6 +74,6 @@ export default function LiveTicker() {
           &rsquo;을 기록했습니다
         </p>
       </div>
-    </div>
+    </button>
   );
 }

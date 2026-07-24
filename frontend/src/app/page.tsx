@@ -19,6 +19,7 @@ import LiveTicker from "@/components/LiveTicker";
 import MoonIcon from "@/components/MoonIcon";
 import NavBar from "@/components/NavBar";
 import { DICTIONARY_CATEGORIES } from "@/lib/dictionaryCategories";
+import { syncTrendRankChanges, type TrendRankChange } from "@/lib/trendSnapshot";
 import { useAuthStore } from "@/store/useAuthStore";
 
 const EXPLORER_COUNT_POLL_MS = 5000;
@@ -74,11 +75,32 @@ function rankStyle(index: number): { number: string; row: string } {
   }
 }
 
+// 순위 변동 마이크로 인디케이터: 새로 진입한 키워드는 은은한 보랏빛 NEW 뱃지로, 그 외에는
+// 상승/하락 폭을 초록/빨강 화살표로 표시한다. 변동이 없으면(직전 순위와 동일) 아무것도 그리지 않는다.
+function TrendRankBadge({ change }: { change?: TrendRankChange }) {
+  if (!change) return null;
+  if (change.type === "new") {
+    return (
+      <span className="shrink-0 rounded-full bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-violet-300">
+        NEW
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`shrink-0 text-[10px] font-semibold ${change.type === "up" ? "text-emerald-400" : "text-red-400"}`}
+    >
+      {change.type === "up" ? "▲" : "▼"} {change.amount}
+    </span>
+  );
+}
+
 export default function HomePage() {
   const router = useRouter();
   const { login } = useAuthStore();
 
   const [trends, setTrends] = useState<Trend[]>([]);
+  const [trendChanges, setTrendChanges] = useState<Record<string, TrendRankChange>>({});
   const [isLoadingTrends, setIsLoadingTrends] = useState(true);
   const [bestDreams, setBestDreams] = useState<BestDream[]>([]);
   const [likedIds, setLikedIds] = useState<Set<number>>(new Set());
@@ -104,7 +126,10 @@ export default function HomePage() {
 
   useEffect(() => {
     getTrends()
-      .then(setTrends)
+      .then((data) => {
+        setTrends(data);
+        setTrendChanges(syncTrendRankChanges(data));
+      })
       .catch(() => {})
       .finally(() => setIsLoadingTrends(false));
     getBestDreams().then(setBestDreams).catch(() => {});
@@ -381,6 +406,7 @@ export default function HomePage() {
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-100">
                           {toHashtagDisplay(trend.keyword)}
                         </span>
+                        <TrendRankBadge change={trendChanges[trend.keyword]} />
                         <span className="shrink-0 text-xs text-violet-300/80">{trend.count}회</span>
                         <span className="ml-0.5 -translate-x-1 text-violet-300/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-violet-300/90">
                           ➔
