@@ -13,6 +13,7 @@ import {
   type UnconsciousStats,
 } from "@/api/dream";
 import NavBar from "@/components/NavBar";
+import NicknameEditor from "@/components/NicknameEditor";
 
 export default function MyPage() {
   const [calendar, setCalendar] = useState<CalendarDay[]>([]);
@@ -34,6 +35,10 @@ export default function MyPage() {
       <main className="mx-auto max-w-3xl px-6 py-12">
         <h1 className="text-2xl font-semibold">마이페이지</h1>
         <p className="mt-1 text-sm text-indigo-300/70">나의 무의식 기록을 한눈에 확인해보세요.</p>
+
+        <div className="mt-6">
+          <NicknameEditor />
+        </div>
 
         {/* 꿈 달력: 날짜별 감정 아이콘 */}
         <section className="mt-8">

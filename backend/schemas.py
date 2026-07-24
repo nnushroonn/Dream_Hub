@@ -64,3 +64,15 @@ class MessageResponse(BaseModel):
 
 class NicknameAvailability(BaseModel):
     available: bool
+
+
+class ProfileUpdateInput(BaseModel):
+    nickname: str
+
+    @field_validator("nickname")
+    @classmethod
+    def validate_nickname(cls, value: str) -> str:
+        trimmed = value.strip()
+        if len(trimmed) < NICKNAME_MIN_LENGTH or len(trimmed) > NICKNAME_MAX_LENGTH:
+            raise ValueError(f"닉네임은 {NICKNAME_MIN_LENGTH}~{NICKNAME_MAX_LENGTH}자로 입력해 주세요.")
+        return trimmed

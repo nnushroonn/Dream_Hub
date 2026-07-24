@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { API_BASE_URL } from "@/api/axios";
 import { checkNicknameAvailability, getAuthErrorMessage, loginUser, registerUser } from "@/api/auth";
+import { randomPersonaNickname } from "@/lib/personaNickname";
 import { useAuthStore } from "@/store/useAuthStore";
 
 type AuthMode = "login" | "register";
@@ -13,16 +14,6 @@ type NicknameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
 const NICKNAME_MIN_LENGTH = 2;
 const NICKNAME_MAX_LENGTH = 20;
 const NICKNAME_CHECK_DEBOUNCE_MS = 400;
-
-// 🎲 랜덤 꿈 페르소나 닉네임 생성기 - 백엔드의 자동 배정(구글 로그인용) 생성기와 같은 컨셉의 조합.
-const PERSONA_ADJECTIVES = ["보랏빛", "자각몽을 꾸는", "달빛 아래", "새벽녘의"];
-const PERSONA_NOUNS = ["탐험가", "몽상가", "추적자", "나비"];
-
-function randomPersonaNickname(): string {
-  const adjective = PERSONA_ADJECTIVES[Math.floor(Math.random() * PERSONA_ADJECTIVES.length)];
-  const noun = PERSONA_NOUNS[Math.floor(Math.random() * PERSONA_NOUNS.length)];
-  return `${adjective} ${noun}`;
-}
 
 function GoogleIcon() {
   return (

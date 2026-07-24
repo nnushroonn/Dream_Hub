@@ -44,6 +44,12 @@ export async function checkNicknameAvailability(nickname: string): Promise<boole
   return data.available;
 }
 
+// 마이페이지에서 꿈 페르소나 닉네임을 바꿀 때 호출한다.
+export async function updateNickname(nickname: string): Promise<AuthUser> {
+  const { data } = await api.patch<AuthUser>("/api/user/profile", { nickname });
+  return data;
+}
+
 export async function loginUser(email: string, password: string): Promise<AuthResponse> {
   const { data } = await api.post<AuthResponse>("/auth/login", { email, password });
   return data;

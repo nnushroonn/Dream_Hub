@@ -85,7 +85,7 @@ export default function NavBar() {
         <div className="flex items-center gap-3 text-sm">
           {isAuthenticated && user ? (
             <>
-              <span className="hidden text-indigo-300/70 sm:inline">{user.email}</span>
+              <span className="hidden text-indigo-300/70 sm:inline">{user.nickname}</span>
               <button
                 type="button"
                 onClick={logout}
