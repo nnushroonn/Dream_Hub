@@ -46,11 +46,7 @@ export default function NicknameEditor() {
   }, [draft, isEditing, user]);
 
   if (!user) {
-    return (
-      <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 text-center text-xs text-slate-400">
-        로그인이 필요해요.
-      </div>
-    );
+    return <p className="text-center text-xs text-slate-400">로그인이 필요해요.</p>;
   }
 
   const startEditing = () => {
@@ -107,7 +103,7 @@ export default function NicknameEditor() {
   const canSave = draft.trim() !== "" && (draft.trim() === user.nickname || status === "available");
 
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5">
+    <div>
       <p className="text-xs text-indigo-300/70">🌙 꿈 페르소나</p>
 
       {!isEditing ? (

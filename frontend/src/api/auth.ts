@@ -2,11 +2,14 @@ import { isAxiosError } from "axios";
 
 import api from "./axios";
 
+export type AuraPreference = "good" | "lucid" | "calm";
+
 export interface AuthUser {
   id: number;
   email: string;
   nickname: string;
   is_verified?: boolean;
+  aura_preference?: AuraPreference | null;
 }
 
 export interface AuthResponse {
@@ -47,6 +50,38 @@ export async function checkNicknameAvailability(nickname: string): Promise<boole
 // 마이페이지에서 꿈 페르소나 닉네임을 바꿀 때 호출한다.
 export async function updateNickname(nickname: string): Promise<AuthUser> {
   const { data } = await api.patch<AuthUser>("/api/user/profile", { nickname });
+  return data;
+}
+
+// 마이페이지 아바타 오라 토글 - 유저가 직접 고르는 시각적 정체성.
+export async function updateAuraPreference(auraPreference: AuraPreference): Promise<AuthUser> {
+  const { data } = await api.patch<AuthUser>("/api/user/aura", { aura_preference: auraPreference });
+  return data;
+}
+
+// 마이페이지 레벨 바 + 업적 뱃지 보드 - 전부 실제 활동 데이터에서 매 요청마다 다시 계산된 값
+// (저장된 값이 아니라 항상 최신 상태).
+export interface BadgeInfo {
+  code: string;
+  label: string;
+  emoji: string;
+  earned: boolean;
+}
+
+export interface UserStats {
+  dream_count: number;
+  public_dream_count: number;
+  lucid_count: number;
+  post_count: number;
+  comment_count: number;
+  empathy_received: number;
+  level: number;
+  level_title: string;
+  badges: BadgeInfo[];
+}
+
+export async function getUserStats(): Promise<UserStats> {
+  const { data } = await api.get<UserStats>("/api/user/stats");
   return data;
 }
 

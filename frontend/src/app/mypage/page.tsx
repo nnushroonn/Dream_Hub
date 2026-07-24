@@ -3,15 +3,16 @@
 import { useEffect, useState } from "react";
 
 import {
-  getBadges,
   getCalendar,
   getScrapbook,
   getUnconsciousStats,
-  type Badges,
   type CalendarDay,
   type ScrapEntry,
   type UnconsciousStats,
 } from "@/api/dream";
+import AuraToggle from "@/components/AuraToggle";
+import LevelBadgeBoard from "@/components/LevelBadgeBoard";
+import MyActivityTabs from "@/components/MyActivityTabs";
 import NavBar from "@/components/NavBar";
 import NicknameEditor from "@/components/NicknameEditor";
 
@@ -19,13 +20,11 @@ export default function MyPage() {
   const [calendar, setCalendar] = useState<CalendarDay[]>([]);
   const [stats, setStats] = useState<UnconsciousStats | null>(null);
   const [scrapbook, setScrapbook] = useState<ScrapEntry[]>([]);
-  const [badges, setBadges] = useState<Badges | null>(null);
 
   useEffect(() => {
     getCalendar().then(setCalendar).catch(() => {});
     getUnconsciousStats().then(setStats).catch(() => {});
     getScrapbook().then(setScrapbook).catch(() => {});
-    getBadges().then(setBadges).catch(() => {});
   }, []);
 
   return (
@@ -36,8 +35,17 @@ export default function MyPage() {
         <h1 className="text-2xl font-semibold">마이페이지</h1>
         <p className="mt-1 text-sm text-indigo-300/70">나의 무의식 기록을 한눈에 확인해보세요.</p>
 
-        <div className="mt-6">
-          <NicknameEditor />
+        {/* 프로필 카드: 아바타 오라 + 닉네임 수정 + 무의식 탐험 등급/업적 뱃지 */}
+        <div className="mt-6 rounded-xl border border-white/[0.08] bg-white/[0.03] p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <AuraToggle />
+            <div className="min-w-0 flex-1">
+              <NicknameEditor />
+            </div>
+          </div>
+          <div className="mt-5 border-t border-white/[0.06] pt-4">
+            <LevelBadgeBoard />
+          </div>
         </div>
 
         {/* 꿈 달력: 날짜별 감정 아이콘 */}
@@ -101,27 +109,7 @@ export default function MyPage() {
           </div>
         </section>
 
-        {/* 뱃지 시스템 */}
-        {badges && (
-          <section className="mt-10">
-            <h2 className="text-lg font-semibold text-indigo-100">🏅 뱃지</h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {badges.earned.map((badge) => (
-                <span key={badge} className="rounded-full bg-violet-600/30 px-3 py-1.5 text-xs text-violet-200">
-                  {badge}
-                </span>
-              ))}
-              {badges.available.map((badge) => (
-                <span
-                  key={badge}
-                  className="rounded-full border border-indigo-800 px-3 py-1.5 text-xs text-indigo-500"
-                >
-                  {badge} (미획득)
-                </span>
-              ))}
-            </div>
-          </section>
-        )}
+        <MyActivityTabs />
       </main>
     </div>
   );

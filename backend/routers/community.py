@@ -82,32 +82,22 @@ def _dream_empathy_count(db: Session, dream_id: int) -> int:
     )
 
 
-@router.get("/dream-feed", response_model=list[DreamFeedEntry])
-def get_dream_feed(
-    current_user: User | None = Depends(get_current_user_optional),
-    db: Session = Depends(get_db),
-) -> list[dict]:
-    entries = (
-        db.query(DreamEntry)
-        .filter(DreamEntry.status == DreamStatus.PUBLIC)
-        .order_by(DreamEntry.created_at.desc())
-        .limit(DREAM_FEED_LIMIT)
+def _liked_dream_ids(db: Session, user: User, entries: list[DreamEntry]) -> set[int]:
+    if not entries:
+        return set()
+    rows = (
+        db.query(Interaction.dream_entry_id)
+        .filter(
+            Interaction.user_id == user.id,
+            Interaction.type == InteractionType.LIKE,
+            Interaction.dream_entry_id.in_([entry.id for entry in entries]),
+        )
         .all()
     )
+    return {row[0] for row in rows}
 
-    liked_ids: set[int] = set()
-    if current_user and entries:
-        liked_rows = (
-            db.query(Interaction.dream_entry_id)
-            .filter(
-                Interaction.user_id == current_user.id,
-                Interaction.type == InteractionType.LIKE,
-                Interaction.dream_entry_id.in_([entry.id for entry in entries]),
-            )
-            .all()
-        )
-        liked_ids = {row[0] for row in liked_rows}
 
+def _build_dream_feed_entries(db: Session, entries: list[DreamEntry], liked_ids: set[int]) -> list[dict]:
     result = []
     for entry in entries:
         interpretation = entry.interpretation if isinstance(entry.interpretation, dict) else {}
@@ -137,6 +127,43 @@ def get_dream_feed(
             }
         )
     return result
+
+
+@router.get("/dream-feed", response_model=list[DreamFeedEntry])
+def get_dream_feed(
+    current_user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    entries = (
+        db.query(DreamEntry)
+        .filter(DreamEntry.status == DreamStatus.PUBLIC)
+        .order_by(DreamEntry.created_at.desc())
+        .limit(DREAM_FEED_LIMIT)
+        .all()
+    )
+    liked_ids = _liked_dream_ids(db, current_user, entries) if current_user else set()
+    return _build_dream_feed_entries(db, entries, liked_ids)
+
+
+@router.get("/my-liked-dreams", response_model=list[DreamFeedEntry])
+def list_my_liked_dreams(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[dict]:
+    """마이페이지 '❤️ 공감한 꿈' 탭 - 내가 공감 누른, 지금도 공개 상태인 실제 꿈 기록."""
+    liked_rows = (
+        db.query(Interaction.dream_entry_id)
+        .filter(Interaction.user_id == current_user.id, Interaction.type == InteractionType.LIKE)
+        .all()
+    )
+    liked_dream_ids = [row[0] for row in liked_rows]
+    if not liked_dream_ids:
+        return []
+
+    entries = (
+        db.query(DreamEntry)
+        .filter(DreamEntry.id.in_(liked_dream_ids), DreamEntry.status == DreamStatus.PUBLIC)
+        .order_by(DreamEntry.created_at.desc())
+        .all()
+    )
+    return _build_dream_feed_entries(db, entries, set(liked_dream_ids))
 
 
 @router.post("/dream-feed/{dream_id}/empathy", response_model=EmpathyResponse)
@@ -199,25 +226,21 @@ def _post_comment_count(db: Session, post_id: int) -> int:
     return db.query(CommunityComment).filter(CommunityComment.post_id == post_id).count()
 
 
-@router.get("/posts", response_model=list[CommunityPostResponse])
-def list_community_posts(
-    current_user: User | None = Depends(get_current_user_optional),
-    db: Session = Depends(get_db),
-) -> list[dict]:
-    posts = db.query(CommunityPost).order_by(CommunityPost.created_at.desc()).limit(POST_FEED_LIMIT).all()
-
-    liked_ids: set[int] = set()
-    if current_user and posts:
-        liked_rows = (
-            db.query(CommunityPostReaction.post_id)
-            .filter(
-                CommunityPostReaction.user_id == current_user.id,
-                CommunityPostReaction.post_id.in_([post.id for post in posts]),
-            )
-            .all()
+def _liked_post_ids(db: Session, user: User, posts: list[CommunityPost]) -> set[int]:
+    if not posts:
+        return set()
+    rows = (
+        db.query(CommunityPostReaction.post_id)
+        .filter(
+            CommunityPostReaction.user_id == user.id,
+            CommunityPostReaction.post_id.in_([post.id for post in posts]),
         )
-        liked_ids = {row[0] for row in liked_rows}
+        .all()
+    )
+    return {row[0] for row in rows}
 
+
+def _build_post_entries(db: Session, posts: list[CommunityPost], liked_ids: set[int]) -> list[dict]:
     return [
         {
             "id": post.id,
@@ -231,6 +254,29 @@ def list_community_posts(
         }
         for post in posts
     ]
+
+
+@router.get("/posts", response_model=list[CommunityPostResponse])
+def list_community_posts(
+    current_user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    posts = db.query(CommunityPost).order_by(CommunityPost.created_at.desc()).limit(POST_FEED_LIMIT).all()
+    liked_ids = _liked_post_ids(db, current_user, posts) if current_user else set()
+    return _build_post_entries(db, posts, liked_ids)
+
+
+@router.get("/my-posts", response_model=list[CommunityPostResponse])
+def list_my_posts(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[dict]:
+    """마이페이지 '💬 내가 쓴 자유글' 탭 - 로그인한 본인이 작성한 자유 광장 글 전체."""
+    posts = (
+        db.query(CommunityPost)
+        .filter(CommunityPost.user_id == current_user.id)
+        .order_by(CommunityPost.created_at.desc())
+        .all()
+    )
+    liked_ids = _liked_post_ids(db, current_user, posts)
+    return _build_post_entries(db, posts, liked_ids)
 
 
 @router.post("/posts", response_model=CommunityPostResponse, status_code=status.HTTP_201_CREATED)

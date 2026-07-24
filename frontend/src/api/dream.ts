@@ -228,6 +228,12 @@ export async function toggleDreamEmpathy(dreamId: number): Promise<EmpathyResult
   return data;
 }
 
+// 마이페이지 '❤️ 공감한 꿈' 탭 - 내가 공감 누른, 지금도 공개 상태인 실제 꿈 기록.
+export async function getMyLikedDreams(): Promise<DreamFeedEntry[]> {
+  const { data } = await api.get<DreamFeedEntry[]>("/api/community/my-liked-dreams");
+  return data;
+}
+
 // 💬 자유 광장: 꿈과 무관한 자유 게시글.
 export interface CommunityPost {
   id: number;
@@ -252,6 +258,12 @@ export async function createCommunityPost(content: string, isAnonymous: boolean)
 
 export async function togglePostEmpathy(postId: number): Promise<EmpathyResult> {
   const { data } = await api.post<EmpathyResult>(`/api/community/posts/${postId}/empathy`);
+  return data;
+}
+
+// 마이페이지 '💬 내가 쓴 자유글' 탭 - 로그인한 본인이 작성한 자유 광장 글 전체.
+export async function getMyPosts(): Promise<CommunityPost[]> {
+  const { data } = await api.get<CommunityPost[]>("/api/community/my-posts");
   return data;
 }
 
@@ -299,11 +311,6 @@ export interface ScrapEntry {
   scrapped_at: string;
 }
 
-export interface Badges {
-  earned: string[];
-  available: string[];
-}
-
 export async function getCalendar(): Promise<CalendarDay[]> {
   const { data } = await api.get<{ days: CalendarDay[] }>("/mypage/calendar");
   return data.days;
@@ -319,7 +326,3 @@ export async function getScrapbook(): Promise<ScrapEntry[]> {
   return data.entries;
 }
 
-export async function getBadges(): Promise<Badges> {
-  const { data } = await api.get<Badges>("/mypage/badges");
-  return data;
-}

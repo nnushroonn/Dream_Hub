@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
 NICKNAME_MIN_LENGTH = 2
 NICKNAME_MAX_LENGTH = 20
+AURA_OPTIONS = {"good", "lucid", "calm"}
 
 
 class UserCreate(BaseModel):
@@ -48,6 +49,7 @@ class UserResponse(BaseModel):
     email: str
     nickname: str
     is_verified: bool
+    aura_preference: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -76,3 +78,33 @@ class ProfileUpdateInput(BaseModel):
         if len(trimmed) < NICKNAME_MIN_LENGTH or len(trimmed) > NICKNAME_MAX_LENGTH:
             raise ValueError(f"닉네임은 {NICKNAME_MIN_LENGTH}~{NICKNAME_MAX_LENGTH}자로 입력해 주세요.")
         return trimmed
+
+
+class AuraUpdateInput(BaseModel):
+    aura_preference: str
+
+    @field_validator("aura_preference")
+    @classmethod
+    def validate_aura(cls, value: str) -> str:
+        if value not in AURA_OPTIONS:
+            raise ValueError(f"오라 옵션은 {sorted(AURA_OPTIONS)} 중 하나여야 합니다.")
+        return value
+
+
+class BadgeInfo(BaseModel):
+    code: str
+    label: str
+    emoji: str
+    earned: bool
+
+
+class UserStatsResponse(BaseModel):
+    dream_count: int
+    public_dream_count: int
+    lucid_count: int
+    post_count: int
+    comment_count: int
+    empathy_received: int
+    level: int
+    level_title: str
+    badges: list[BadgeInfo]

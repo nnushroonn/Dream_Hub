@@ -1,4 +1,6 @@
-"""마이페이지: 꿈 달력 / 무의식 통계 / 스크랩북 / 뱃지 시스템 (더미 데이터)."""
+"""마이페이지: 꿈 달력 / 무의식 통계 / 스크랩북 (더미 데이터).
+
+뱃지/레벨은 실제 활동 데이터 기반으로 계산돼 routers/user.py의 GET /api/user/stats가 대신 맡는다."""
 
 from fastapi import APIRouter
 
@@ -36,10 +38,3 @@ def get_scrapbook():
         ]
     }
 
-
-@router.get("/badges")
-def get_badges():
-    return {
-        "earned": ["FIRST_DREAM", "WEEK_STREAK_7"],
-        "available": ["LUCID_MASTER", "COMMUNITY_STAR", "DREAM_COLLECTOR_100"],
-    }

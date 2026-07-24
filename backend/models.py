@@ -33,6 +33,9 @@ class User(Base):
     # 리얼리티 체크 푸시 알림 스케줄링에 사용하는 수면 주기 설정
     bedtime: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
     wake_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
+    # 마이페이지 아바타 오라 커스텀 - "good"(길몽 위주)/"lucid"(자각몽 위주)/"calm"(평온 위주).
+    # 유저가 직접 고르는 값이라 기본은 미선택(None) - 프론트가 그때는 중립 톤으로 보여준다.
+    aura_preference: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     dream_entries: Mapped[list["DreamEntry"]] = relationship(
