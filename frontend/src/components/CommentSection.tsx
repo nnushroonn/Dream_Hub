@@ -98,7 +98,7 @@ export default function CommentSection({
           transition={{ duration: 0.3, ease: "easeOut" }}
           className="overflow-hidden"
         >
-          <div className="mt-3 border-t border-white/[0.06] pt-3">
+          <div className="mt-3 border-t border-white/[0.06] pt-3 pb-4">
             {isLoading ? (
               <div className="space-y-2">
                 {Array.from({ length: 2 }, (_, index) => (
@@ -132,7 +132,7 @@ export default function CommentSection({
             )}
 
             {/* 댓글 입력 폼: 텍스트 영역 아래에 이 댓글만의 익명 여부를 고르는 미니 토글이 붙는다 */}
-            <div className="mt-2">
+            <div className="mt-2 space-y-3">
               <textarea
                 value={commentText}
                 onChange={(event) => setCommentText(event.target.value)}
@@ -141,8 +141,8 @@ export default function CommentSection({
                 maxLength={500}
                 className="w-full resize-none rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
               />
-              {error && <p className="mt-1.5 text-xs text-red-300">{error}</p>}
-              <div className="mt-1.5 flex items-center justify-between">
+              {error && <p className="text-xs text-red-300">{error}</p>}
+              <div className="flex items-center justify-between">
                 <button
                   type="button"
                   onClick={() => setIsCommentAnonymous((prev) => !prev)}
@@ -159,13 +159,13 @@ export default function CommentSection({
                   type="button"
                   onClick={handleSubmit}
                   disabled={!commentText.trim() || isSubmitting}
-                  className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-3.5 py-1.5 text-[11px] font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full bg-purple-700/80 px-3.5 py-1.5 text-sm font-medium text-white transition-colors hover:bg-purple-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSubmitting ? "등록 중..." : isAuthenticated ? "댓글 등록" : "로그인하고 댓글 쓰기"}
                 </button>
               </div>
               {!isAuthenticated && (
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p className="text-[11px] text-slate-500">
                   {isCommentAnonymous ? "🎭 익명" : `👤 ${nickname}`}으로 남길 예정이에요.
                 </p>
               )}

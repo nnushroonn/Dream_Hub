@@ -464,14 +464,14 @@ export default function CommunityPage() {
               <button
                 type="button"
                 onClick={openCompose}
-                className="w-full rounded-xl bg-purple-600 py-3 font-medium text-white shadow-lg transition-all hover:bg-purple-700"
+                className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 font-medium text-white shadow-lg transition-all hover:from-purple-700 hover:to-indigo-700"
               >
                 🖊️ 글쓰기
               </button>
 
               <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                <p className="text-xs font-semibold text-slate-300">🔥 지금 뜨는 꿈 상징</p>
-                <div className="mt-3 flex flex-col gap-2">
+                <p className="mb-4 text-lg font-bold text-white">🔥 지금 뜨는 꿈 상징</p>
+                <div className="flex flex-col gap-2">
                   {trends.length > 0 ? (
                     trends.slice(0, 6).map((trend, index) => (
                       <button
