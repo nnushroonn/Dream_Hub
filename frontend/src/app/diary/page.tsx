@@ -18,6 +18,7 @@ import {
   type DreamSurvey,
 } from "@/api/dream";
 import DiaryCalendarPanel from "@/components/DiaryCalendarPanel";
+import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
 import DreamWizard from "@/components/DreamWizard";
 import NavBar from "@/components/NavBar";
 import { emojiForMoodBucket, MOOD_OPTIONS } from "@/lib/moodBucket";
@@ -267,18 +268,22 @@ export default function DiaryPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isModalOpen, detailEntries, deleteTarget]);
 
+  // 결과 모달은 AI 응답을 기다리지 않고 즉시 연다 - 제목/요약처럼 이미 가진 가벼운 데이터는
+  // 곧바로 보여주고, 무거운 AI 리포트 영역만 <DreamAnalyzerLoading />으로 채워 체감 대기를 줄인다.
   const handleWizardComplete = async (survey: DreamSurvey) => {
     if (isLoading) return;
 
     setLastSurvey(survey);
+    setInterpretation(null);
     setErrorMessage(null);
+    setIsModalOpen(true);
     setIsLoading(true);
     try {
       const result = await requestAiInterpretation({ date: selectedDate, emotion: mood, is_public: isPublic, survey });
       setInterpretation(result);
-      setIsModalOpen(true);
     } catch {
       setErrorMessage("AI 해몽 요청에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      setIsModalOpen(false);
     } finally {
       setIsLoading(false);
     }
@@ -299,28 +304,30 @@ export default function DiaryPage() {
     }
 
     setErrorMessage(null);
+    setLastSurvey({
+      title,
+      brightness: "",
+      space_depth: "",
+      space_detail: "",
+      identity_factor: "",
+      target_detail: "",
+      action_physics: "",
+      action_detail: text,
+      reality_link: "",
+      reality_detail: "",
+      vividness: 50,
+      is_lucid: false,
+      final_memo: "",
+    });
+    setInterpretation(null);
+    setIsModalOpen(true);
     setIsLoading(true);
     try {
       const result = await requestQuickAiInterpretation(title, text);
-      setLastSurvey({
-        title,
-        brightness: "",
-        space_depth: "",
-        space_detail: "",
-        identity_factor: "",
-        target_detail: "",
-        action_physics: "",
-        action_detail: text,
-        reality_link: "",
-        reality_detail: "",
-        vividness: 50,
-        is_lucid: false,
-        final_memo: "",
-      });
       setInterpretation(result);
-      setIsModalOpen(true);
     } catch {
       setErrorMessage("AI 해몽 요청에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      setIsModalOpen(false);
     } finally {
       setIsLoading(false);
     }
@@ -722,19 +729,9 @@ export default function DiaryPage() {
         </div>
       </main>
 
-      {/* AI 해몽 로딩 오버레이 */}
-      {isLoading && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-slate-950/80 backdrop-blur-md">
-          <div className="relative h-20 w-20">
-            <div className="absolute inset-0 animate-spin rounded-full bg-[conic-gradient(from_0deg,rgba(167,139,250,0.05),rgba(167,139,250,0.9),rgba(99,102,241,0.05))] blur-[2px]" />
-            <div className="absolute inset-2 rounded-full bg-slate-950" />
-          </div>
-          <p className="text-sm text-violet-200">AI가 무의식의 파동을 읽어내는 중...</p>
-        </div>
-      )}
-
-      {/* AI 해몽 결과 모달 */}
-      {interpretation && (
+      {/* AI 해몽 결과 모달: AI 응답을 기다리지 않고 즉시 연다 - 제목/요약(가벼운 데이터)은 곧바로
+          보여주고, 무거운 리포트 영역만 interpretation이 도착할 때까지 로딩으로 채운다. */}
+      {isModalOpen && lastSurvey && (
         <div
           className={`fixed inset-0 z-50 flex items-center justify-center px-4 transition-opacity duration-300 ${
             isModalOpen ? "opacity-100" : "pointer-events-none opacity-0"
@@ -756,75 +753,89 @@ export default function DiaryPage() {
               ✕
             </button>
 
+            {/* 즉시 렌더링 영역: 유저가 이미 입력한 제목/선택 칩 요약이라 AI 응답을 기다릴 필요가 없다 */}
             <div className="text-center">
               <p className="text-xs tracking-widest text-indigo-300/70 uppercase">AI Dream Interpretation</p>
-              <h3 className="mt-1 text-2xl font-semibold text-white">🔮 무의식이 전하는 메시지</h3>
+              <h3 className="mt-1 text-2xl font-semibold text-white">
+                {mood} {lastSurvey.title || "제목 없는 꿈"}
+              </h3>
+            </div>
+            <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center text-xs leading-relaxed text-slate-400">
+              {buildDreamOneLineSummary(lastSurvey)}
             </div>
 
-            <div className="mt-5 flex flex-wrap justify-center gap-2">
-              {interpretation.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full border border-violet-400/30 bg-violet-500/15 px-3 py-1 text-xs text-violet-200"
-                >
-                  {tag.startsWith("#") ? tag : `#${tag}`}
-                </span>
-              ))}
-            </div>
+            {!interpretation ? (
+              <DreamAnalyzerLoading />
+            ) : (
+              <>
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                  {interpretation.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-violet-400/30 bg-violet-500/15 px-3 py-1 text-xs text-violet-200"
+                    >
+                      {tag.startsWith("#") ? tag : `#${tag}`}
+                    </span>
+                  ))}
+                </div>
 
-            <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-300">{interpretation.description}</p>
+                <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-300">
+                  {interpretation.description}
+                </p>
 
-            {/* 전문가의 시선: 모든 학파를 나열하지 않고, 이 꿈과 가장 찰떡궁합인 전문가 1~2명만 깊이 있게 */}
-            <div className="mt-5 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
-                  {interpretation.expert_badge}
-                </span>
-                <span className="text-xs text-violet-300/80">{interpretation.selected_expert}의 시선</span>
-              </div>
-              <p className="mt-2.5 text-sm leading-relaxed text-slate-300">{interpretation.expert_insight}</p>
-            </div>
+                {/* 전문가의 시선: 모든 학파를 나열하지 않고, 이 꿈과 가장 찰떡궁합인 전문가 1~2명만 깊이 있게 */}
+                <div className="mt-5 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
+                      {interpretation.expert_badge}
+                    </span>
+                    <span className="text-xs text-violet-300/80">{interpretation.selected_expert}의 시선</span>
+                  </div>
+                  <p className="mt-2.5 text-sm leading-relaxed text-slate-300">{interpretation.expert_insight}</p>
+                </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-center text-xs text-indigo-300/70">행운의 아이템</p>
-                <p className="mt-1.5 text-center font-medium text-white">{interpretation.lucky_item}</p>
-                <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{interpretation.lucky_item_reason}</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-center text-xs text-indigo-300/70">행운의 숫자</p>
-                <p className="mt-1.5 text-center font-medium text-white">{interpretation.lucky_number}</p>
-                <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{interpretation.lucky_number_reason}</p>
-              </div>
-            </div>
+                <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-center text-xs text-indigo-300/70">행운의 아이템</p>
+                    <p className="mt-1.5 text-center font-medium text-white">{interpretation.lucky_item}</p>
+                    <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{interpretation.lucky_item_reason}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-center text-xs text-indigo-300/70">행운의 숫자</p>
+                    <p className="mt-1.5 text-center font-medium text-white">{interpretation.lucky_number}</p>
+                    <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{interpretation.lucky_number_reason}</p>
+                  </div>
+                </div>
 
-            {saveError && (
-              <p className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-300">
-                {saveError}
-              </p>
+                {saveError && (
+                  <p className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-300">
+                    {saveError}
+                  </p>
+                )}
+                {!isAuthenticated && (
+                  <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-center text-xs text-amber-200">
+                    저장하려면 로그인이 필요해요.
+                  </p>
+                )}
+
+                <div className="mt-7 flex flex-col gap-2.5 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={!isAuthenticated || isSaving}
+                    className="flex-1 rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSaving ? "저장 중..." : editingEntry ? "수정 내용 저장하고 확인" : "캘린더에 저장하고 확인"}
+                  </button>
+                  <Link
+                    href="/community"
+                    className="flex-1 rounded-full border border-white/10 px-5 py-2.5 text-center text-sm text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200"
+                  >
+                    커뮤니티로 이동
+                  </Link>
+                </div>
+              </>
             )}
-            {!isAuthenticated && (
-              <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-center text-xs text-amber-200">
-                저장하려면 로그인이 필요해요.
-              </p>
-            )}
-
-            <div className="mt-7 flex flex-col gap-2.5 sm:flex-row">
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={!isAuthenticated || isSaving}
-                className="flex-1 rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isSaving ? "저장 중..." : editingEntry ? "수정 내용 저장하고 확인" : "캘린더에 저장하고 확인"}
-              </button>
-              <Link
-                href="/community"
-                className="flex-1 rounded-full border border-white/10 px-5 py-2.5 text-center text-sm text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200"
-              >
-                커뮤니티로 이동
-              </Link>
-            </div>
           </div>
         </div>
       )}
