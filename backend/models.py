@@ -197,3 +197,31 @@ class Interaction(Base):
 
     user: Mapped["User"] = relationship(back_populates="interactions")
     dream_entry: Mapped["DreamEntry"] = relationship(back_populates="interactions")
+
+
+class CommunityPost(Base):
+    """무의식 광장의 '자유 광장' 탭 - 꿈과 무관한 자유 게시글. 익명 컨셉을 유지하기 위해
+    API 응답에는 글쓴이 식별 정보(user_id/email)를 담지 않는다."""
+
+    __tablename__ = "community_posts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    content: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class CommunityPostReaction(Base):
+    """자유 광장 게시글의 '✨ 공감' 토글. (user_id, post_id) 유니크로 중복 공감을 막는다."""
+
+    __tablename__ = "community_post_reactions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "post_id", name="uq_community_post_reaction"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    post_id: Mapped[int] = mapped_column(
+        ForeignKey("community_posts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

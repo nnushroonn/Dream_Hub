@@ -1,33 +1,225 @@
-"""커뮤니티: 공개된 꿈 피드 / 공감 버튼 / 키워드 필터링 (더미 데이터)."""
+"""꿈 커뮤니티: 무의식 광장.
 
-from fastapi import APIRouter
+[🔮 무의식 피드] 탭은 실제로 공개(PUBLIC) 저장된 DreamEntry를 그대로 보여준다 - 더미 게시글이
+아니라 꿈 기록소에서 실제로 공개 체크를 한 유저의 진짜 꿈이다. 공감(❤️)은 Interaction(type=LIKE)을
+그대로 재사용해 토글한다.
 
-router = APIRouter(prefix="/community", tags=["community"])
+[💬 자유 광장] 탭은 꿈과 무관한 자유 게시글로, 이 라우터가 새로 관리하는 CommunityPost가
+데이터 원본이다. 두 탭 모두 로그인 없이 조회는 가능하지만(get_current_user_optional), 글 작성과
+공감은 로그인이 필요하다. 어느 응답에도 작성자 식별 정보(user_id/email)를 담지 않아 '익명의
+탐험가' 컨셉을 유지한다.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from database import get_db
+from models import CommunityPost, CommunityPostReaction, DreamEntry, DreamStatus, Interaction, InteractionType, User
+from routers.auth import get_current_user, get_current_user_optional
+
+router = APIRouter(prefix="/api/community", tags=["community"])
+
+DREAM_FEED_LIMIT = 30
+POST_FEED_LIMIT = 50
 
 
-@router.get("/feed")
-def get_feed():
+# --- 🔮 무의식 피드: 공개된 실제 꿈 기록 -------------------------------------
+
+
+class DreamFeedEntry(BaseModel):
+    id: int
+    title: str
+    emotion: str
+    summary: str
+    tags: list[str]
+    dream_date: str
+    empathy_count: int
+    is_liked_by_me: bool
+
+
+class EmpathyResponse(BaseModel):
+    is_liked_by_me: bool
+    empathy_count: int
+
+
+def _dream_empathy_count(db: Session, dream_id: int) -> int:
+    return (
+        db.query(Interaction)
+        .filter(Interaction.dream_entry_id == dream_id, Interaction.type == InteractionType.LIKE)
+        .count()
+    )
+
+
+@router.get("/dream-feed", response_model=list[DreamFeedEntry])
+def get_dream_feed(
+    current_user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    entries = (
+        db.query(DreamEntry)
+        .filter(DreamEntry.status == DreamStatus.PUBLIC)
+        .order_by(DreamEntry.created_at.desc())
+        .limit(DREAM_FEED_LIMIT)
+        .all()
+    )
+
+    liked_ids: set[int] = set()
+    if current_user and entries:
+        liked_rows = (
+            db.query(Interaction.dream_entry_id)
+            .filter(
+                Interaction.user_id == current_user.id,
+                Interaction.type == InteractionType.LIKE,
+                Interaction.dream_entry_id.in_([entry.id for entry in entries]),
+            )
+            .all()
+        )
+        liked_ids = {row[0] for row in liked_rows}
+
+    return [
+        {
+            "id": entry.id,
+            "title": entry.title,
+            "emotion": entry.emotion,
+            "summary": entry.summary,
+            "tags": entry.interpretation.get("tags", []) if isinstance(entry.interpretation, dict) else [],
+            "dream_date": entry.dream_date.isoformat(),
+            "empathy_count": _dream_empathy_count(db, entry.id),
+            "is_liked_by_me": entry.id in liked_ids,
+        }
+        for entry in entries
+    ]
+
+
+@router.post("/dream-feed/{dream_id}/empathy", response_model=EmpathyResponse)
+def toggle_dream_empathy(
+    dream_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    entry = (
+        db.query(DreamEntry).filter(DreamEntry.id == dream_id, DreamEntry.status == DreamStatus.PUBLIC).first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공개된 꿈 기록을 찾을 수 없습니다.")
+
+    existing = (
+        db.query(Interaction)
+        .filter(
+            Interaction.user_id == current_user.id,
+            Interaction.dream_entry_id == dream_id,
+            Interaction.type == InteractionType.LIKE,
+        )
+        .first()
+    )
+    if existing is not None:
+        db.delete(existing)
+        db.commit()
+        is_liked = False
+    else:
+        db.add(Interaction(user_id=current_user.id, dream_entry_id=dream_id, type=InteractionType.LIKE))
+        db.commit()
+        is_liked = True
+
+    return {"is_liked_by_me": is_liked, "empathy_count": _dream_empathy_count(db, dream_id)}
+
+
+# --- 💬 자유 광장: 꿈과 무관한 자유 게시글 -----------------------------------
+
+
+class CommunityPostInput(BaseModel):
+    content: str = Field(min_length=1, max_length=1000)
+
+
+class CommunityPostResponse(BaseModel):
+    id: int
+    content: str
+    empathy_count: int
+    is_liked_by_me: bool
+    created_at: str
+
+
+def _post_empathy_count(db: Session, post_id: int) -> int:
+    return db.query(CommunityPostReaction).filter(CommunityPostReaction.post_id == post_id).count()
+
+
+@router.get("/posts", response_model=list[CommunityPostResponse])
+def list_community_posts(
+    current_user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    posts = db.query(CommunityPost).order_by(CommunityPost.created_at.desc()).limit(POST_FEED_LIMIT).all()
+
+    liked_ids: set[int] = set()
+    if current_user and posts:
+        liked_rows = (
+            db.query(CommunityPostReaction.post_id)
+            .filter(
+                CommunityPostReaction.user_id == current_user.id,
+                CommunityPostReaction.post_id.in_([post.id for post in posts]),
+            )
+            .all()
+        )
+        liked_ids = {row[0] for row in liked_rows}
+
+    return [
+        {
+            "id": post.id,
+            "content": post.content,
+            "empathy_count": _post_empathy_count(db, post.id),
+            "is_liked_by_me": post.id in liked_ids,
+            "created_at": post.created_at.isoformat(),
+        }
+        for post in posts
+    ]
+
+
+@router.post("/posts", response_model=CommunityPostResponse, status_code=status.HTTP_201_CREATED)
+def create_community_post(
+    payload: CommunityPostInput,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="내용을 입력해 주세요.")
+
+    post = CommunityPost(user_id=current_user.id, content=content)
+    db.add(post)
+    db.commit()
+    db.refresh(post)
     return {
-        "entries": [
-            {
-                "id": 1,
-                "author_email": "dreamer1@example.com",
-                "content": "친구와 함께 우주선을 타고 여행하는 꿈을 꿨어요.",
-                "emotion": "😊",
-                "keywords": ["우주", "여행", "친구"],
-                "empathy_count": 12,
-                "is_liked_by_me": False,
-            }
-        ]
+        "id": post.id,
+        "content": post.content,
+        "empathy_count": 0,
+        "is_liked_by_me": False,
+        "created_at": post.created_at.isoformat(),
     }
 
 
-@router.post("/entries/{entry_id}/empathy")
-def toggle_empathy(entry_id: int):
-    # TODO: 실제 구현 시 Interaction(type=LIKE) 생성/삭제 토글 로직으로 대체
-    return {"entry_id": entry_id, "is_liked_by_me": True, "empathy_count": 13}
+@router.post("/posts/{post_id}/empathy", response_model=EmpathyResponse)
+def toggle_post_empathy(
+    post_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
 
+    existing = (
+        db.query(CommunityPostReaction)
+        .filter(CommunityPostReaction.user_id == current_user.id, CommunityPostReaction.post_id == post_id)
+        .first()
+    )
+    if existing is not None:
+        db.delete(existing)
+        db.commit()
+        is_liked = False
+    else:
+        db.add(CommunityPostReaction(user_id=current_user.id, post_id=post_id))
+        db.commit()
+        is_liked = True
 
-@router.get("/keywords")
-def get_filter_keywords():
-    return {"keywords": ["물", "비행", "추락", "뱀", "이빨 빠짐", "가족"]}
+    return {"is_liked_by_me": is_liked, "empathy_count": _post_empathy_count(db, post_id)}

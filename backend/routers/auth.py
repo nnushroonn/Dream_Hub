@@ -89,6 +89,29 @@ def get_current_user(
     return user
 
 
+optional_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """토큰이 없거나 유효하지 않으면 401 대신 None을 반환한다.
+
+    누구나 볼 수 있지만 로그인했다면 '내가 이미 공감했는지' 같은 개인화 정보를 함께
+    내려주고 싶은 공개 피드/게시글 목록 엔드포인트에 쓴다.
+    """
+    if credentials is None:
+        return None
+    try:
+        decoded = jwt.decode(credentials.credentials, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    except jwt.PyJWTError:
+        return None
+    if decoded.get("type") != "access":
+        return None
+    return db.query(User).filter(User.id == int(decoded["sub"])).first()
+
+
 async def send_verification_email(email: str, token: str) -> None:
     verify_url = f"{settings.frontend_origin}/verify?token={token}"
     message = MessageSchema(

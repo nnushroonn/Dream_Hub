@@ -186,24 +186,55 @@ export async function deleteDream(id: number): Promise<void> {
   await api.delete(`/api/dreams/${id}`);
 }
 
-export interface CommunityEntry {
+// 🔮 무의식 피드: 꿈 기록소에서 실제로 "공개"로 저장한 진짜 DreamEntry 목록 (더미 아님).
+export interface DreamFeedEntry {
   id: number;
-  author_email: string;
-  content: string;
+  title: string;
   emotion: string;
-  keywords: string[];
+  summary: string;
+  tags: string[];
+  dream_date: string;
   empathy_count: number;
   is_liked_by_me: boolean;
 }
 
-export async function getCommunityFeed(): Promise<CommunityEntry[]> {
-  const { data } = await api.get<{ entries: CommunityEntry[] }>("/community/feed");
-  return data.entries;
+export interface EmpathyResult {
+  is_liked_by_me: boolean;
+  empathy_count: number;
 }
 
-export async function getCommunityKeywords(): Promise<string[]> {
-  const { data } = await api.get<{ keywords: string[] }>("/community/keywords");
-  return data.keywords;
+export async function getDreamFeed(): Promise<DreamFeedEntry[]> {
+  const { data } = await api.get<DreamFeedEntry[]>("/api/community/dream-feed");
+  return data;
+}
+
+export async function toggleDreamEmpathy(dreamId: number): Promise<EmpathyResult> {
+  const { data } = await api.post<EmpathyResult>(`/api/community/dream-feed/${dreamId}/empathy`);
+  return data;
+}
+
+// 💬 자유 광장: 꿈과 무관한 자유 게시글.
+export interface CommunityPost {
+  id: number;
+  content: string;
+  empathy_count: number;
+  is_liked_by_me: boolean;
+  created_at: string;
+}
+
+export async function getCommunityPosts(): Promise<CommunityPost[]> {
+  const { data } = await api.get<CommunityPost[]>("/api/community/posts");
+  return data;
+}
+
+export async function createCommunityPost(content: string): Promise<CommunityPost> {
+  const { data } = await api.post<CommunityPost>("/api/community/posts", { content });
+  return data;
+}
+
+export async function togglePostEmpathy(postId: number): Promise<EmpathyResult> {
+  const { data } = await api.post<EmpathyResult>(`/api/community/posts/${postId}/empathy`);
+  return data;
 }
 
 export interface CalendarDay {
