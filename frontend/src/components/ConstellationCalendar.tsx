@@ -147,7 +147,12 @@ export function ConstellationDots({ daysInMonth, startWeekday, entries, onSelect
                       : "cursor-default text-xs font-light text-slate-400/50 hover:bg-white/5 hover:backdrop-blur-sm"
                   } ${isToday ? "ring-2 ring-violet-300/80 ring-offset-2 ring-offset-slate-950" : ""}`}
                 >
-                  <span className={entry ? "text-sm" : undefined}>{day}</span>
+                  <span className="flex flex-col items-center justify-center leading-none">
+                    <span className={entry ? "text-sm" : undefined}>{day}</span>
+                    {isToday && !entry && (
+                      <span className="mt-0.5 h-1 w-1 animate-pulse rounded-full bg-white/30 mx-auto" />
+                    )}
+                  </span>
                 </button>
 
                 {/* 서브 도트: 하루에 기록이 2개 이상이면 별의 무리처럼 작은 점을 최대 3개까지 덧붙인다 */}

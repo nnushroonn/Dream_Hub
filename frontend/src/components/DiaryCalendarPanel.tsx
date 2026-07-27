@@ -108,7 +108,7 @@ export default function DiaryCalendarPanel({ onSelectDay, onRequestWrite }: Diar
             <button
               type="button"
               onClick={onRequestWrite}
-              className="underline decoration-dotted underline-offset-2 transition-colors hover:text-amber-100"
+              className="whitespace-nowrap text-[11px] underline decoration-dotted underline-offset-2 transition-colors hover:text-amber-100 lg:text-xs"
             >
               · 꺼져가는 무의식의 불꽃을 살려볼까요?
             </button>
