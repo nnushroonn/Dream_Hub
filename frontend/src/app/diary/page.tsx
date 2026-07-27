@@ -142,6 +142,8 @@ export default function DiaryPage() {
   const [publishSettingsOpen, setPublishSettingsOpen] = useState(false);
   const [publishIsAnonymous, setPublishIsAnonymous] = useState(true);
   const [publishWithAiReport, setPublishWithAiReport] = useState(false);
+  // 꿈 내용과는 별개로, 공유하면서 덧붙이는 한마디(질문/자랑거리 등) - 무의식 피드 카드 상단에 노출된다.
+  const [publishCaption, setPublishCaption] = useState("");
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const activeDetail = detailEntries?.[activeDetailIndex] ?? null;
@@ -562,7 +564,7 @@ export default function DiaryPage() {
   const handleTogglePublish = async (
     entry: DreamEntryRecord,
     nextIsPublic: boolean,
-    options?: { isAnonymous: boolean; shareWithAiAnalysis: boolean }
+    options?: { isAnonymous: boolean; shareWithAiAnalysis: boolean; caption: string }
   ) => {
     setIsPublishing(true);
     setPublishError(null);
@@ -571,6 +573,7 @@ export default function DiaryPage() {
         isPublic: nextIsPublic,
         isAnonymous: options?.isAnonymous ?? entry.is_anonymous,
         shareWithAiAnalysis: options?.shareWithAiAnalysis ?? entry.share_with_ai_analysis,
+        shareCaption: options?.caption,
       });
       upsertEntry(saved);
       setDetailEntries((prev) => prev?.map((item) => (item.id === saved.id ? saved : item)) ?? prev);
@@ -1086,6 +1089,7 @@ export default function DiaryPage() {
                     onClick={() => {
                       setPublishIsAnonymous(activeDetail.is_anonymous);
                       setPublishWithAiReport(activeDetail.share_with_ai_analysis);
+                      setPublishCaption(activeDetail.share_caption ?? "");
                       setPublishSettingsOpen((prev) => !prev);
                     }}
                     className="rounded-full border border-violet-400/40 bg-violet-500/10 px-4 py-1.5 text-xs font-medium text-violet-200 transition-colors hover:border-violet-400/60"
@@ -1104,6 +1108,18 @@ export default function DiaryPage() {
                         <div className="mt-2">
                           <IdentitySwitch isAnonymous={publishIsAnonymous} onChange={setPublishIsAnonymous} nickname={nickname} />
                         </div>
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-indigo-300/70">이 꿈과 함께 남길 말 (질문이나 자랑거리 등, 선택)</label>
+                        <textarea
+                          value={publishCaption}
+                          onChange={(event) => setPublishCaption(event.target.value)}
+                          placeholder="예: 이런 꿈 꿔본 사람 있나요? / 오랜만에 좋은 꿈 꿨어요 ✨"
+                          rows={2}
+                          maxLength={300}
+                          className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+                        />
                       </div>
 
                       <label className="flex cursor-pointer items-center justify-between gap-3">
@@ -1147,6 +1163,7 @@ export default function DiaryPage() {
                         handleTogglePublish(activeDetail, true, {
                           isAnonymous: publishIsAnonymous,
                           shareWithAiAnalysis: publishWithAiReport,
+                          caption: publishCaption.trim(),
                         })
                       }
                       disabled={isPublishing}

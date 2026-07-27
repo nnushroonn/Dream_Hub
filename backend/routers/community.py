@@ -71,6 +71,8 @@ class DreamFeedEntry(BaseModel):
     is_anonymous: bool
     author_display_name: str | None = None
     share_with_ai_analysis: bool
+    # 꿈 내용과는 별개로 공유하면서 덧붙인 한마디(질문/자랑거리 등) - 있으면 카드 상단에 노출한다.
+    share_caption: str | None = None
     ai_report: DreamFeedAiReport | None = None
     comment_count: int
 
@@ -124,6 +126,7 @@ def _build_dream_feed_entries(db: Session, entries: list[DreamEntry], liked_ids:
                 "is_anonymous": entry.is_anonymous,
                 "author_display_name": _display_name(entry.user, entry.is_anonymous),
                 "share_with_ai_analysis": entry.share_with_ai_analysis,
+                "share_caption": entry.share_caption,
                 "comment_count": _dream_comment_count(db, entry.id),
                 "ai_report": (
                     {

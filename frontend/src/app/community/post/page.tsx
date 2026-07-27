@@ -77,6 +77,11 @@ export default function CommunityPostPage() {
         ) : (
           <div className="relative mt-6 rounded-3xl border border-violet-400/30 bg-white/10 p-8 shadow-[0_0_60px_rgba(139,92,246,0.2)] backdrop-blur-2xl">
             <p className="text-xs tracking-widest text-indigo-300/70 uppercase">Anonymous Dreamer</p>
+            {entry.share_caption && (
+              <p className="mt-3 rounded-lg border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-sm leading-relaxed text-violet-100">
+                💭 {entry.share_caption}
+              </p>
+            )}
             <h1 className="mt-1 text-2xl font-semibold text-white">
               {entry.emotion} {entry.title}
             </h1>

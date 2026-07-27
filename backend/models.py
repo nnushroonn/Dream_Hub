@@ -150,6 +150,9 @@ class DreamEntry(Base):
     # 공개(PUBLIC) 상태일 때만 의미 있음: 체크하면 무의식 피드 카드에 AI 해몽 리포트 아코디언이
     # 함께 노출된다. 기본값은 보수적으로 비공개(false) - 명시적으로 동의한 경우에만 공유.
     share_with_ai_analysis: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    # 공개(PUBLIC) 상태일 때만 의미 있음: 꿈 내용 자체와는 별개로, 공유하면서 덧붙이는 한마디
+    # (질문/자랑거리 등). 무의식 피드 카드 상단에 말풍선처럼 노출된다.
+    share_caption: Mapped[str | None] = mapped_column(String(300), nullable=True)
     is_lucid: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

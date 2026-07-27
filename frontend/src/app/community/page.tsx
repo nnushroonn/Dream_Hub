@@ -219,6 +219,8 @@ export default function CommunityPage() {
   const [shareDreamId, setShareDreamId] = useState<number | null>(null);
   const [shareDreamIsAnonymous, setShareDreamIsAnonymous] = useState(true);
   const [shareDreamWithAiReport, setShareDreamWithAiReport] = useState(false);
+  // 꿈 내용과는 별개로, 공유하면서 덧붙이는 한마디(질문/자랑거리 등) - 무의식 피드 카드 상단에 노출된다.
+  const [shareDreamCaption, setShareDreamCaption] = useState("");
   const [isSharingDream, setIsSharingDream] = useState(false);
   const [shareDreamError, setShareDreamError] = useState<string | null>(null);
 
@@ -374,6 +376,7 @@ export default function CommunityPage() {
     setShareDreamId(myPrivateDreams[0]?.id ?? null);
     setShareDreamIsAnonymous(true);
     setShareDreamWithAiReport(false);
+    setShareDreamCaption("");
     setShareDreamError(null);
     setNewDreamTitle("");
     setNewDreamMood(MOOD_OPTIONS[3].emoji);
@@ -393,6 +396,7 @@ export default function CommunityPage() {
         isPublic: true,
         isAnonymous: shareDreamIsAnonymous,
         shareWithAiAnalysis: shareDreamWithAiReport,
+        shareCaption: shareDreamCaption.trim(),
       });
       upsertSavedDreamEntry(saved);
       // 방금 공개한 기록이 무의식 피드에 바로 보이도록 다시 불러온다.
@@ -458,6 +462,7 @@ export default function CommunityPage() {
         is_public: true,
         is_anonymous: shareDreamIsAnonymous,
         share_with_ai_analysis: shareDreamWithAiReport,
+        share_caption: shareDreamCaption.trim(),
         survey,
         interpretation: newDreamInterpretation,
       });
@@ -577,6 +582,11 @@ export default function CommunityPage() {
                           <AuthorLine isAnonymous={dream.is_anonymous} displayName={dream.author_display_name} />
                           <span className="shrink-0 text-[11px] text-slate-500">{dream.dream_date}</span>
                         </div>
+                        {dream.share_caption && (
+                          <p className="mb-3 rounded-lg border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-sm leading-relaxed text-violet-100">
+                            💭 {dream.share_caption}
+                          </p>
+                        )}
                         <h3 className="truncate text-sm font-semibold text-white">
                           {dream.emotion} {dream.title}
                         </h3>
@@ -783,25 +793,28 @@ export default function CommunityPage() {
             )}
           </div>
 
-          {/* 사이드바: 탭과 무관하게 항상 노출 - 내 꿈 공유하기 + 자유 글쓰기 액션을 둘 다 두고,
-              실시간 트렌드 위젯도 함께 붙인다. flex flex-col gap-4로 묶어 박스들의 가로 너비를
-              완벽히 일치시키고 수직 간격을 통일한다. */}
+          {/* 사이드바: 탭과 무관하게 항상 노출 - 메인 액션(탭에 따라 내 꿈 공유하기/글쓰기로 전환) +
+              실시간 트렌드 위젯. flex flex-col gap-4로 묶어 두 박스의 가로 너비를 완벽히 일치시키고
+              수직 간격을 통일한다. */}
           <aside className="lg:col-span-4">
             <div className="flex flex-col gap-4 lg:sticky lg:top-6">
-              <button
-                type="button"
-                onClick={openShareDream}
-                className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 font-medium text-white shadow-lg transition-all hover:from-purple-700 hover:to-indigo-700"
-              >
-                🌙 내 꿈 공유하기
-              </button>
-              <button
-                type="button"
-                onClick={openCompose}
-                className="w-full rounded-xl border border-white/10 bg-white/5 py-3 font-medium text-slate-200 transition-all hover:border-violet-400/40 hover:bg-white/10"
-              >
-                🖊️ 자유 글쓰기
-              </button>
+              {tab === "dream" ? (
+                <button
+                  type="button"
+                  onClick={openShareDream}
+                  className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 font-medium text-white shadow-lg transition-all hover:from-purple-700 hover:to-indigo-700"
+                >
+                  🌙 내 꿈 공유하기
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={openCompose}
+                  className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 font-medium text-white shadow-lg transition-all hover:from-purple-700 hover:to-indigo-700"
+                >
+                  🖊️ 글쓰기
+                </button>
+              )}
 
               <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
                 <p className="mb-4 text-lg font-bold text-white">🔥 지금 뜨는 꿈 상징</p>
@@ -961,6 +974,18 @@ export default function CommunityPage() {
                     </div>
                   </div>
 
+                  <div className="mt-4">
+                    <label className="text-xs text-indigo-300/70">이 꿈과 함께 남길 말 (질문이나 자랑거리 등, 선택)</label>
+                    <textarea
+                      value={shareDreamCaption}
+                      onChange={(event) => setShareDreamCaption(event.target.value)}
+                      placeholder="예: 이런 꿈 꿔본 사람 있나요? / 오랜만에 좋은 꿈 꿨어요 ✨"
+                      rows={2}
+                      maxLength={300}
+                      className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+                    />
+                  </div>
+
                   <label className="mt-4 flex cursor-pointer items-center justify-between gap-3">
                     <span className="text-xs leading-relaxed text-slate-300">체크 시 AI 해몽 결과도 피드에 함께 공개합니다</span>
                     <button
@@ -1073,6 +1098,18 @@ export default function CommunityPage() {
                   <div className="mt-2">
                     <IdentitySwitch isAnonymous={shareDreamIsAnonymous} onChange={setShareDreamIsAnonymous} nickname={nickname} />
                   </div>
+                </div>
+
+                <div className="mt-4">
+                  <label className="text-xs text-indigo-300/70">이 꿈과 함께 남길 말 (질문이나 자랑거리 등, 선택)</label>
+                  <textarea
+                    value={shareDreamCaption}
+                    onChange={(event) => setShareDreamCaption(event.target.value)}
+                    placeholder="예: 이런 꿈 꿔본 사람 있나요? / 오랜만에 좋은 꿈 꿨어요 ✨"
+                    rows={2}
+                    maxLength={300}
+                    className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+                  />
                 </div>
 
                 <label className="mt-4 flex cursor-pointer items-center justify-between gap-3">

@@ -173,6 +173,8 @@ export interface DreamEntryRecord {
   is_public: boolean;
   is_anonymous: boolean;
   share_with_ai_analysis: boolean;
+  // 꿈 내용과는 별개로, 공유할 때 덧붙인 한마디(질문/자랑거리 등). is_public=false면 의미 없음.
+  share_caption: string | null;
   is_lucid: boolean;
   survey: DreamSurvey;
   interpretation: AiInterpretation;
@@ -188,6 +190,7 @@ export interface DreamEntryPayload {
   is_public: boolean;
   is_anonymous: boolean;
   share_with_ai_analysis: boolean;
+  share_caption?: string | null;
   survey: DreamSurvey;
   interpretation: AiInterpretation;
 }
@@ -223,7 +226,7 @@ export async function deleteDream(id: number): Promise<void> {
 // 커뮤니티 페이지의 "내 꿈 공유하기" 둘 다 이 함수 하나를 공유한다.
 export async function setDreamVisibility(
   entry: DreamEntryRecord,
-  options: { isPublic: boolean; isAnonymous: boolean; shareWithAiAnalysis: boolean }
+  options: { isPublic: boolean; isAnonymous: boolean; shareWithAiAnalysis: boolean; shareCaption?: string }
 ): Promise<DreamEntryRecord> {
   return updateDream(entry.id, {
     dream_date: entry.dream_date,
@@ -233,6 +236,7 @@ export async function setDreamVisibility(
     is_public: options.isPublic,
     is_anonymous: options.isAnonymous,
     share_with_ai_analysis: options.shareWithAiAnalysis,
+    share_caption: options.shareCaption ?? entry.share_caption,
     survey: entry.survey,
     interpretation: entry.interpretation,
   });
@@ -258,6 +262,7 @@ export interface DreamFeedEntry {
   is_anonymous: boolean;
   author_display_name: string | null;
   share_with_ai_analysis: boolean;
+  share_caption: string | null;
   comment_count: number;
   ai_report: DreamFeedAiReport | null;
 }
