@@ -15,9 +15,9 @@ const STEP_THEMES = [
   "bg-gradient-to-b from-purple-900 to-pink-900/50",
 ];
 
-const STEP_LABELS = ["🛋️ 마음 읽기", "🔍 무의식의 무대", "⚠️ 현실 점검", "💡 행동 지침"];
+const STEP_LABELS = ["🛋️ 마음 읽기", "🔍 무의식의 무대", "⚠️ 현실 점검", "💡 당신을 위한 라이프 코칭"];
 
-// 스태거드 연출/체크리스트용으로 문장 단위로 쪼갠다. 마지막 문장에 종결부호가 없어도 그대로 살린다.
+// 스태거드 연출용으로 문장 단위로 쪼갠다. 마지막 문장에 종결부호가 없어도 그대로 살린다.
 function splitSentences(text: string): string[] {
   return text
     .split(/(?<=[.!?。])\s+/)
@@ -84,21 +84,21 @@ function StepContent({ step, report, tags }: StepContentProps) {
     );
   }
 
+  // 개조식 체크리스트가 아니라, 단호한 카리스마 멘토가 쓴 한 편의 편지처럼 이어지는 산문으로 보여준다.
   return (
-    <ul className="space-y-3">
-      {splitSentences(report.action_plan).map((item, i) => (
-        <motion.li
+    <div className="space-y-2.5 border-l-2 border-pink-300/40 pl-4 text-left">
+      {splitSentences(report.action_plan).map((sentence, i) => (
+        <motion.p
           key={i}
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.3, duration: 0.4, ease: "easeOut" }}
-          className="flex items-start gap-2 text-base leading-relaxed text-white"
+          transition={{ delay: i * 0.15, duration: 0.5, ease: "easeOut" }}
+          className="text-base font-medium leading-relaxed text-white"
         >
-          <span className="shrink-0">☑️</span>
-          <span>{item}</span>
-        </motion.li>
+          {sentence}
+        </motion.p>
       ))}
-    </ul>
+    </div>
   );
 }
 
