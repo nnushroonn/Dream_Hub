@@ -50,8 +50,8 @@ function findCategoryLabel(word: string): string {
   return found ? found.label : "자유 검색";
 }
 
-/** "내 꿈일기에 이 상징 기록하기" 브릿지용: 사전 카테고리(+키워드)를 꿈 기록소 6단계
- * 위저드 Step 3(대상) 칩 라벨로 매핑한다. DreamWizard의 PROJECTION_OPTIONS와 정확히
+/** "내 꿈일기에 이 상징 기록하기" 브릿지용: 사전 카테고리(+키워드)를 꿈 기록소 7단계
+ * 위저드 Step 4(대상) 칩 라벨로 매핑한다. DreamWizard의 PROJECTION_OPTIONS와 정확히
  * 일치해야 하며, 뚜렷이 매칭되는 보기가 없으면 "기타" + 키워드 자체를 커스텀값으로 쓴다. */
 function mapCategoryToTargetChip(categoryLabel: string, keyword: string): { chip: string; other?: string } {
   if (categoryLabel === "사람/인물") {

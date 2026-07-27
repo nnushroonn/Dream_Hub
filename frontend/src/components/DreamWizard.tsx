@@ -3,15 +3,17 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 
 import type { DreamSurvey } from "@/api/dream";
+import { MOOD_OPTIONS } from "@/lib/moodBucket";
 
 interface ChipOption {
   emoji: string;
   label: string;
 }
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 
 const STEP_META = [
+  { key: "mood", label: "분위기" },
   { key: "light", label: "조도 및 제목" },
   { key: "space", label: "공간" },
   { key: "target", label: "대상" },
@@ -92,18 +94,22 @@ type SlidePhase = "idle" | "leaving" | "entering";
 interface DreamWizardProps {
   onComplete: (survey: DreamSurvey) => void;
   isSubmitting: boolean;
+  /** Step 1(분위기)의 감정 이모지 - survey에 포함되지 않는 별도 필드라 부모(꿈 기록소 페이지)가
+   * 소유한 상태를 그대로 내려받아 컨트롤드 컴포넌트로 쓴다 (날짜/공개범위와 같은 위치의 메타 정보). */
+  mood: string;
+  onMoodChange: (emoji: string) => void;
   /** 수정 모드에서 기존에 저장된 응답을 그대로 채워 넣기 위한 원본 데이터 */
   initialData?: DreamSurvey;
-  /** 꿈해몽 사전에서 "이 상징을 바탕으로 기록하기"로 넘어온 경우, Step 1 제목만 미리 채운다 (initialData가 있으면 무시됨) */
+  /** 꿈해몽 사전에서 "이 상징을 바탕으로 기록하기"로 넘어온 경우, Step 2 제목만 미리 채운다 (initialData가 있으면 무시됨) */
   initialTitle?: string;
-  /** ⚡ 10초 미니멀 빠른 기록에서 "정밀 분석으로 전환"한 경우, 적어둔 서술을 Step 4(행동 묘사)에 미리 채운다 (initialData가 있으면 무시됨) */
+  /** ⚡ 10초 미니멀 빠른 기록에서 "정밀 분석으로 전환"한 경우, 적어둔 서술을 Step 5(행동 묘사)에 미리 채운다 (initialData가 있으면 무시됨) */
   initialActionDetail?: string;
   /** 꿈해몽 사전의 "내 꿈일기에 이 상징 기록하기"에서 넘어온 경우, 상징의 카테고리로 유추한
-   * Step 3(대상) 칩을 미리 선택한다. PROJECTION_OPTIONS 라벨과 일치해야 하며, "기타"일 때만
+   * Step 4(대상) 칩을 미리 선택한다. PROJECTION_OPTIONS 라벨과 일치해야 하며, "기타"일 때만
    * initialTargetOther가 커스텀 입력값으로 함께 쓰인다 (initialData가 있으면 무시됨) */
   initialTargetChip?: string;
   initialTargetOther?: string;
-  /** 같은 브릿지에서, 시나리오 제목/무드로 유추한 Step 4(역동성) 칩을 미리 선택한다.
+  /** 같은 브릿지에서, 시나리오 제목/무드로 유추한 Step 5(역동성) 칩을 미리 선택한다.
    * DYNAMICS_OPTIONS 라벨과 일치해야 한다 (initialData가 있으면 무시됨) */
   initialDynamicsChip?: string;
   initialDynamicsOther?: string;
@@ -123,7 +129,7 @@ function resolveChipState(options: ChipOption[], value: string): { chip: string;
   return matched ? { chip: matched.label, other: "" } : { chip: OTHER_LABEL, other: value };
 }
 
-/** Step 1 전용: 최대 2개까지 고를 수 있어, brightness 문자열을 " · "로 합쳐 저장하고
+/** Step 2 전용: 최대 2개까지 고를 수 있어, brightness 문자열을 " · "로 합쳐 저장하고
  * 불러올 때는 다시 분리해 최대 2개의 칩(또는 "기타"+커스텀값)으로 복원한다. */
 function resolveLightChips(value: string): { chips: string[]; other: string } {
   if (!value) return { chips: [], other: "" };
@@ -142,7 +148,7 @@ function resolveLightChips(value: string): { chips: string[]; other: string } {
   return { chips, other };
 }
 
-/** Step 1의 최대 2개 선택을 하나의 brightness 문자열로 합친다 - "기타"는 커스텀 입력값으로 치환. */
+/** Step 2의 최대 2개 선택을 하나의 brightness 문자열로 합친다 - "기타"는 커스텀 입력값으로 치환. */
 function buildBrightnessValue(lightChips: string[], lightOther: string): string {
   return lightChips
     .map((chip) => (chip === OTHER_LABEL ? lightOther.trim() : chip))
@@ -158,7 +164,7 @@ function chipClass(selected: boolean): string {
   }`;
 }
 
-// Step 1 카드의 아이콘 성격별 은은한 포인트 컬러 - 텍스트를 다시 읽지 않아도 첫인상을 색으로 구분할 수 있게 한다.
+// Step 2 카드의 아이콘 성격별 은은한 포인트 컬러 - 텍스트를 다시 읽지 않아도 첫인상을 색으로 구분할 수 있게 한다.
 type LightTheme = "amber" | "slate" | "neon" | "neutral";
 
 const LIGHT_THEME: Record<string, LightTheme> = {
@@ -170,7 +176,7 @@ const LIGHT_THEME: Record<string, LightTheme> = {
   "주변 배경이랑 빛이 시시각각 변했어요": "neon",
 };
 
-/** Step 1 전용 칩 스타일: 선택되면 테마와 무관하게 동일한 강조색(퍼플)으로, 선택 전에는
+/** Step 2 전용 칩 스타일: 선택되면 테마와 무관하게 동일한 강조색(퍼플)으로, 선택 전에는
  * 카드 성격별 은은한 글로우로, 최대 선택(2개) 도달 후 남은 미선택 카드는 흐릿하게 비활성화한다. */
 function lightChipClass(label: string, selected: boolean, limitReached: boolean): string {
   const base = "relative w-full rounded-xl border px-3 py-2.5 text-left text-sm backdrop-blur-md transition-all duration-200";
@@ -253,6 +259,8 @@ function SubjectiveGuideField({ visible, guide, value, onChange, placeholder, as
 export default function DreamWizard({
   onComplete,
   isSubmitting,
+  mood,
+  onMoodChange,
   initialData,
   initialTitle,
   initialActionDetail,
@@ -272,7 +280,7 @@ export default function DreamWizard({
   const [lightOther, setLightOther] = useState(lightInit.other);
   const [title, setTitle] = useState(initialData?.title ?? initialTitle ?? "");
 
-  // Step 1은 최대 2개까지 고를 수 있다 - 이미 2개 선택된 상태에서 새 카드를 누르면 조용히 무시한다.
+  // Step 2는 최대 2개까지 고를 수 있다 - 이미 2개 선택된 상태에서 새 카드를 누르면 조용히 무시한다.
   const toggleLight = (label: string) => {
     setLight((prev) => {
       if (prev.includes(label)) return prev.filter((item) => item !== label);
@@ -374,6 +382,8 @@ export default function DreamWizard({
     reader.readAsDataURL(file);
   };
 
+  // 분위기(Step 1)는 항상 기본값이 있어 바로 다음으로 넘어갈 수 있다.
+  const stepMoodReady = true;
   const step1Ready = light.length > 0 && (!light.includes(OTHER_LABEL) || lightOther.trim() !== "") && title.trim() !== "";
   const step2Ready = space !== null && (space !== OTHER_LABEL || spaceOther.trim() !== "") && spaceDetail.trim() !== "";
   const step3Ready =
@@ -384,7 +394,19 @@ export default function DreamWizard({
     reality !== null && (reality !== OTHER_LABEL || realityOther.trim() !== "") && realityDetail.trim() !== "";
 
   const canProceed =
-    step === 1 ? step1Ready : step === 2 ? step2Ready : step === 3 ? step3Ready : step === 4 ? step4Ready : step === 5 ? step5Ready : true;
+    step === 1
+      ? stepMoodReady
+      : step === 2
+        ? step1Ready
+        : step === 3
+          ? step2Ready
+          : step === 4
+            ? step3Ready
+            : step === 5
+              ? step4Ready
+              : step === 6
+                ? step5Ready
+                : true;
 
   const isSurveyComplete = step1Ready && step2Ready && step3Ready && step4Ready && step5Ready;
 
@@ -464,6 +486,25 @@ export default function DreamWizard({
         <div className={`transition-all duration-300 ease-out ${slideClass}`}>
           {step === 1 && (
             <div>
+              <h3 className="text-base font-medium text-white">이 꿈, 전체적으로 어떤 느낌이 가장 컸나요?</h3>
+              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+                {MOOD_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.emoji}
+                    type="button"
+                    onClick={() => onMoodChange(opt.emoji)}
+                    className={chipClass(mood === opt.emoji)}
+                  >
+                    <span className="mr-1.5">{opt.emoji}</span>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div>
               <h3 className="text-base font-medium text-white">
                 눈을 떴을 때 꿈속 공간의 첫인상(풍경이나 밝기)은 어땠나요?
               </h3>
@@ -512,7 +553,7 @@ export default function DreamWizard({
             </div>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <div>
               <h3 className="text-base font-medium text-white">
                 어떤 공간에서 일어난 일인가요?
@@ -550,7 +591,7 @@ export default function DreamWizard({
             </div>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <div>
               <h3 className="text-base font-medium text-white">
                 꿈에 나 말고 누가 또 등장했나요?
@@ -588,7 +629,7 @@ export default function DreamWizard({
             </div>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <div>
               <h3 className="text-base font-medium text-white">
                 그 안에서 주로 어떤 행동을 하셨나요?
@@ -626,7 +667,7 @@ export default function DreamWizard({
             </div>
           )}
 
-          {step === 5 && (
+          {step === 6 && (
             <div>
               <h3 className="text-base font-medium text-white">
                 요즘 일상에서 가장 신경 쓰이는 부분이 있나요?
@@ -664,7 +705,7 @@ export default function DreamWizard({
             </div>
           )}
 
-          {step === 6 && (
+          {step === 7 && (
             <div>
               <h3 className="text-base font-medium text-white">마지막으로, 이 꿈이 전체적으로 얼마나 생생했나요?</h3>
 

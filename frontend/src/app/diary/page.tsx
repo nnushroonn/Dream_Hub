@@ -65,7 +65,7 @@ function formatDraftSavedAt(savedAt: number): string {
   return `${formatted}에 저장된 조각`;
 }
 
-// 6단계 위저드 초안에 실제로 뭔가 채워졌는지 - 전부 빈 값이면 "작성 중"으로 치지 않는다.
+// 7단계 위저드 초안에 실제로 뭔가 채워졌는지 - 전부 빈 값이면 "작성 중"으로 치지 않는다.
 function isWizardDraftDirty(draft: DreamSurvey | null): boolean {
   if (!draft) return false;
   return Boolean(
@@ -140,10 +140,10 @@ export default function DiaryPage() {
   const [quickTitle, setQuickTitle] = useState("");
   const [quickText, setQuickText] = useState("");
 
-  // 6단계 위저드가 onDraftChange로 매번 올려보내는 "지금까지 입력한 값 전체" 스냅샷.
+  // 7단계 위저드가 onDraftChange로 매번 올려보내는 "지금까지 입력한 값 전체" 스냅샷.
   // 이탈 방지 가드의 dirty 판단과 자동 임시 저장 둘 다 이 값을 데이터 소스로 쓴다.
   const [wizardDraft, setWizardDraft] = useState<DreamSurvey | null>(null);
-  // localStorage에서 "불러오기"로 복원한 6단계 응답 - DreamWizard의 initialData로 그대로 흘려보낸다.
+  // localStorage에서 "불러오기"로 복원한 7단계 응답 - DreamWizard의 initialData로 그대로 흘려보낸다.
   const [restoredWizardDraft, setRestoredWizardDraft] = useState<DreamSurvey | undefined>(undefined);
   // 마운트 시 복원 가능한 임시 저장 기록이 있으면 켜지는 복구 모달 표시 여부와, 그 안의 프리뷰 박스에 쓸 요약.
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
@@ -323,8 +323,8 @@ export default function DiaryPage() {
     }
   };
 
-  // ⚡ 10초 미니멀 빠른 기록: 6단계 문답 없이 자유 서술 한 편만 AI 해몽 백엔드로 보낸다.
-  // 저장 시에는 기존 CRUD 흐름을 그대로 재사용하기 위해, 구조화된 6단계 항목 중
+  // ⚡ 10초 미니멀 빠른 기록: 7단계 문답 없이 자유 서술 한 편만 AI 해몽 백엔드로 보낸다.
+  // 저장 시에는 기존 CRUD 흐름을 그대로 재사용하기 위해, 구조화된 7단계 항목 중
   // 실제로 값이 있는 action_detail 자리에만 서술 원문을 담고 나머지는 비워 둔다
   // (선택하지 않은 항목을 지어내지 않고 정직하게 빈 상태로 남긴다).
   const handleQuickSubmit = async () => {
@@ -447,7 +447,7 @@ export default function DiaryPage() {
     setErrorMessage(null);
     setSaveError(null);
     setWizardKey((key) => key + 1);
-    // 이미 저장된 6단계 응답을 다시 다듬는 작업이라 항상 정밀 위저드로 연다.
+    // 이미 저장된 7단계 응답을 다시 다듬는 작업이라 항상 정밀 위저드로 연다.
     setRecordMode("precise");
     setDictionaryBridge(null);
     setCameFromDictionary(false);
@@ -572,7 +572,8 @@ export default function DiaryPage() {
             </div>
 
 
-            {/* 고정형 메타 정보: 날짜 · 감정 · 공개 범위 */}
+            {/* 고정형 메타 정보: 날짜 · 공개 범위. 꿈의 분위기는 정밀 기록 위저드의 Step 1로
+                옮겨졌다 - ⚡ 빠른 기록 모드에는 위저드가 없어 아래 빠른 기록 영역에 따로 둔다. */}
             <div className="space-y-5">
               <div>
                 <label className="text-xs text-indigo-300/70">날짜</label>
@@ -582,27 +583,6 @@ export default function DiaryPage() {
                   onChange={(event) => setSelectedDate(event.target.value)}
                   className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-2.5 text-sm text-slate-100 [color-scheme:dark] focus:border-violet-400/60 focus:outline-none"
                 />
-              </div>
-
-              <div>
-                <label className="text-xs text-indigo-300/70">꿈의 분위기</label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {MOOD_OPTIONS.map((option) => (
-                    <button
-                      key={option.emoji}
-                      type="button"
-                      onClick={() => setMood(option.emoji)}
-                      className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm backdrop-blur-md transition-all duration-200 ${
-                        mood === option.emoji
-                          ? "border-violet-400/70 bg-violet-500/25 text-white shadow-[0_0_16px_rgba(167,139,250,0.35)]"
-                          : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
-                      }`}
-                    >
-                      <span className="text-base">{option.emoji}</span>
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <div>
@@ -692,7 +672,7 @@ export default function DiaryPage() {
                       : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
-                  🔮 6단계 정밀 분석 기록
+                  🔮 7단계 정밀 분석 기록
                 </button>
               </div>
             )}
@@ -710,6 +690,27 @@ export default function DiaryPage() {
                 />
 
                 <div className="mt-5">
+                  <label className="text-xs text-indigo-300/70">꿈의 분위기</label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {MOOD_OPTIONS.map((option) => (
+                      <button
+                        key={option.emoji}
+                        type="button"
+                        onClick={() => setMood(option.emoji)}
+                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs backdrop-blur-md transition-all duration-200 ${
+                          mood === option.emoji
+                            ? "border-violet-400/70 bg-violet-500/25 text-white shadow-[0_0_16px_rgba(167,139,250,0.35)]"
+                            : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
+                        }`}
+                      >
+                        <span className="text-sm">{option.emoji}</span>
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5">
                   <label className="text-xs text-indigo-300/70">지난밤 꾼 꿈을 자유롭게 적어주세요</label>
                   <textarea
                     value={quickText}
@@ -725,7 +726,7 @@ export default function DiaryPage() {
                       onClick={upgradeToPreciseMode}
                       className="text-xs text-violet-300/70 underline-offset-2 transition-colors hover:text-violet-200 hover:underline"
                     >
-                      💡 더 정밀한 6단계 분석으로 전환
+                      💡 더 정밀한 7단계 분석으로 전환
                     </button>
                   </div>
                 </div>
@@ -743,11 +744,13 @@ export default function DiaryPage() {
                 </div>
               </div>
             ) : (
-              /* 🔮 6단계 정밀 분석 기록: 칩 선택 + 주관식 가이드 위저드 */
+              /* 🔮 7단계 정밀 분석 기록: 칩 선택 + 주관식 가이드 위저드 */
               <DreamWizard
                 key={wizardKey}
                 onComplete={handleWizardComplete}
                 isSubmitting={isLoading}
+                mood={mood}
+                onMoodChange={setMood}
                 initialData={editingEntry?.survey ?? restoredWizardDraft}
                 initialTitle={editingEntry ? undefined : initialTitle}
                 initialActionDetail={editingEntry ? undefined : initialActionDetail}
