@@ -86,33 +86,28 @@ export default function DiaryCalendarPanel({ onSelectDay, onRequestWrite }: Diar
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(129,90,255,0.12),transparent_60%)]" />
 
       {streakDays > 0 ? (
-        <div
-          className={`relative flex w-full flex-row items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-center text-[11px] transition-all duration-700 lg:text-xs ${
-            justCheckedIn
-              ? "scale-110 border-amber-300/60 bg-amber-400/20 text-amber-100 shadow-[0_0_20px_rgba(251,191,36,0.5)]"
-              : "border-amber-400/30 bg-amber-400/10 text-amber-200"
-          }`}
-        >
-          <span
-            className={`inline-block shrink-0 transition-all duration-500 ${
-              checkedInToday
-                ? "drop-shadow-[0_0_6px_rgba(251,191,36,0.85)]"
-                : "grayscale contrast-75 opacity-50"
-            }`}
-          >
-            🔥
-          </span>
-          <span className="whitespace-nowrap">
-            연속 {streakDays}일째 무의식 탐험 중
-            {checkedInToday && " (오늘의 출석 완료)"}
-          </span>
-          {!checkedInToday && onRequestWrite && (
+        <div className="flex w-full flex-col items-center">
+          {checkedInToday ? (
+            <div
+              className={`relative flex w-auto max-w-full flex-row items-center justify-center gap-1.5 overflow-x-auto whitespace-nowrap rounded-full border px-3 py-2 text-center text-[10px] transition-all duration-700 no-scrollbar lg:text-xs ${
+                justCheckedIn
+                  ? "scale-110 border-amber-300/60 bg-amber-400/20 text-amber-100 shadow-[0_0_20px_rgba(251,191,36,0.5)]"
+                  : "border-amber-400/30 bg-amber-400/10 text-amber-200"
+              }`}
+            >
+              <span className="shrink-0 transition-all duration-500 drop-shadow-[0_0_6px_rgba(251,191,36,0.85)]">🔥</span>
+              <span className="shrink-0">연속 {streakDays}일째 무의식 탐험 중 (오늘의 출석 완료)</span>
+            </div>
+          ) : (
             <button
               type="button"
               onClick={onRequestWrite}
-              className="whitespace-nowrap underline decoration-dotted underline-offset-2 transition-colors hover:text-amber-100"
+              disabled={!onRequestWrite}
+              className="flex w-auto max-w-full flex-row items-center justify-center gap-1.5 overflow-x-auto whitespace-nowrap rounded-full border border-purple-500/20 bg-purple-950/10 px-3 py-2 text-center text-[10px] transition-all duration-700 no-scrollbar disabled:cursor-default lg:text-xs"
             >
-              · 꺼져가는 무의식의 불꽃을 살려볼까요?
+              <span className="shrink-0 grayscale contrast-75 opacity-50 transition-all duration-500">🔥</span>
+              <span className="shrink-0 font-medium text-slate-400">연속 {streakDays}일째 무의식 탐험 중</span>
+              <span className="shrink-0 font-semibold text-purple-300">· 밤사이 무의식을 기록해 볼까요?</span>
             </button>
           )}
         </div>
