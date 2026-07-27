@@ -12,6 +12,7 @@ import {
   deleteDream,
   requestAiInterpretation,
   requestQuickAiInterpretation,
+  setDreamVisibility,
   updateDream,
   type AiInterpretation,
   type DreamEntryRecord,
@@ -566,18 +567,11 @@ export default function DiaryPage() {
     setIsPublishing(true);
     setPublishError(null);
     try {
-      const payload = {
-        dream_date: entry.dream_date,
-        title: entry.title,
-        emotion: entry.emotion,
-        summary: entry.summary,
-        is_public: nextIsPublic,
-        is_anonymous: options?.isAnonymous ?? entry.is_anonymous,
-        share_with_ai_analysis: options?.shareWithAiAnalysis ?? entry.share_with_ai_analysis,
-        survey: entry.survey,
-        interpretation: entry.interpretation,
-      };
-      const saved = await updateDream(entry.id, payload);
+      const saved = await setDreamVisibility(entry, {
+        isPublic: nextIsPublic,
+        isAnonymous: options?.isAnonymous ?? entry.is_anonymous,
+        shareWithAiAnalysis: options?.shareWithAiAnalysis ?? entry.share_with_ai_analysis,
+      });
       upsertEntry(saved);
       setDetailEntries((prev) => prev?.map((item) => (item.id === saved.id ? saved : item)) ?? prev);
       setPublishSettingsOpen(false);

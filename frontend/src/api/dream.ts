@@ -218,6 +218,26 @@ export async function deleteDream(id: number): Promise<void> {
   await api.delete(`/api/dreams/${id}`);
 }
 
+// 이미 저장된 기록의 공개 범위만 바꾼다 (AI 재분석 없음) - survey/interpretation은 그대로 재사용하고
+// is_public/is_anonymous/share_with_ai_analysis만 교체해 updateDream을 호출한다. 꿈 기록소 상세 보기와
+// 커뮤니티 페이지의 "내 꿈 공유하기" 둘 다 이 함수 하나를 공유한다.
+export async function setDreamVisibility(
+  entry: DreamEntryRecord,
+  options: { isPublic: boolean; isAnonymous: boolean; shareWithAiAnalysis: boolean }
+): Promise<DreamEntryRecord> {
+  return updateDream(entry.id, {
+    dream_date: entry.dream_date,
+    title: entry.title,
+    emotion: entry.emotion,
+    summary: entry.summary,
+    is_public: options.isPublic,
+    is_anonymous: options.isAnonymous,
+    share_with_ai_analysis: options.shareWithAiAnalysis,
+    survey: entry.survey,
+    interpretation: entry.interpretation,
+  });
+}
+
 // 🔮 무의식 피드: 꿈 기록소에서 실제로 "공개"로 저장한 진짜 DreamEntry 목록 (더미 아님).
 export interface DreamFeedAiReport {
   description: string;
