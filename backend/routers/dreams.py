@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import DreamEntry, DreamStatus, User
-from routers.ai_interpretation import DreamSurveyInput
+from routers.ai_interpretation import CounselingReportInput, DreamSurveyInput
 from routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/dreams", tags=["dreams"])
@@ -30,6 +30,10 @@ class AiInterpretationPayload(BaseModel):
     lucky_item_reason: str
     lucky_number: int
     lucky_number_reason: str
+    # 이 필드가 없으면 Pydantic이 조용히 잘라내 버려, 프론트가 보낸 counseling_report가
+    # DB에 아예 저장되지 않는다 - 실제로 발생했던 버그라 Optional로 두어 레거시 데이터
+    # 재저장 시에도 에러 없이 통과시키되, 있으면 반드시 그대로 보존한다.
+    counseling_report: CounselingReportInput | None = None
 
 
 class DreamEntryInput(BaseModel):

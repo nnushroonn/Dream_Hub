@@ -219,6 +219,15 @@ class DreamSurveyInput(BaseModel):
     final_memo: str
 
 
+# routers/dreams.py의 저장 payload가 이 모델을 그대로 재사용한다 - AI 응답의 counseling_report와
+# 필드가 어긋나면 저장할 때 조용히 잘려나가므로, 두 스키마가 항상 같은 소스를 공유하게 한다.
+class CounselingReportInput(BaseModel):
+    empathy: str
+    unconscious_stage: str
+    reality_check: str
+    action_plan: str
+
+
 class DreamInterpretationRequest(BaseModel):
     date: str | None = None
     emotion: str | None = None
