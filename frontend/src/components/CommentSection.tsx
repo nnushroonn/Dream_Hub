@@ -143,18 +143,24 @@ export default function CommentSection({
               />
               {error && <p className="text-xs text-red-300">{error}</p>}
               <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setIsCommentAnonymous((prev) => !prev)}
-                  aria-pressed={isCommentAnonymous}
-                  className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                    isCommentAnonymous
-                      ? "border-violet-400/50 bg-violet-500/20 text-violet-200"
-                      : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
-                  }`}
-                >
-                  🎭 익명
-                </button>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isCommentAnonymous}
+                    onClick={() => setIsCommentAnonymous((prev) => !prev)}
+                    className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${
+                      isCommentAnonymous ? "bg-violet-500" : "bg-white/15"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
+                        isCommentAnonymous ? "translate-x-[18px]" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                  <span className="text-[11px] font-medium text-slate-300">🎭 익명</span>
+                </label>
                 <button
                   type="button"
                   onClick={handleSubmit}

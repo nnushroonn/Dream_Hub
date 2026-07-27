@@ -601,17 +601,29 @@ export default function DreamWizard({
               </div>
 
               <div className="mt-6">
-                <p className="text-sm text-white">
-                  혹시 꿈속에서 &apos;지금 이건 꿈이구나&apos; 하고 스스로 알아챘나요?
+                <label className="flex cursor-pointer items-center justify-between gap-3">
+                  <span className="text-sm text-white">
+                    혹시 꿈속에서 &apos;지금 이건 꿈이구나&apos; 하고 스스로 알아챘나요?
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isLucid}
+                    onClick={() => setIsLucid((prev) => !prev)}
+                    className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${
+                      isLucid ? "bg-violet-500" : "bg-white/15"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
+                        isLucid ? "translate-x-[18px]" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </label>
+                <p className="mt-2 text-xs text-slate-400">
+                  {isLucid ? "✨ 네, 제 의지대로 꿈을 인지하거나 조절했어요" : "평소처럼 꿈속에 푹 빠져 있었어요"}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setIsLucid((prev) => !prev)}
-                  aria-pressed={isLucid}
-                  className={`${chipClass(isLucid)} mt-3`}
-                >
-                  ✨ 네, 제 의지대로 꿈을 인지하거나 조절했어요
-                </button>
               </div>
 
               <div className="mt-6 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4 backdrop-blur-md">
