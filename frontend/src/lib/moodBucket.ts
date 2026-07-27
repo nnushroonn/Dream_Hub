@@ -18,7 +18,7 @@ export const MOOD_OPTIONS: MoodOption[] = [
   { emoji: "🥰", label: "행복", bucket: "good" },
   { emoji: "😰", label: "불안", bucket: "nightmare" },
   { emoji: "😠", label: "분노", bucket: "nightmare" },
-  { emoji: "🥹", label: "그리움", bucket: "neutral" },
+  { emoji: "😔", label: "그리움", bucket: "neutral" },
   { emoji: "💓", label: "설렘", bucket: "good" },
   { emoji: "😮", label: "놀라움", bucket: "neutral" },
 ];
