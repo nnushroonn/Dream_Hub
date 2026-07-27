@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 
 import { getAuthErrorMessage } from "@/api/auth";
 import {
@@ -38,6 +39,16 @@ function todayDateInputValue(): string {
 // 실시간 자동 임시 저장(Auto-Save)이 쓰는 localStorage 키와 디바운스 간격.
 const DRAFT_STORAGE_KEY = "dream_hub_draft";
 const AUTOSAVE_DEBOUNCE_MS = 600;
+
+// ⚡ 빠른 기록 입력창 위 롤링 팁 배너 - 5대 핵심 요소(인물/장소/사건/상징/감정)를 3초 간격으로 안내한다.
+const QUICK_RECORD_TIPS = [
+  '💡 꿈에 "누가 나왔는지" 구체적으로 적어주시면 정확도가 올라가요.',
+  '💡 꿈속의 구체적인 "장소와 배경 비주얼"을 함께 묘사해 주세요.',
+  '💡 꿈속에서 일어난 "사건의 순서"대로 차근차근 적어보세요.',
+  '💡 기억에 남는 "상징적인 오브젝트나 동물"이 있다면 놓치지 마세요.',
+  '💡 꿈속에서 느꼈던 기분이나 "깬 뒤의 감정 상태"를 표현해 주세요.',
+];
+const QUICK_TIP_INTERVAL_MS = 3000;
 
 interface DreamDraft {
   savedAt: number;
@@ -139,6 +150,15 @@ export default function DiaryPage() {
   const [recordMode, setRecordMode] = useState<"quick" | "precise">("quick");
   const [quickTitle, setQuickTitle] = useState("");
   const [quickText, setQuickText] = useState("");
+  const [quickTipIndex, setQuickTipIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(
+      () => setQuickTipIndex((prev) => (prev + 1) % QUICK_RECORD_TIPS.length),
+      QUICK_TIP_INTERVAL_MS,
+    );
+    return () => clearInterval(timer);
+  }, []);
 
   // 7단계 위저드가 onDraftChange로 매번 올려보내는 "지금까지 입력한 값 전체" 스냅샷.
   // 이탈 방지 가드의 dirty 판단과 자동 임시 저장 둘 다 이 값을 데이터 소스로 쓴다.
@@ -712,12 +732,27 @@ export default function DiaryPage() {
 
                 <div className="mt-5">
                   <label className="text-xs text-indigo-300/70">지난밤 꾼 꿈을 자유롭게 적어주세요</label>
+
+                  <div className="mt-1.5 flex items-center gap-2 overflow-hidden rounded-lg border border-purple-500/10 bg-purple-950/20 px-3 py-1.5 text-xs text-purple-300">
+                    <AnimatePresence mode="wait">
+                      <motion.span
+                        key={quickTipIndex}
+                        initial={{ y: 14, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: -14, opacity: 0 }}
+                        transition={{ duration: 0.4, ease: "easeOut" }}
+                      >
+                        {QUICK_RECORD_TIPS[quickTipIndex]}
+                      </motion.span>
+                    </AnimatePresence>
+                  </div>
+
                   <textarea
                     value={quickText}
                     onChange={(event) => setQuickText(event.target.value)}
-                    placeholder="꿈에서 깨어난 느낌 그대로, 생각나는 조각들을 편하게 적어보세요 (예: 거대한 바다 위에서 황금 고래를 만나 하늘을 날았다)."
+                    placeholder="ex) 친구와 함께(인물) 끝없는 계단을 오르다가(장소/사건) 파란 나비(상징)를 보고 깨어났는데, 마음이 묘하게 평온했어요(감정). 탐험가님의 꿈의 파편을 자유롭게 적어보세요."
                     rows={7}
-                    className="mt-1.5 w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-slate-500/80 focus:border-violet-400/60 focus:outline-none"
+                    className="mt-1.5 w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-slate-500/60 focus:border-violet-400/60 focus:outline-none"
                   />
 
                   <div className="mt-2 text-right">
