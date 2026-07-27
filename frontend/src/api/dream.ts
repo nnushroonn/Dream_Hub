@@ -293,6 +293,8 @@ export interface CommunityPost {
   author_display_name: string | null;
   comment_count: number;
   created_at: string;
+  // 내가 쓴 글인지 - 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는 서버가 다시 한다.
+  is_mine: boolean;
 }
 
 export async function getCommunityPosts(): Promise<CommunityPost[]> {
@@ -303,6 +305,18 @@ export async function getCommunityPosts(): Promise<CommunityPost[]> {
 export async function createCommunityPost(content: string, isAnonymous: boolean): Promise<CommunityPost> {
   const { data } = await api.post<CommunityPost>("/api/community/posts", { content, is_anonymous: isAnonymous });
   return data;
+}
+
+// 게시 후 10분이 지나면 서버가 403으로 거절한다 - 프론트는 POST_EDIT_WINDOW_MS로 버튼 자체를 미리 숨긴다.
+export const POST_EDIT_WINDOW_MS = 10 * 60 * 1000;
+
+export async function updateCommunityPost(postId: number, content: string, isAnonymous: boolean): Promise<CommunityPost> {
+  const { data } = await api.put<CommunityPost>(`/api/community/posts/${postId}`, { content, is_anonymous: isAnonymous });
+  return data;
+}
+
+export async function deleteCommunityPost(postId: number): Promise<void> {
+  await api.delete(`/api/community/posts/${postId}`);
 }
 
 export async function togglePostEmpathy(postId: number): Promise<EmpathyResult> {

@@ -13,6 +13,8 @@
 응답 어디에도 담지 않는다.
 """
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -34,6 +36,8 @@ from routers.auth import get_current_user, get_current_user_optional
 router = APIRouter(prefix="/api/community", tags=["community"])
 
 DREAM_FEED_LIMIT = 30
+# 자유 광장 게시글 수정 가능 시간 - 게시 후 이 시간이 지나면 삭제만 가능하다.
+POST_EDIT_WINDOW = timedelta(minutes=10)
 POST_FEED_LIMIT = 50
 
 
@@ -223,6 +227,9 @@ class CommunityPostResponse(BaseModel):
     author_display_name: str | None = None
     comment_count: int
     created_at: str
+    # 내가 쓴 글인지 - 수정/삭제 버튼 노출 여부를 프론트가 이걸로 판단한다. 실제 권한 체크는
+    # PUT/DELETE 엔드포인트가 서버에서 다시 하므로, 이 값은 순전히 UI 표시용이다.
+    is_mine: bool = False
 
 
 def _post_empathy_count(db: Session, post_id: int) -> int:
@@ -247,7 +254,9 @@ def _liked_post_ids(db: Session, user: User, posts: list[CommunityPost]) -> set[
     return {row[0] for row in rows}
 
 
-def _build_post_entries(db: Session, posts: list[CommunityPost], liked_ids: set[int]) -> list[dict]:
+def _build_post_entries(
+    db: Session, posts: list[CommunityPost], liked_ids: set[int], current_user_id: int | None = None
+) -> list[dict]:
     return [
         {
             "id": post.id,
@@ -258,6 +267,7 @@ def _build_post_entries(db: Session, posts: list[CommunityPost], liked_ids: set[
             "author_display_name": _display_name(post.user, post.is_anonymous),
             "comment_count": _post_comment_count(db, post.id),
             "created_at": post.created_at.isoformat(),
+            "is_mine": current_user_id is not None and post.user_id == current_user_id,
         }
         for post in posts
     ]
@@ -270,7 +280,7 @@ def list_community_posts(
 ) -> list[dict]:
     posts = db.query(CommunityPost).order_by(CommunityPost.created_at.desc()).limit(POST_FEED_LIMIT).all()
     liked_ids = _liked_post_ids(db, current_user, posts) if current_user else set()
-    return _build_post_entries(db, posts, liked_ids)
+    return _build_post_entries(db, posts, liked_ids, current_user.id if current_user else None)
 
 
 @router.get("/my-posts", response_model=list[CommunityPostResponse])
@@ -283,7 +293,7 @@ def list_my_posts(current_user: User = Depends(get_current_user), db: Session = 
         .all()
     )
     liked_ids = _liked_post_ids(db, current_user, posts)
-    return _build_post_entries(db, posts, liked_ids)
+    return _build_post_entries(db, posts, liked_ids, current_user.id)
 
 
 @router.post("/posts", response_model=CommunityPostResponse, status_code=status.HTTP_201_CREATED)
@@ -309,7 +319,61 @@ def create_community_post(
         "author_display_name": _display_name(current_user, post.is_anonymous),
         "comment_count": 0,
         "created_at": post.created_at.isoformat(),
+        "is_mine": True,
     }
+
+
+@router.put("/posts/{post_id}", response_model=CommunityPostResponse)
+def update_community_post(
+    post_id: int,
+    payload: CommunityPostInput,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
+    if post.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="본인이 작성한 글만 수정할 수 있습니다.")
+
+    if datetime.now(timezone.utc) - post.created_at > POST_EDIT_WINDOW:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="게시 후 10분이 지나 더 이상 수정할 수 없습니다.")
+
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="내용을 입력해 주세요.")
+
+    post.content = content
+    post.is_anonymous = payload.is_anonymous
+    db.commit()
+    db.refresh(post)
+    return {
+        "id": post.id,
+        "content": post.content,
+        "empathy_count": _post_empathy_count(db, post.id),
+        "is_liked_by_me": post.id in _liked_post_ids(db, current_user, [post]),
+        "is_anonymous": post.is_anonymous,
+        "author_display_name": _display_name(current_user, post.is_anonymous),
+        "comment_count": _post_comment_count(db, post.id),
+        "created_at": post.created_at.isoformat(),
+        "is_mine": True,
+    }
+
+
+@router.delete("/posts/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_community_post(
+    post_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
+    if post.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="본인이 작성한 글만 삭제할 수 있습니다.")
+
+    db.delete(post)
+    db.commit()
 
 
 @router.post("/posts/{post_id}/empathy", response_model=EmpathyResponse)
