@@ -17,7 +17,7 @@ import {
   type DreamMood,
   type DreamSurvey,
 } from "@/api/dream";
-import CounselingStoryView from "@/components/CounselingStoryView";
+import CounselingStoryView, { shareCounselingReport } from "@/components/CounselingStoryView";
 import DiaryCalendarPanel from "@/components/DiaryCalendarPanel";
 import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
 import DreamGuidePanel from "@/components/DreamGuidePanel";
@@ -134,6 +134,7 @@ export default function DiaryPage() {
   const [detailEntries, setDetailEntries] = useState<DreamEntryRecord[] | null>(null);
   const [activeDetailIndex, setActiveDetailIndex] = useState(0);
   const [detailVisible, setDetailVisible] = useState(true);
+  const [detailShareCopied, setDetailShareCopied] = useState(false);
   const activeDetail = detailEntries?.[activeDetailIndex] ?? null;
 
   // 삭제 확인 모달
@@ -531,6 +532,16 @@ export default function DiaryPage() {
       setActiveDetailIndex(index);
       setDetailVisible(true);
     }, 150);
+  };
+
+  // 상세 보기 액션 바의 공유하기 - 카드 안이 아니라 수정/삭제와 나란한 위치에서 4개 항목 전체를 공유한다.
+  const handleShareDetail = async (entry: DreamEntryRecord) => {
+    if (!entry.interpretation.counseling_report) return;
+    const result = await shareCounselingReport(entry.interpretation.counseling_report, `${entry.emotion} ${entry.title}`);
+    if (result === "copied") {
+      setDetailShareCopied(true);
+      window.setTimeout(() => setDetailShareCopied(false), 1600);
+    }
   };
 
   const confirmDelete = async () => {
@@ -1128,7 +1139,16 @@ export default function DiaryPage() {
               )}
             </div>
 
-            <div className="mt-7 flex flex-col gap-2.5 sm:flex-row">
+            <div className="mt-7 flex flex-row gap-2">
+              {activeDetail.interpretation.counseling_report && (
+                <button
+                  type="button"
+                  onClick={() => handleShareDetail(activeDetail)}
+                  className="flex-1 rounded-full border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-200 transition-transform hover:-translate-y-0.5"
+                >
+                  {detailShareCopied ? "✅ 복사 완료" : "🔗 공유하기"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => startEdit(activeDetail)}
