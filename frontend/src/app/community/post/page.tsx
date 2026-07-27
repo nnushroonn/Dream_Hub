@@ -102,7 +102,9 @@ export default function CommunityPostPage() {
               </div>
             </div>
 
-            {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 나눠 보여준다 */}
+            {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 나눠 보여준다.
+                이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
+            {entry.interpretation.counseling_report && (
             <div className="mt-6 space-y-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
               <p className="text-center text-xs tracking-wide text-indigo-300/70">🛋️ 무의식 상담 리포트</p>
 
@@ -132,6 +134,7 @@ export default function CommunityPostPage() {
                 </p>
               </div>
             </div>
+            )}
           </div>
         )}
       </main>

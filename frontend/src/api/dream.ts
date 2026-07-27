@@ -127,7 +127,8 @@ export interface AiInterpretation {
   lucky_item_reason: string;
   lucky_number: number;
   lucky_number_reason: string;
-  counseling_report: CounselingReport;
+  // 이 기능 이전에 저장된 기록은 값이 없을 수 있다 - 렌더링 전 항상 존재를 확인한다.
+  counseling_report?: CounselingReport;
 }
 
 export async function requestAiInterpretation(payload: DreamEntryInput): Promise<AiInterpretation> {

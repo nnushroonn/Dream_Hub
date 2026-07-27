@@ -938,7 +938,9 @@ export default function DiaryPage() {
                   </div>
                 </div>
 
-                {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 나눠 보여준다 */}
+                {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 나눠 보여준다.
+                    이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
+                {interpretation.counseling_report && (
                 <div className="mt-6 space-y-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
                   <p className="text-center text-xs tracking-wide text-indigo-300/70">🛋️ 무의식 상담 리포트</p>
 
@@ -964,6 +966,7 @@ export default function DiaryPage() {
                     <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{interpretation.counseling_report.action_plan}</p>
                   </div>
                 </div>
+                )}
 
                 {saveError && (
                   <p className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-300">
@@ -1100,7 +1103,9 @@ export default function DiaryPage() {
                 </div>
               </div>
 
-              {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 나눠 보여준다 */}
+              {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 나눠 보여준다.
+                  이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
+              {activeDetail.interpretation.counseling_report && (
               <div className="mt-6 space-y-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
                 <p className="text-center text-xs tracking-wide text-indigo-300/70">🛋️ 무의식 상담 리포트</p>
 
@@ -1132,6 +1137,7 @@ export default function DiaryPage() {
                   </p>
                 </div>
               </div>
+              )}
             </div>
 
             <div className="mt-7 flex flex-col gap-2.5 sm:flex-row">
