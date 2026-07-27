@@ -61,6 +61,13 @@ export default function DiaryCalendarPanel({ onSelectDay, onRequestWrite }: Diar
 
   const { streakDays, checkedInToday } = useMemo(() => computeStreak(entries), [entries]);
 
+  // 오늘 미출석이라 불꽃이 꺼진 상태에서 "탐험 중"이라고 하면 앞뒤가 안 맞으므로,
+  // 꺼진 불꽃 메타포와 논리적으로 맞물리는 유예/경고형 문구로 대체한다.
+  const streakLapseWarning =
+    streakDays === 1
+      ? "오늘이 지나면 첫 기록 버프가 사라져요"
+      : `오늘이 지나면 연속 ${streakDays}일 기록이 리셋돼요`;
+
   // 출석 체크가 방금 완료된 순간(false -> true 전환)에만 배지가 잠깐 부풀어 오르며 강조된다.
   const [justCheckedIn, setJustCheckedIn] = useState(false);
   const wasCheckedInRef = useRef(checkedInToday);
@@ -107,7 +114,7 @@ export default function DiaryCalendarPanel({ onSelectDay, onRequestWrite }: Diar
             >
               <span className="flex items-center gap-1.5 whitespace-nowrap">
                 <span className="shrink-0 grayscale contrast-75 opacity-50 transition-all duration-500">🔥</span>
-                <span className="shrink-0 font-medium text-slate-400">연속 {streakDays}일째 무의식 탐험 중</span>
+                <span className="shrink-0 font-medium text-slate-400">{streakLapseWarning}</span>
               </span>
               <span className="whitespace-nowrap font-semibold text-purple-300">
                 · 밤사이 무의식을 기록해 볼까요?
