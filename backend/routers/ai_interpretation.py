@@ -39,6 +39,29 @@ selected_expert에는 "칼 융 (Carl Jung)"처럼 이름(영문 병기)을, expe
 이모지+짧은 분야명을 담으세요. 두 명을 함께 골랐다면 "지그문트 프로이트 / 칼 융"처럼 "/"로 이어 쓰세요.
 expert_insight는 선택된 거장 특유의 어조로 3~4문장 깊이 있게 서술하세요."""
 
+# 기존 해몽 리포트(tags/description/expert_insight/lucky_item 등)와는 별개로 함께 채워 넣는
+# 4단계 상담 리포트. 위 EXPERT_MATRIX가 담당하는 "가장 찰떡궁합인 학파 1~2명 깊이 파기"와 달리,
+# 이 섹션은 공감-분석-경고-행동의 네 관점을 매번 전부 채우는 고정 포맷이다.
+COUNSELING_REPORT_BLOCK = """[counseling_report 작성 지시사항]
+위 해몽 리포트(tags/description/expert_insight/lucky_item 등)와는 별개로, counseling_report
+객체를 추가로 작성하세요. 이 섹션에서는 내담자의 상처를 따뜻하게 어루만지는 '공감형 심리 상담가'이자,
+칼 융과 프로이트의 이론을 바탕으로 무의식을 해부하는 '정신분석학자', 그리고 현실의 리스크를 단호하게
+짚어주는 '행동 분석가' — 이 세 역할을 동시에 수행하며 아래 4개 항목을 각각 채우세요.
+
+1. empathy (🛋️ 마음 읽기): 유저의 감정 상태와 꿈의 맥락을 연결해, 지금 겪고 있을 혼란이나 아픔을
+   다정하고 따뜻한 어조로 타당화(Validation)하세요.
+2. unconscious_stage (🔍 무의식의 무대): 두 갈래를 함께 짚으세요 — (1) 공간 분석: 꿈의 배경(조도,
+   분위기 등)이 상징하는 심리적 방어기제나 현재 상태, (2) 인물 분석(융의 그림자): 꿈에 등장한 타인을
+   단순 외부인이 아니라 유저가 억압한 소망이나 '내면의 또 다른 자아(그림자)'가 투사된 대상으로 해석하세요.
+3. reality_check (⚠️ 현실 점검): 달콤한 꿈(소망 충족)이 주는 환상과 현실의 팩트를 명확히 분리하세요.
+   꿈에서 관계가 회복되었다고 해서 현실에서 다가가면 안 되는 이유나, 유저가 빠질 수 있는 착각을 단호하게
+   경고하세요.
+4. action_plan (💡 오늘을 위한 행동 지침): 은유적인 맺음말은 절대 금지합니다. 오늘 당장 취해야 할
+   구체적이고 실천적인 태도나 행동(예: 연락 금지, 거리두기, 감정 기록 등)을 1~2가지의 명확한 가이드라인으로
+   제시하세요.
+
+각 항목은 2~4문장 내외로, 서로 다른 관점(공감/분석/경고/행동)이 뚜렷이 구분되도록 작성하세요."""
+
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -85,6 +108,36 @@ RESPONSE_SCHEMA = {
             "type": "string",
             "description": "유저가 입력한 선명도(vividness)와 자각몽(is_lucid) 상태를 근거로, 이 숫자가 지니는 심리적·수비학적 의미와 오늘 하루 실생활에서 어떻게 활용하면 좋을지를 1~2문장으로 설명",
         },
+        "counseling_report": {
+            "type": "object",
+            "description": (
+                "위 해몽 리포트와는 별개로 함께 채우는 4단계 상담 리포트. 공감형 심리 상담가 + "
+                "정신분석학자(프로이트/융) + 행동 분석가, 세 페르소나를 동시에 수행해 작성한다."
+            ),
+            "properties": {
+                "empathy": {
+                    "type": "string",
+                    "description": "🛋️ 마음 읽기: 유저의 감정 상태와 꿈의 맥락을 연결한 공감·타당화(Validation) 2~4문장",
+                },
+                "unconscious_stage": {
+                    "type": "string",
+                    "description": (
+                        "🔍 무의식의 무대: 공간이 상징하는 심리적 방어기제/현재 상태 분석과, 꿈에 등장한 "
+                        "타인을 억압된 소망 또는 그림자(융)의 투사로 해석하는 인물 분석을 함께 담은 2~4문장"
+                    ),
+                },
+                "reality_check": {
+                    "type": "string",
+                    "description": "⚠️ 현실 점검: 꿈(소망 충족)의 환상과 현실의 팩트를 분리하고, 유저가 빠질 수 있는 착각을 단호하게 경고하는 2~4문장",
+                },
+                "action_plan": {
+                    "type": "string",
+                    "description": "💡 오늘을 위한 행동 지침: 은유적 맺음말 없이, 오늘 당장 취할 구체적이고 실천적인 행동 1~2가지",
+                },
+            },
+            "required": ["empathy", "unconscious_stage", "reality_check", "action_plan"],
+            "additionalProperties": False,
+        },
     },
     "required": [
         "tags",
@@ -96,6 +149,7 @@ RESPONSE_SCHEMA = {
         "lucky_item_reason",
         "lucky_number",
         "lucky_number_reason",
+        "counseling_report",
     ],
     "additionalProperties": False,
 }
@@ -106,6 +160,8 @@ SYSTEM_PROMPT_STATIC = """당신은 깊은 통찰력과 감성적인 언어 해�
 
 {expert_matrix}
 
+{counseling_block}
+
 [수행 지시사항]
 1. 분석적 신뢰성: 뻔한 미신적 해몽이 아닌, 유저가 서술한 공간·인물·행동·현실 공명 묘사 간의 연결 고리를 짚어내며 심리학적으로 위로와 통찰을 주는 본문을 작성하세요.
 2. 본문 구조: description은 반드시 '무의식 상태 → 상징 분석 → 자아의 메시지' 3개 문단으로 구성하고, 문단 사이는 빈 줄로 구분하세요. 6가지 데이터(제목·조도·공간·대상·행동·현실 공명)가 최소 하나 이상의 문단에 유기적으로 녹아들어야 하며, 전체 5~6문장 이상의 풍부한 분량으로 작성해 "내 꿈을 정말 정밀하게 읽어내는구나"라는 신뢰를 주세요.
@@ -113,7 +169,8 @@ SYSTEM_PROMPT_STATIC = """당신은 깊은 통찰력과 감성적인 언어 해�
 4. 행운의 요소 근거: lucky_item_reason과 lucky_number_reason은 단순 부연이 아니라, 유저의 구체적인 입력값(조도·행동·선명도·자각몽 여부 등)을 직접 인용하며 왜 지금 이 아이템/숫자가 필요한지 설득력 있게 설명하세요. 막연한 미사여구는 금지합니다.
 5. 톤앤매너: 'Dream_Hub' 서비스의 정체성에 맞게 신비롭고 몽환적이면서도, 내면을 꿰뚫어 보는 듯한 차분하고 세련된 어조를 유지하세요.
 6. 다양성과 동적 생성: 고정된 결과는 절대 금지합니다. 입력값들의 상호작용을 계산하여 매번 유니크한 키워드 태그와 행운의 요소를 실시간으로 창작하세요.
-7. 엄격한 응답 포맷: 대화형 답변이나 서론/결론은 모두 배제하고, 반드시 지정된 JSON 스키마 구조로만 정확히 답변하세요."""
+7. counseling_report 작성: 위 [counseling_report 작성 지시사항]에 따라 4개 항목을 모두 빠짐없이 채우세요.
+8. 엄격한 응답 포맷: 대화형 답변이나 서론/결론은 모두 배제하고, 반드시 지정된 JSON 스키마 구조로만 정확히 답변하세요."""
 
 SYSTEM_PROMPT_DATA_TEMPLATE = """[유저의 6단계 무의식 데이터 리포트]
 0. 꿈의 제목: {title}
@@ -140,12 +197,20 @@ FALLBACK_RESULT = {
     "lucky_item_reason": "지금은 해몽 엔진이 잠시 침묵하는 시간이라, 흔들림 없는 불빛처럼 당신의 마음을 차분히 가라앉혀 줄 향초를 권해드려요.",
     "lucky_number": 3,
     "lucky_number_reason": "3은 시작·과정·완성을 상징하는 숫자로, 지금의 기다림이 곧 완성으로 이어질 것이라는 신호로 해석할 수 있어요.",
+    "counseling_report": {
+        "empathy": "지금 이 순간의 혼란스러움, 그 마음 그대로도 충분히 이해받을 자격이 있어요.",
+        "unconscious_stage": "무대의 조명이 아직 완전히 켜지지 않은 상태라, 지금은 공간도 등장인물도 또렷하게 해석해 드리기 어려운 시간이에요.",
+        "reality_check": "꿈이 주는 위안은 위안대로 소중하지만, 그것이 현실의 결정을 대신할 수는 없다는 것만은 분명히 기억해 주세요.",
+        "action_plan": "오늘은 새로운 결정을 서두르지 말고, 지금 느낀 감정을 짧게라도 기록해 두세요.",
+    },
 }
 
 
 QUICK_SYSTEM_PROMPT_STATIC = """당신은 깊은 통찰력과 감성적인 언어 해설 능력을 겸비한 세계 최고의 심층 심리학자이자 꿈 분석 전문가(Dream Analyst)입니다. 프로이트, 융, 아들러, 게슈탈트 심리학 등 여러 학파에 두루 정통하며, 곧이어 주어지는 유저가 형식 없이 자유롭게 적은 꿈 서술 한 편을 분석해 신뢰감 있고 몽환적인 꿈해몽 보고서를 작성해야 합니다.
 
 {expert_matrix}
+
+{counseling_block}
 
 [수행 지시사항]
 1. 유저는 6단계 정밀 문답을 거치지 않고 짧은 서술 하나만 남겼습니다. 문장 속에서 조도·공간·등장 인물/사물·행동·감정의 단서를 스스로 찾아내 6단계 정밀 분석에 준하는 깊이의 해몽을 작성하세요. 단서가 부족한 부분은 서술의 전체 분위기에서 합리적으로 추론하세요.
@@ -154,7 +219,8 @@ QUICK_SYSTEM_PROMPT_STATIC = """당신은 깊은 통찰력과 감성적인 언�
 4. 행운의 요소 근거: lucky_item_reason과 lucky_number_reason은 유저의 서술에 등장한 구체적인 소재나 감정을 직접 인용하며 왜 지금 이 아이템/숫자가 필요한지 설득력 있게 설명하세요. 막연한 미사여구는 금지합니다.
 5. 톤앤매너: 'Dream_Hub' 서비스의 정체성에 맞게 신비롭고 몽환적이면서도, 내면을 꿰뚫어 보는 듯한 차분하고 세련된 어조를 유지하세요.
 6. 다양성과 동적 생성: 고정된 결과는 절대 금지합니다. 서술 내용에 맞춰 매번 유니크한 키워드 태그와 행운의 요소를 실시간으로 창작하세요.
-7. 엄격한 응답 포맷: 대화형 답변이나 서론/결론은 모두 배제하고, 반드시 지정된 JSON 스키마 구조로만 정확히 답변하세요."""
+7. counseling_report 작성: 위 [counseling_report 작성 지시사항]에 따라 4개 항목을 모두 빠짐없이 채우세요. 서술이 짧더라도 전체 분위기에서 합리적으로 추론해 채우세요.
+8. 엄격한 응답 포맷: 대화형 답변이나 서론/결론은 모두 배제하고, 반드시 지정된 JSON 스키마 구조로만 정확히 답변하세요."""
 
 QUICK_SYSTEM_PROMPT_DATA_TEMPLATE = """[유저가 자유롭게 적은 꿈 서술]
 제목: {title}
@@ -194,7 +260,7 @@ class QuickDreamInterpretationRequest(BaseModel):
 
 def build_system_prompt(survey: DreamSurveyInput) -> tuple[str, str]:
     """6단계 문답 응답을 (캐시 가능한 STATIC 블록, 매번 바뀌는 DATA 블록) 튜플로 나눠 반환한다."""
-    static_block = SYSTEM_PROMPT_STATIC.format(expert_matrix=EXPERT_MATRIX_BLOCK)
+    static_block = SYSTEM_PROMPT_STATIC.format(expert_matrix=EXPERT_MATRIX_BLOCK, counseling_block=COUNSELING_REPORT_BLOCK)
     data_block = SYSTEM_PROMPT_DATA_TEMPLATE.format(
         title=survey.title,
         brightness=survey.brightness,
@@ -215,7 +281,7 @@ def build_system_prompt(survey: DreamSurveyInput) -> tuple[str, str]:
 
 def build_quick_system_prompt(title: str, raw_text: str) -> tuple[str, str]:
     """⚡ 10초 미니멀 빠른 기록 모드: 6단계 문답 없이 자유 서술 한 편만으로 DATA 블록을 구성한다."""
-    static_block = QUICK_SYSTEM_PROMPT_STATIC.format(expert_matrix=EXPERT_MATRIX_BLOCK)
+    static_block = QUICK_SYSTEM_PROMPT_STATIC.format(expert_matrix=EXPERT_MATRIX_BLOCK, counseling_block=COUNSELING_REPORT_BLOCK)
     data_block = QUICK_SYSTEM_PROMPT_DATA_TEMPLATE.format(title=title, raw_text=raw_text)
     return static_block, data_block
 

@@ -101,6 +101,37 @@ export default function CommunityPostPage() {
                 <p className="mt-1.5 text-center font-medium text-white">{entry.interpretation.lucky_number}</p>
               </div>
             </div>
+
+            {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 나눠 보여준다 */}
+            <div className="mt-6 space-y-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
+              <p className="text-center text-xs tracking-wide text-indigo-300/70">🛋️ 무의식 상담 리포트</p>
+
+              <div>
+                <p className="text-xs font-medium text-violet-200">🛋️ 마음 읽기</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{entry.interpretation.counseling_report.empathy}</p>
+              </div>
+
+              <div className="border-t border-white/5 pt-3">
+                <p className="text-xs font-medium text-violet-200">🔍 무의식의 무대</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
+                  {entry.interpretation.counseling_report.unconscious_stage}
+                </p>
+              </div>
+
+              <div className="border-t border-white/5 pt-3">
+                <p className="text-xs font-medium text-amber-200">⚠️ 현실 점검</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
+                  {entry.interpretation.counseling_report.reality_check}
+                </p>
+              </div>
+
+              <div className="border-t border-white/5 pt-3">
+                <p className="text-xs font-medium text-emerald-200">💡 오늘을 위한 행동 지침</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
+                  {entry.interpretation.counseling_report.action_plan}
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </main>

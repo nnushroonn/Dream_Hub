@@ -107,6 +107,15 @@ export function buildDreamOneLineSummary(survey: DreamSurvey): string {
   return `${raw.slice(0, ONE_LINE_SUMMARY_MAX_LENGTH - 1).trimEnd()}…`;
 }
 
+// 기존 해몽 리포트(description/expert_insight 등)와는 별개로 함께 내려오는 4단계 상담 리포트.
+// 공감형 심리 상담가 + 정신분석학자(프로이트/융) + 행동 분석가, 세 관점을 매번 전부 채운다.
+export interface CounselingReport {
+  empathy: string;
+  unconscious_stage: string;
+  reality_check: string;
+  action_plan: string;
+}
+
 export interface AiInterpretation {
   tags: string[];
   description: string;
@@ -118,6 +127,7 @@ export interface AiInterpretation {
   lucky_item_reason: string;
   lucky_number: number;
   lucky_number_reason: string;
+  counseling_report: CounselingReport;
 }
 
 export async function requestAiInterpretation(payload: DreamEntryInput): Promise<AiInterpretation> {

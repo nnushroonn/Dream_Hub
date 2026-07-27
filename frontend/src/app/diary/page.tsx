@@ -938,6 +938,33 @@ export default function DiaryPage() {
                   </div>
                 </div>
 
+                {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 나눠 보여준다 */}
+                <div className="mt-6 space-y-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
+                  <p className="text-center text-xs tracking-wide text-indigo-300/70">🛋️ 무의식 상담 리포트</p>
+
+                  <div>
+                    <p className="text-xs font-medium text-violet-200">🛋️ 마음 읽기</p>
+                    <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{interpretation.counseling_report.empathy}</p>
+                  </div>
+
+                  <div className="border-t border-white/5 pt-3">
+                    <p className="text-xs font-medium text-violet-200">🔍 무의식의 무대</p>
+                    <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
+                      {interpretation.counseling_report.unconscious_stage}
+                    </p>
+                  </div>
+
+                  <div className="border-t border-white/5 pt-3">
+                    <p className="text-xs font-medium text-amber-200">⚠️ 현실 점검</p>
+                    <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{interpretation.counseling_report.reality_check}</p>
+                  </div>
+
+                  <div className="border-t border-white/5 pt-3">
+                    <p className="text-xs font-medium text-emerald-200">💡 오늘을 위한 행동 지침</p>
+                    <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{interpretation.counseling_report.action_plan}</p>
+                  </div>
+                </div>
+
                 {saveError && (
                   <p className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-300">
                     {saveError}
@@ -1070,6 +1097,39 @@ export default function DiaryPage() {
                 <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                   <p className="text-center text-xs text-indigo-300/70">행운의 숫자</p>
                   <p className="mt-1.5 text-center font-medium text-white">{activeDetail.interpretation.lucky_number}</p>
+                </div>
+              </div>
+
+              {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 나눠 보여준다 */}
+              <div className="mt-6 space-y-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
+                <p className="text-center text-xs tracking-wide text-indigo-300/70">🛋️ 무의식 상담 리포트</p>
+
+                <div>
+                  <p className="text-xs font-medium text-violet-200">🛋️ 마음 읽기</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
+                    {activeDetail.interpretation.counseling_report.empathy}
+                  </p>
+                </div>
+
+                <div className="border-t border-white/5 pt-3">
+                  <p className="text-xs font-medium text-violet-200">🔍 무의식의 무대</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
+                    {activeDetail.interpretation.counseling_report.unconscious_stage}
+                  </p>
+                </div>
+
+                <div className="border-t border-white/5 pt-3">
+                  <p className="text-xs font-medium text-amber-200">⚠️ 현실 점검</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
+                    {activeDetail.interpretation.counseling_report.reality_check}
+                  </p>
+                </div>
+
+                <div className="border-t border-white/5 pt-3">
+                  <p className="text-xs font-medium text-emerald-200">💡 오늘을 위한 행동 지침</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
+                    {activeDetail.interpretation.counseling_report.action_plan}
+                  </p>
                 </div>
               </div>
             </div>
