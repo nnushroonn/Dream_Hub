@@ -12,6 +12,7 @@ import {
   createCommunityPost,
   createDream,
   createDreamComment,
+  deleteCommunityPost,
   getCommunityPosts,
   getDreamComments,
   getDreamFeed,
@@ -178,6 +179,9 @@ export default function CommunityPage() {
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  // 리스트에서 바로 삭제할 수 있는 빠른 액션 - 수정은 상세 페이지(edit=1)로 보낸다.
+  const [confirmDeletePostId, setConfirmDeletePostId] = useState<number | null>(null);
+  const [isDeletingPost, setIsDeletingPost] = useState(false);
 
   // 사이드바의 "지금 뜨는 꿈 상징" 위젯 - 홈 화면과 같은 실제 집계(trends.py)를 그대로 재사용한다.
   const [trends, setTrends] = useState<Trend[]>([]);
@@ -268,6 +272,20 @@ export default function CommunityPage() {
       setDreams((prev) => prev.map((dream) => (dream.id === dreamId ? { ...dream, ...result } : dream)));
     } catch {
       setDreams(previous);
+    }
+  };
+
+  const handleDeletePost = async (postId: number) => {
+    if (isDeletingPost) return;
+    setIsDeletingPost(true);
+    try {
+      await deleteCommunityPost(postId);
+      setPosts((prev) => prev.filter((post) => post.id !== postId));
+    } catch {
+      // 간단한 액션이라 별도 에러 배너 없이, 확인 상태만 닫고 목록은 그대로 둔다.
+    } finally {
+      setConfirmDeletePostId(null);
+      setIsDeletingPost(false);
     }
   };
 
@@ -572,26 +590,72 @@ export default function CommunityPage() {
                     <div key={index} className="h-14 animate-pulse border-b border-white/10 bg-white/[0.02]" />
                   ))
                 ) : posts.length > 0 ? (
-                  posts.map((post) => (
-                    <div
-                      key={post.id}
-                      className="flex items-center justify-between gap-4 border-b border-white/10 px-2 py-3 transition-colors hover:bg-white/5"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <Link href={`/community/board-post?id=${post.id}`} className="inline-flex min-w-0 items-baseline gap-1.5">
-                          <span className="truncate text-lg font-bold text-slate-100 hover:underline">{post.title}</span>
-                          {post.comment_count > 0 && (
-                            <span className="shrink-0 text-sm font-semibold text-violet-400">[{post.comment_count}]</span>
-                          )}
-                        </Link>
-                        {post.content && <p className="mt-0.5 line-clamp-1 text-sm text-slate-400">{post.content}</p>}
-                        <p className="mt-1 text-[11px] text-slate-500">
-                          {post.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${post.author_display_name}`} · {formatPostTime(post.created_at)}
-                        </p>
+                  posts.map((post) =>
+                    confirmDeletePostId === post.id ? (
+                      <div
+                        key={post.id}
+                        className="flex items-center justify-between gap-3 border-b border-white/10 bg-red-500/10 px-2 py-3"
+                      >
+                        <span className="text-xs text-red-200">"{post.title}" 글을 정말 삭제할까요?</span>
+                        <div className="flex shrink-0 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeletePostId(null)}
+                            disabled={isDeletingPost}
+                            className="text-xs text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline disabled:opacity-50"
+                          >
+                            취소
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePost(post.id)}
+                            disabled={isDeletingPost}
+                            className="text-xs font-semibold text-red-300 underline-offset-2 hover:text-red-200 hover:underline disabled:opacity-50"
+                          >
+                            {isDeletingPost ? "삭제 중..." : "네, 삭제할게요"}
+                          </button>
+                        </div>
                       </div>
-                      <span className="shrink-0 text-xs text-slate-400">✨ {post.empathy_count}</span>
-                    </div>
-                  ))
+                    ) : (
+                      <div
+                        key={post.id}
+                        className="flex items-center justify-between gap-4 border-b border-white/10 px-2 py-3 transition-colors hover:bg-white/5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/community/board-post?id=${post.id}`} className="inline-flex min-w-0 items-baseline gap-1.5">
+                            <span className="truncate text-lg font-bold text-slate-100 hover:underline">{post.title}</span>
+                            {post.comment_count > 0 && (
+                              <span className="shrink-0 text-sm font-semibold text-violet-400">[{post.comment_count}]</span>
+                            )}
+                          </Link>
+                          {post.content && <p className="mt-0.5 line-clamp-1 text-sm text-slate-400">{post.content}</p>}
+                          <p className="mt-1 text-[11px] text-slate-500">
+                            {post.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${post.author_display_name}`} · {formatPostTime(post.created_at)}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-3">
+                          {post.is_mine && (
+                            <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                              <Link
+                                href={`/community/board-post?id=${post.id}&edit=1`}
+                                className="underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
+                              >
+                                ✏️ 수정
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeletePostId(post.id)}
+                                className="underline-offset-2 transition-colors hover:text-red-300 hover:underline"
+                              >
+                                🗑️ 삭제
+                              </button>
+                            </div>
+                          )}
+                          <span className="text-xs text-slate-400">✨ {post.empathy_count}</span>
+                        </div>
+                      </div>
+                    )
+                  )
                 ) : (
                   <p className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-8 text-center text-xs text-slate-500">
                     아직 작성된 글이 없어요. 첫 이야기를 남겨보세요 ✨

@@ -59,13 +59,24 @@ export default function BoardPostPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = Number(params.get("id"));
+    // 리스트의 "✏️ 수정" 링크가 ?edit=1을 붙여 보내면, 상세를 읽기 모드로 먼저 보여주지 않고
+    // 곧바로 편집 폼을 연다.
+    const wantsEdit = params.get("edit") === "1";
     if (!Number.isFinite(id) || id <= 0) {
       setNotFound(true);
       setIsLoading(false);
       return;
     }
     getCommunityPost(id)
-      .then(setPost)
+      .then((data) => {
+        setPost(data);
+        if (wantsEdit && data.is_mine && Date.now() - new Date(data.created_at).getTime() < POST_EDIT_WINDOW_MS) {
+          setEditTitle(data.title);
+          setEditContent(data.content);
+          setEditIsAnonymous(data.is_anonymous);
+          setIsEditing(true);
+        }
+      })
       .catch(() => setNotFound(true))
       .finally(() => setIsLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
