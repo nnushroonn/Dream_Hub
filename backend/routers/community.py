@@ -222,12 +222,14 @@ def toggle_dream_empathy(
 
 
 class CommunityPostInput(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1, max_length=1000)
     is_anonymous: bool = False
 
 
 class CommunityPostResponse(BaseModel):
     id: int
+    title: str
     content: str
     empathy_count: int
     is_liked_by_me: bool
@@ -268,6 +270,7 @@ def _build_post_entries(
     return [
         {
             "id": post.id,
+            "title": post.title,
             "content": post.content,
             "empathy_count": _post_empathy_count(db, post.id),
             "is_liked_by_me": post.id in liked_ids,
@@ -291,6 +294,20 @@ def list_community_posts(
     return _build_post_entries(db, posts, liked_ids, current_user.id if current_user else None)
 
 
+@router.get("/posts/{post_id}", response_model=CommunityPostResponse)
+def get_community_post(
+    post_id: int,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+) -> dict:
+    """리스트에서 제목을 눌러 들어오는 자유 광장 게시글 상세 - 로그인 없이도 조회 가능."""
+    post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
+    liked_ids = _liked_post_ids(db, current_user, [post]) if current_user else set()
+    return _build_post_entries(db, [post], liked_ids, current_user.id if current_user else None)[0]
+
+
 @router.get("/my-posts", response_model=list[CommunityPostResponse])
 def list_my_posts(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[dict]:
     """마이페이지 '💬 내가 쓴 자유글' 탭 - 로그인한 본인이 작성한 자유 광장 글 전체."""
@@ -310,16 +327,18 @@ def create_community_post(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    title = payload.title.strip()
     content = payload.content.strip()
-    if not content:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="내용을 입력해 주세요.")
+    if not title or not content:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="제목과 내용을 모두 입력해 주세요.")
 
-    post = CommunityPost(user_id=current_user.id, content=content, is_anonymous=payload.is_anonymous)
+    post = CommunityPost(user_id=current_user.id, title=title, content=content, is_anonymous=payload.is_anonymous)
     db.add(post)
     db.commit()
     db.refresh(post)
     return {
         "id": post.id,
+        "title": post.title,
         "content": post.content,
         "empathy_count": 0,
         "is_liked_by_me": False,
@@ -347,16 +366,19 @@ def update_community_post(
     if datetime.now(timezone.utc) - post.created_at > POST_EDIT_WINDOW:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="게시 후 10분이 지나 더 이상 수정할 수 없습니다.")
 
+    title = payload.title.strip()
     content = payload.content.strip()
-    if not content:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="내용을 입력해 주세요.")
+    if not title or not content:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="제목과 내용을 모두 입력해 주세요.")
 
+    post.title = title
     post.content = content
     post.is_anonymous = payload.is_anonymous
     db.commit()
     db.refresh(post)
     return {
         "id": post.id,
+        "title": post.title,
         "content": post.content,
         "empathy_count": _post_empathy_count(db, post.id),
         "is_liked_by_me": post.id in _liked_post_ids(db, current_user, [post]),

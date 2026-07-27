@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { getAuthErrorMessage } from "@/api/auth";
@@ -11,19 +12,13 @@ import {
   createCommunityPost,
   createDream,
   createDreamComment,
-  createPostComment,
-  deleteCommunityPost,
   getCommunityPosts,
   getDreamComments,
   getDreamFeed,
-  getPostComments,
   getTrends,
-  POST_EDIT_WINDOW_MS,
   requestQuickAiInterpretation,
   setDreamVisibility,
   toggleDreamEmpathy,
-  togglePostEmpathy,
-  updateCommunityPost,
   type AiInterpretation,
   type CommunityPost,
   type DreamFeedAiReport,
@@ -183,17 +178,6 @@ export default function CommunityPage() {
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
-  // 한 번에 댓글 창을 펼칠 수 있는 게시글은 하나 - 다른 게시글의 댓글을 열면 이전 것은 접힌다.
-  const [openCommentsFor, setOpenCommentsFor] = useState<number | null>(null);
-
-  // 내 게시글 수정/삭제: 수정은 게시 후 POST_EDIT_WINDOW_MS(10분) 안에서만, 삭제는 언제든 가능하다.
-  const [editingPostId, setEditingPostId] = useState<number | null>(null);
-  const [editPostText, setEditPostText] = useState("");
-  const [editPostIsAnonymous, setEditPostIsAnonymous] = useState(false);
-  const [isSavingPostEdit, setIsSavingPostEdit] = useState(false);
-  const [editPostError, setEditPostError] = useState<string | null>(null);
-  const [confirmDeletePostId, setConfirmDeletePostId] = useState<number | null>(null);
-  const [isDeletingPost, setIsDeletingPost] = useState(false);
 
   // 사이드바의 "지금 뜨는 꿈 상징" 위젯 - 홈 화면과 같은 실제 집계(trends.py)를 그대로 재사용한다.
   const [trends, setTrends] = useState<Trend[]>([]);
@@ -201,6 +185,7 @@ export default function CommunityPage() {
   // 자유 광장 글쓰기 모달. 기본값은 "닉네임 공개"(isAnonymous: false) - 무의식 피드가
   // 기본 익명인 것과 대비되는 자유 광장의 기본값이다. 모달을 열 때마다 다시 기본값으로 맞춘다.
   const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [composeTitle, setComposeTitle] = useState("");
   const [composeText, setComposeText] = useState("");
   const [composeIsAnonymous, setComposeIsAnonymous] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
@@ -286,83 +271,12 @@ export default function CommunityPage() {
     }
   };
 
-  const handlePostToggle = async (postId: number) => {
-    if (!isAuthenticated) {
-      router.push("/login");
-      return;
-    }
-    const previous = posts;
-    setPosts((prev) =>
-      prev.map((post) =>
-        post.id === postId
-          ? {
-              ...post,
-              is_liked_by_me: !post.is_liked_by_me,
-              empathy_count: post.empathy_count + (post.is_liked_by_me ? -1 : 1),
-            }
-          : post
-      )
-    );
-    try {
-      const result = await togglePostEmpathy(postId);
-      setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, ...result } : post)));
-    } catch {
-      setPosts(previous);
-    }
-  };
-
-  // 게시 후 10분이 지났는지는 클라이언트 시각으로 즉시 판단해 버튼 자체를 숨긴다 -
-  // 실제 권한/시간 체크는 PUT 엔드포인트가 서버에서 다시 하므로 이건 어디까지나 UX용.
-  const canEditPost = (post: CommunityPost) =>
-    post.is_mine && Date.now() - new Date(post.created_at).getTime() < POST_EDIT_WINDOW_MS;
-
-  const startEditPost = (post: CommunityPost) => {
-    setEditingPostId(post.id);
-    setEditPostText(post.content);
-    setEditPostIsAnonymous(post.is_anonymous);
-    setEditPostError(null);
-  };
-
-  const cancelEditPost = () => {
-    setEditingPostId(null);
-    setEditPostError(null);
-  };
-
-  const saveEditPost = async (postId: number) => {
-    const content = editPostText.trim();
-    if (!content || isSavingPostEdit) return;
-    setIsSavingPostEdit(true);
-    setEditPostError(null);
-    try {
-      const updated = await updateCommunityPost(postId, content, editPostIsAnonymous);
-      setPosts((prev) => prev.map((post) => (post.id === postId ? updated : post)));
-      setEditingPostId(null);
-    } catch (error) {
-      setEditPostError(getAuthErrorMessage(error));
-    } finally {
-      setIsSavingPostEdit(false);
-    }
-  };
-
-  const handleDeletePost = async (postId: number) => {
-    if (isDeletingPost) return;
-    setIsDeletingPost(true);
-    try {
-      await deleteCommunityPost(postId);
-      setPosts((prev) => prev.filter((post) => post.id !== postId));
-    } catch {
-      // 간단한 액션이라 별도 에러 배너 없이, 확인 상태만 닫고 목록은 그대로 둔다.
-    } finally {
-      setConfirmDeletePostId(null);
-      setIsDeletingPost(false);
-    }
-  };
-
   const openCompose = () => {
     if (!isAuthenticated) {
       router.push("/login");
       return;
     }
+    setComposeTitle("");
     setComposeText("");
     setComposeIsAnonymous(false);
     setPostError(null);
@@ -481,12 +395,13 @@ export default function CommunityPage() {
   };
 
   const handleCreatePost = async () => {
+    const title = composeTitle.trim();
     const content = composeText.trim();
-    if (!content || isPosting) return;
+    if (!title || !content || isPosting) return;
     setPostError(null);
     setIsPosting(true);
     try {
-      const created = await createCommunityPost(content, composeIsAnonymous);
+      const created = await createCommunityPost(title, content, composeIsAnonymous);
       setPosts((prev) => [created, ...prev]);
       setIsComposeOpen(false);
     } catch {
@@ -651,143 +566,32 @@ export default function CommunityPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col">
                 {isLoadingPosts ? (
-                  Array.from({ length: 3 }, (_, index) => (
-                    <div key={index} className="h-20 animate-pulse rounded-xl border border-white/[0.06] bg-white/[0.02]" />
+                  Array.from({ length: 5 }, (_, index) => (
+                    <div key={index} className="h-14 animate-pulse border-b border-white/10 bg-white/[0.02]" />
                   ))
                 ) : posts.length > 0 ? (
-                  posts.map((post) =>
-                    editingPostId === post.id ? (
-                      <article key={post.id} className={cardClass(post.is_anonymous)}>
-                        <textarea
-                          value={editPostText}
-                          onChange={(event) => setEditPostText(event.target.value)}
-                          rows={4}
-                          maxLength={1000}
-                          autoFocus
-                          className="w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
-                        />
-                        <div className="mt-3">
-                          <IdentitySwitch isAnonymous={editPostIsAnonymous} onChange={setEditPostIsAnonymous} nickname={nickname} />
-                        </div>
-                        {editPostError && <p className="mt-2 text-xs text-red-300">{editPostError}</p>}
-                        <div className="mt-3 flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={cancelEditPost}
-                            disabled={isSavingPostEdit}
-                            className="rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            취소
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => saveEditPost(post.id)}
-                            disabled={!editPostText.trim() || isSavingPostEdit}
-                            className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-4 py-2 text-xs font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {isSavingPostEdit ? "저장 중..." : "저장하기"}
-                          </button>
-                        </div>
-                      </article>
-                    ) : (
-                    <article key={post.id} className={cardClass(post.is_anonymous)}>
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="flex items-center gap-1.5 text-xs font-normal text-slate-400">
-                          <span>{post.is_anonymous ? "🎭" : "👤"}</span>
-                          {post.is_anonymous ? "익명의 탐험가" : post.author_display_name}
+                  posts.map((post) => (
+                    <div
+                      key={post.id}
+                      className="flex items-center justify-between gap-4 border-b border-white/10 px-2 py-3 transition-colors hover:bg-white/5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <Link href={`/community/board-post?id=${post.id}`} className="inline-flex min-w-0 items-baseline gap-1.5">
+                          <span className="truncate text-lg font-bold text-slate-100 hover:underline">{post.title}</span>
+                          {post.comment_count > 0 && (
+                            <span className="shrink-0 text-sm font-semibold text-violet-400">[{post.comment_count}]</span>
+                          )}
+                        </Link>
+                        {post.content && <p className="mt-0.5 line-clamp-1 text-sm text-slate-400">{post.content}</p>}
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          {post.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${post.author_display_name}`} · {formatPostTime(post.created_at)}
                         </p>
-                        {post.is_mine && confirmDeletePostId !== post.id && (
-                          <div className="flex shrink-0 items-center gap-2 text-[11px]">
-                            {canEditPost(post) && (
-                              <button
-                                type="button"
-                                onClick={() => startEditPost(post)}
-                                className="text-slate-500 underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
-                              >
-                                ✏️ 수정
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeletePostId(post.id)}
-                              className="text-slate-500 underline-offset-2 transition-colors hover:text-red-300 hover:underline"
-                            >
-                              🗑️ 삭제
-                            </button>
-                          </div>
-                        )}
                       </div>
-
-                      {confirmDeletePostId === post.id ? (
-                        <div className="my-2 flex items-center justify-between gap-3 rounded-xl border border-red-400/30 bg-red-500/10 px-3.5 py-2.5">
-                          <span className="text-xs text-red-200">이 글을 정말 삭제할까요?</span>
-                          <div className="flex shrink-0 gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeletePostId(null)}
-                              disabled={isDeletingPost}
-                              className="text-xs text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline disabled:opacity-50"
-                            >
-                              취소
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeletePost(post.id)}
-                              disabled={isDeletingPost}
-                              className="text-xs font-semibold text-red-300 underline-offset-2 hover:text-red-200 hover:underline disabled:opacity-50"
-                            >
-                              {isDeletingPost ? "삭제 중..." : "네, 삭제할게요"}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="my-2 whitespace-pre-line text-base font-medium text-slate-100">{post.content}</p>
-                      )}
-
-                      <p className="text-xs text-slate-500">{formatPostTime(post.created_at)}</p>
-                      <div className="mt-3 flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => handlePostToggle(post.id)}
-                          className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                            post.is_liked_by_me
-                              ? "border-violet-400/60 bg-violet-500/25 text-violet-100"
-                              : "border-white/10 text-slate-300 hover:border-violet-400/30 hover:text-slate-100"
-                          }`}
-                        >
-                          ✨ 공감{post.empathy_count > 0 ? ` ${post.empathy_count}` : ""}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setOpenCommentsFor((prev) => (prev === post.id ? null : post.id))}
-                          className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                            openCommentsFor === post.id
-                              ? "border-violet-400/60 bg-violet-500/25 text-violet-100"
-                              : "border-white/10 text-slate-300 hover:border-violet-400/30 hover:text-slate-100"
-                          }`}
-                        >
-                          💬 댓글{post.comment_count > 0 ? ` ${post.comment_count}` : ""}
-                        </button>
-                      </div>
-
-                      <CommentSection
-                        targetId={post.id}
-                        isOpen={openCommentsFor === post.id}
-                        defaultAnonymous={post.is_anonymous}
-                        nickname={nickname}
-                        isAuthenticated={isAuthenticated}
-                        onRequireLogin={() => router.push("/login")}
-                        onCommentCountChange={(count) =>
-                          setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, comment_count: count } : p)))
-                        }
-                        fetchComments={getPostComments}
-                        submitComment={createPostComment}
-                      />
-                    </article>
-                    )
-                  )
+                      <span className="shrink-0 text-xs text-slate-400">✨ {post.empathy_count}</span>
+                    </div>
+                  ))
                 ) : (
                   <p className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-8 text-center text-xs text-slate-500">
                     아직 작성된 글이 없어요. 첫 이야기를 남겨보세요 ✨
@@ -874,14 +678,23 @@ export default function CommunityPage() {
               </div>
             </div>
 
+            <input
+              type="text"
+              value={composeTitle}
+              onChange={(event) => setComposeTitle(event.target.value)}
+              placeholder="제목을 입력하세요"
+              maxLength={200}
+              autoFocus
+              className="mt-4 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+            />
+
             <textarea
               value={composeText}
               onChange={(event) => setComposeText(event.target.value)}
               placeholder="자유롭게 이야기를 나눠보세요..."
               rows={4}
               maxLength={1000}
-              autoFocus
-              className="mt-4 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+              className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
             />
             {postError && <p className="mt-2 text-xs text-red-300">{postError}</p>}
 
@@ -889,7 +702,7 @@ export default function CommunityPage() {
               <button
                 type="button"
                 onClick={handleCreatePost}
-                disabled={!composeText.trim() || isPosting}
+                disabled={!composeTitle.trim() || !composeText.trim() || isPosting}
                 className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isPosting ? "게시 중..." : "게시하기"}

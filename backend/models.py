@@ -224,6 +224,8 @@ class CommunityPost(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    # 리스트형 게시판으로 전환하며 추가된 필드 - 기존 행은 마이그레이션 시 빈 문자열로 채워진다.
+    title: Mapped[str] = mapped_column(String(200), nullable=False, server_default="")
     content: Mapped[str] = mapped_column(String(1000), nullable=False)
     # 기본값은 자유 광장의 기본 모드(닉네임 공개)에 맞춰 false.
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import {
   getMyLikedDreams,
@@ -108,7 +109,10 @@ export default function MyActivityTabs() {
               myPosts.length > 0 ? (
                 myPosts.map((post) => (
                   <div key={post.id} className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
-                    <p className="line-clamp-3 text-sm text-slate-200">{post.content}</p>
+                    <Link href={`/community/board-post?id=${post.id}`} className="text-sm font-semibold text-slate-100 hover:underline">
+                      {post.title}
+                    </Link>
+                    <p className="mt-1 line-clamp-2 text-sm text-slate-400">{post.content}</p>
                     <p className="mt-2 text-[11px] text-slate-500">
                       ✨ {post.empathy_count} · 💬 {post.comment_count}
                     </p>

@@ -294,6 +294,7 @@ export async function getMyLikedDreams(): Promise<DreamFeedEntry[]> {
 // 💬 자유 광장: 꿈과 무관한 자유 게시글.
 export interface CommunityPost {
   id: number;
+  title: string;
   content: string;
   empathy_count: number;
   is_liked_by_me: boolean;
@@ -310,16 +311,31 @@ export async function getCommunityPosts(): Promise<CommunityPost[]> {
   return data;
 }
 
-export async function createCommunityPost(content: string, isAnonymous: boolean): Promise<CommunityPost> {
-  const { data } = await api.post<CommunityPost>("/api/community/posts", { content, is_anonymous: isAnonymous });
+// 리스트에서 제목을 눌러 들어오는 상세 페이지용 단건 조회 - 로그인 없이도 조회 가능.
+export async function getCommunityPost(postId: number): Promise<CommunityPost> {
+  const { data } = await api.get<CommunityPost>(`/api/community/posts/${postId}`);
+  return data;
+}
+
+export async function createCommunityPost(title: string, content: string, isAnonymous: boolean): Promise<CommunityPost> {
+  const { data } = await api.post<CommunityPost>("/api/community/posts", { title, content, is_anonymous: isAnonymous });
   return data;
 }
 
 // 게시 후 10분이 지나면 서버가 403으로 거절한다 - 프론트는 POST_EDIT_WINDOW_MS로 버튼 자체를 미리 숨긴다.
 export const POST_EDIT_WINDOW_MS = 10 * 60 * 1000;
 
-export async function updateCommunityPost(postId: number, content: string, isAnonymous: boolean): Promise<CommunityPost> {
-  const { data } = await api.put<CommunityPost>(`/api/community/posts/${postId}`, { content, is_anonymous: isAnonymous });
+export async function updateCommunityPost(
+  postId: number,
+  title: string,
+  content: string,
+  isAnonymous: boolean
+): Promise<CommunityPost> {
+  const { data } = await api.put<CommunityPost>(`/api/community/posts/${postId}`, {
+    title,
+    content,
+    is_anonymous: isAnonymous,
+  });
   return data;
 }
 
