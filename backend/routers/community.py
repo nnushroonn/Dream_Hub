@@ -31,6 +31,7 @@ from models import (
     InteractionType,
     User,
 )
+from routers.ai_interpretation import DreamSurveyInput
 from routers.auth import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/api/community", tags=["community"])
@@ -73,6 +74,9 @@ class DreamFeedEntry(BaseModel):
     share_with_ai_analysis: bool
     # 꿈 내용과는 별개로 공유하면서 덧붙인 한마디(질문/자랑거리 등) - 있으면 카드 상단에 노출한다.
     share_caption: str | None = None
+    # summary는 목록용 90자 한 줄 요약이라 90자에서 "…"로 잘린다 - 피드 카드에서 꿈 원문을
+    # 끝까지(펼치기로) 보여주려면 survey 원본이 필요해 함께 내려준다.
+    survey: DreamSurveyInput
     ai_report: DreamFeedAiReport | None = None
     comment_count: int
 
@@ -127,6 +131,7 @@ def _build_dream_feed_entries(db: Session, entries: list[DreamEntry], liked_ids:
                 "author_display_name": _display_name(entry.user, entry.is_anonymous),
                 "share_with_ai_analysis": entry.share_with_ai_analysis,
                 "share_caption": entry.share_caption,
+                "survey": entry.survey,
                 "comment_count": _dream_comment_count(db, entry.id),
                 "ai_report": (
                     {

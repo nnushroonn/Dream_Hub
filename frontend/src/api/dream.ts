@@ -263,6 +263,9 @@ export interface DreamFeedEntry {
   author_display_name: string | null;
   share_with_ai_analysis: boolean;
   share_caption: string | null;
+  // summary는 목록용 90자 요약이라 "…"로 잘려 있다 - 카드에서 원문을 끝까지(펼치기로) 보여주려면
+  // 이 survey로 buildDreamOriginalContent를 다시 돌려야 한다.
+  survey: DreamSurvey;
   comment_count: number;
   ai_report: DreamFeedAiReport | null;
 }

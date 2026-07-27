@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { getAuthErrorMessage } from "@/api/auth";
 import {
   buildDreamOneLineSummary,
+  buildDreamOriginalContent,
   createCommunityPost,
   createDream,
   createDreamComment,
@@ -32,6 +33,7 @@ import {
 import CommentSection from "@/components/CommentSection";
 import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
 import DreamGuidePanel from "@/components/DreamGuidePanel";
+import DreamOriginalQuote from "@/components/DreamOriginalQuote";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
 import { MOOD_OPTIONS } from "@/lib/moodBucket";
@@ -590,7 +592,9 @@ export default function CommunityPage() {
                         <h3 className="truncate text-sm font-semibold text-white">
                           {dream.emotion} {dream.title}
                         </h3>
-                        {dream.summary && <p className="mt-2 text-xs leading-relaxed text-slate-400">{dream.summary}</p>}
+                        <div className="mt-2">
+                          <DreamOriginalQuote content={buildDreamOriginalContent(dream.survey)} />
+                        </div>
                         {dream.tags.length > 0 && (
                           <div className="mt-3 flex flex-wrap gap-1.5">
                             {dream.tags.map((tag) => (
