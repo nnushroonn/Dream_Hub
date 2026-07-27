@@ -48,6 +48,23 @@ interface DreamDraft {
   meta: { selectedDate: string; mood: string; isPublic: boolean };
 }
 
+// 복구 모달의 데이터 프리뷰 박스에 쓰는 요약 정보.
+interface DraftPreview {
+  savedAt: number;
+  title: string;
+  content: string;
+}
+
+function formatDraftSavedAt(savedAt: number): string {
+  const formatted = new Date(savedAt).toLocaleString("ko-KR", {
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${formatted}에 저장된 조각`;
+}
+
 // 6단계 위저드 초안에 실제로 뭔가 채워졌는지 - 전부 빈 값이면 "작성 중"으로 치지 않는다.
 function isWizardDraftDirty(draft: DreamSurvey | null): boolean {
   if (!draft) return false;
@@ -128,8 +145,9 @@ export default function DiaryPage() {
   const [wizardDraft, setWizardDraft] = useState<DreamSurvey | null>(null);
   // localStorage에서 "불러오기"로 복원한 6단계 응답 - DreamWizard의 initialData로 그대로 흘려보낸다.
   const [restoredWizardDraft, setRestoredWizardDraft] = useState<DreamSurvey | undefined>(undefined);
-  // 마운트 시 복원 가능한 임시 저장 기록이 있으면 켜지는 알림 배너 표시 여부.
+  // 마운트 시 복원 가능한 임시 저장 기록이 있으면 켜지는 복구 모달 표시 여부와, 그 안의 프리뷰 박스에 쓸 요약.
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
+  const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
 
   const setGlobalDirty = useUnsavedChangesStore((state) => state.setDirty);
 
@@ -141,14 +159,21 @@ export default function DiaryPage() {
     setSelectedDate(todayDateInputValue());
   }, []);
 
-  // 마운트 시 localStorage에 복원할 만한 임시 저장 초안이 있는지 한 번만 확인한다.
+  // 마운트 시 localStorage에 복원할 만한 임시 저장 초안이 있는지 한 번만 확인하고,
+  // 복구 모달의 데이터 프리뷰 박스에 쓸 제목/본문 요약도 함께 뽑아둔다.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
       if (!raw) return;
       const draft = JSON.parse(raw) as DreamDraft;
       const hasContent = Boolean(draft.quickTitle?.trim() || draft.quickText?.trim()) || isWizardDraftDirty(draft.precise);
-      if (hasContent) setHasSavedDraft(true);
+      if (!hasContent) return;
+
+      setHasSavedDraft(true);
+      const isQuick = draft.recordMode === "quick";
+      const title = (isQuick ? draft.quickTitle : draft.precise?.title)?.trim() || "제목 없는 꿈";
+      const content = isQuick ? draft.quickText?.trim() ?? "" : draft.precise ? buildDreamOneLineSummary(draft.precise) : "";
+      setDraftPreview({ savedAt: draft.savedAt, title, content });
     } catch {
       // 손상된 초안은 조용히 무시한다.
     }
@@ -215,14 +240,17 @@ export default function DiaryPage() {
       setRestoredWizardDraft(draft.precise ?? undefined);
       setWizardKey((key) => key + 1);
       setHasSavedDraft(false);
+      setDraftPreview(null);
     } catch {
       setHasSavedDraft(false);
+      setDraftPreview(null);
     }
   };
 
   const discardDraft = () => {
     localStorage.removeItem(DRAFT_STORAGE_KEY);
     setHasSavedDraft(false);
+    setDraftPreview(null);
   };
 
   // 꿈해몽 사전의 "🔮 내 꿈일기에 이 상징 기록하기"에서 title(+mood/badge/expert/targetChip/dynamicsChip)이
@@ -543,28 +571,6 @@ export default function DiaryPage() {
               </button>
             </div>
 
-            {/* 자동 임시 저장 복원 배너: 이전에 쓰다 만 기록이 있으면 은은하게 펄스하며 안내한다 */}
-            {hasSavedDraft && !editingEntry && (
-              <div className="mb-5 flex animate-pulse items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200">
-                <span>💡 작성 중이던 임시 저장된 기록이 있습니다.</span>
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={restoreDraft}
-                    className="rounded-full border border-amber-400/40 bg-amber-500/15 px-3 py-1 font-medium text-amber-100 transition-colors hover:bg-amber-500/25"
-                  >
-                    불러오기
-                  </button>
-                  <button
-                    type="button"
-                    onClick={discardDraft}
-                    className="rounded-full border border-white/10 px-3 py-1 text-slate-300 transition-colors hover:border-red-400/40 hover:text-red-200"
-                  >
-                    삭제
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* 고정형 메타 정보: 날짜 · 감정 · 공개 범위 */}
             <div className="space-y-5">
@@ -773,6 +779,47 @@ export default function DiaryPage() {
           </div>
         </div>
       </main>
+
+      {/* 임시 저장 데이터 복구 모달: 마운트 시 복원 가능한 초안이 있으면 전체 화면을 덮는
+          모달로 강하게 안내한다 - 예전에는 은은한 배너였지만, 데이터 유실을 막으려면 그냥
+          지나치기 쉬운 배너보다 확실히 눈에 띄는 편이 낫다. */}
+      {hasSavedDraft && !editingEntry && draftPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-md">
+          <div className="w-full max-w-sm rounded-3xl border border-purple-500/30 bg-slate-950 p-7 shadow-[0_0_50px_rgba(139,92,246,0.3)]">
+            <p className="text-center text-xs tracking-widest text-indigo-300/70 uppercase">Draft Recovery</p>
+            <h2 className="mt-1.5 text-center text-lg font-semibold text-white">💡 작성 중이던 꿈의 조각이 남아있어요</h2>
+            <p className="mt-2 text-center text-sm text-slate-400">이어서 기록할까요, 아니면 새로 시작할까요?</p>
+
+            <div className="my-4 rounded-xl border border-white/5 bg-white/[0.03] p-3">
+              <p className="text-xs text-violet-300/70">{formatDraftSavedAt(draftPreview.savedAt)}</p>
+              <p className="mt-1.5 text-sm font-medium text-slate-200">{draftPreview.title}</p>
+              {draftPreview.content && (
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                  {draftPreview.content.slice(0, 40)}
+                  {draftPreview.content.length > 40 ? "..." : ""}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={discardDraft}
+                className="px-4 py-2 text-sm text-slate-500 transition-colors hover:text-slate-300"
+              >
+                새로 쓰기
+              </button>
+              <button
+                type="button"
+                onClick={restoreDraft}
+                className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-3 font-medium text-white shadow-lg transition-transform hover:from-purple-500 hover:to-indigo-500 active:scale-95"
+              >
+                🔮 이어서 기록하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI 해몽 결과 모달: AI 응답을 기다리지 않고 즉시 연다 - 제목/요약(가벼운 데이터)은 곧바로
           보여주고, 무거운 리포트 영역만 interpretation이 도착할 때까지 로딩으로 채운다. */}
