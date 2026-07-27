@@ -123,12 +123,76 @@ function resolveChipState(options: ChipOption[], value: string): { chip: string;
   return matched ? { chip: matched.label, other: "" } : { chip: OTHER_LABEL, other: value };
 }
 
+/** Step 1 전용: 최대 2개까지 고를 수 있어, brightness 문자열을 " · "로 합쳐 저장하고
+ * 불러올 때는 다시 분리해 최대 2개의 칩(또는 "기타"+커스텀값)으로 복원한다. */
+function resolveLightChips(value: string): { chips: string[]; other: string } {
+  if (!value) return { chips: [], other: "" };
+  const parts = value.split(" · ").map((part) => part.trim()).filter(Boolean).slice(0, 2);
+  const chips: string[] = [];
+  let other = "";
+  for (const part of parts) {
+    const matched = LIGHT_OPTIONS.find((opt) => opt.label !== OTHER_LABEL && opt.label === part);
+    if (matched) {
+      if (!chips.includes(matched.label)) chips.push(matched.label);
+    } else {
+      if (!chips.includes(OTHER_LABEL)) chips.push(OTHER_LABEL);
+      other = part;
+    }
+  }
+  return { chips, other };
+}
+
+/** Step 1의 최대 2개 선택을 하나의 brightness 문자열로 합친다 - "기타"는 커스텀 입력값으로 치환. */
+function buildBrightnessValue(lightChips: string[], lightOther: string): string {
+  return lightChips
+    .map((chip) => (chip === OTHER_LABEL ? lightOther.trim() : chip))
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function chipClass(selected: boolean): string {
   return `w-full rounded-xl border px-3 py-2.5 text-left text-sm backdrop-blur-md transition-all duration-200 ${
     selected
       ? "border-purple-500 bg-purple-600/30 text-white shadow-[0_0_10px_rgba(168,85,247,0.5)]"
       : "border-white/10 bg-white/5 text-slate-300 hover:border-purple-400/30 hover:bg-purple-500/20"
   }`;
+}
+
+// Step 1 카드의 아이콘 성격별 은은한 포인트 컬러 - 텍스트를 다시 읽지 않아도 첫인상을 색으로 구분할 수 있게 한다.
+type LightTheme = "amber" | "slate" | "neon" | "neutral";
+
+const LIGHT_THEME: Record<string, LightTheme> = {
+  "햇살이 눈부시고 엄청 맑았어요": "amber",
+  "새벽녘이나 노을빛처럼 은은했어요": "amber",
+  "눈앞이 캄캄하고 아주 어두웠어요": "slate",
+  "안개가 낀 것처럼 흐릿하고 답답했어요": "slate",
+  "화려한 조명이나 네온사인이 반짝였어요": "neon",
+  "주변 배경이랑 빛이 시시각각 변했어요": "neon",
+};
+
+/** Step 1 전용 칩 스타일: 선택되면 테마와 무관하게 동일한 강조색(퍼플)으로, 선택 전에는
+ * 카드 성격별 은은한 글로우로, 최대 선택(2개) 도달 후 남은 미선택 카드는 흐릿하게 비활성화한다. */
+function lightChipClass(label: string, selected: boolean, limitReached: boolean): string {
+  const base = "relative w-full rounded-xl border px-3 py-2.5 text-left text-sm backdrop-blur-md transition-all duration-200";
+
+  if (selected) {
+    return `${base} border-purple-500 bg-purple-500/10 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]`;
+  }
+  if (limitReached) {
+    return `${base} cursor-not-allowed border-white/5 bg-white/[0.02] text-slate-600 opacity-50`;
+  }
+
+  const theme = LIGHT_THEME[label] ?? "neutral";
+  switch (theme) {
+    case "amber":
+      return `${base} border-amber-400/20 bg-amber-500/[0.04] text-slate-300 shadow-[0_0_15px_rgba(245,158,11,0.15)] hover:border-amber-400/40 hover:bg-amber-500/10`;
+    case "slate":
+      return `${base} border-slate-400/25 bg-slate-500/[0.06] text-slate-300 shadow-[0_0_15px_rgba(100,116,139,0.18)] hover:border-slate-400/45 hover:bg-slate-500/10`;
+    case "neon":
+      return `${base} border-purple-400/25 bg-purple-500/[0.04] text-slate-300 shadow-[0_0_15px_rgba(168,85,247,0.2)] hover:border-purple-400/50 hover:bg-purple-500/10`;
+    default:
+      return `${base} border-white/10 bg-white/5 text-slate-300 hover:border-purple-400/30 hover:bg-purple-500/20`;
+  }
 }
 
 // 선명도 슬라이더 값을 친구에게 말하듯 담백한 구어체 한 줄로 풀어준다.
@@ -203,10 +267,19 @@ export default function DreamWizard({
   const [phase, setPhase] = useState<SlidePhase>("idle");
   const [direction, setDirection] = useState<1 | -1>(1);
 
-  const lightInit = initialData ? resolveChipState(LIGHT_OPTIONS, initialData.brightness) : null;
-  const [light, setLight] = useState<string | null>(lightInit?.chip ?? null);
-  const [lightOther, setLightOther] = useState(lightInit?.other ?? "");
+  const lightInit = resolveLightChips(initialData?.brightness ?? "");
+  const [light, setLight] = useState<string[]>(lightInit.chips);
+  const [lightOther, setLightOther] = useState(lightInit.other);
   const [title, setTitle] = useState(initialData?.title ?? initialTitle ?? "");
+
+  // Step 1은 최대 2개까지 고를 수 있다 - 이미 2개 선택된 상태에서 새 카드를 누르면 조용히 무시한다.
+  const toggleLight = (label: string) => {
+    setLight((prev) => {
+      if (prev.includes(label)) return prev.filter((item) => item !== label);
+      if (prev.length >= 2) return prev;
+      return [...prev, label];
+    });
+  };
 
   const spaceInit = initialData ? resolveChipState(SPACE_OPTIONS, initialData.space_depth) : null;
   const [space, setSpace] = useState<string | null>(spaceInit?.chip ?? null);
@@ -246,7 +319,7 @@ export default function DreamWizard({
   useEffect(() => {
     onDraftChange?.({
       title: title.trim(),
-      brightness: (light === OTHER_LABEL ? lightOther.trim() : light) ?? "",
+      brightness: buildBrightnessValue(light, lightOther),
       space_depth: (space === OTHER_LABEL ? spaceOther.trim() : space) ?? "",
       space_detail: spaceDetail.trim(),
       identity_factor: (projection === OTHER_LABEL ? projectionOther.trim() : projection) ?? "",
@@ -301,7 +374,7 @@ export default function DreamWizard({
     reader.readAsDataURL(file);
   };
 
-  const step1Ready = light !== null && (light !== OTHER_LABEL || lightOther.trim() !== "") && title.trim() !== "";
+  const step1Ready = light.length > 0 && (!light.includes(OTHER_LABEL) || lightOther.trim() !== "") && title.trim() !== "";
   const step2Ready = space !== null && (space !== OTHER_LABEL || spaceOther.trim() !== "") && spaceDetail.trim() !== "";
   const step3Ready =
     projection !== null && (projection !== OTHER_LABEL || projectionOther.trim() !== "") && targetDetail.trim() !== "";
@@ -328,7 +401,7 @@ export default function DreamWizard({
 
     const survey: DreamSurvey = {
       title: title.trim(),
-      brightness: (light === OTHER_LABEL ? lightOther.trim() : light) ?? "",
+      brightness: buildBrightnessValue(light, lightOther),
       space_depth: (space === OTHER_LABEL ? spaceOther.trim() : space) ?? "",
       space_detail: spaceDetail.trim(),
       identity_factor: (projection === OTHER_LABEL ? projectionOther.trim() : projection) ?? "",
@@ -392,22 +465,33 @@ export default function DreamWizard({
           {step === 1 && (
             <div>
               <h3 className="text-base font-medium text-white">
-                눈을 떴을 때 꿈속 주변의 전체적인 분위기는 어땠나요?
+                눈을 떴을 때 꿈속 공간의 첫인상(풍경이나 밝기)은 어땠나요?
               </h3>
+              <p className="mt-1 text-xs text-slate-500">가장 가까운 느낌으로 최대 2개까지 고를 수 있어요.</p>
               <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-                {LIGHT_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.label}
-                    type="button"
-                    onClick={() => setLight(opt.label)}
-                    className={chipClass(light === opt.label)}
-                  >
-                    <span className="mr-1.5">{opt.emoji}</span>
-                    {opt.label}
-                  </button>
-                ))}
+                {LIGHT_OPTIONS.map((opt) => {
+                  const selected = light.includes(opt.label);
+                  const limitReached = !selected && light.length >= 2;
+                  return (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      onClick={() => toggleLight(opt.label)}
+                      disabled={limitReached}
+                      className={lightChipClass(opt.label, selected, limitReached)}
+                    >
+                      <span className="mr-1.5">{opt.emoji}</span>
+                      {opt.label}
+                      {selected && (
+                        <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-purple-500 text-[10px] shadow-[0_0_8px_rgba(168,85,247,0.6)]">
+                          ✨
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-              {light === OTHER_LABEL && (
+              {light.includes(OTHER_LABEL) && (
                 <input
                   type="text"
                   value={lightOther}
@@ -418,7 +502,7 @@ export default function DreamWizard({
                 />
               )}
               <SubjectiveGuideField
-                visible={light !== null}
+                visible={light.length > 0}
                 guide="💡 이 꿈에 등장한 가장 중요한 소재를 중심으로 신비로운 [꿈 제목]을 붙여주세요."
                 value={title}
                 onChange={setTitle}
