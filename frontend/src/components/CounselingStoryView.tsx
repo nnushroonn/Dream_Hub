@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useState } from "react";
+import { AnimatePresence, motion, type PanInfo } from "framer-motion";
 
 import type { CounselingReport } from "@/api/dream";
 
-const STEP_DURATION_MS = 5000;
 const TOTAL_STEPS = 4;
+const DRAG_THRESHOLD_PX = 80;
 
 const STEP_THEMES = [
   "bg-gradient-to-b from-indigo-900 to-purple-800",
@@ -111,7 +111,8 @@ interface CounselingStoryViewProps {
   saveLabel?: string;
 }
 
-// 🎬 인스타그램 스토리 형태의 4컷 스와이프 카드: 무의식 상담 리포트(counseling_report) 전용 뷰어.
+// 🎠 인스타그램 다중 이미지 게시물 형태의 수동 캐러셀: 무의식 상담 리포트(counseling_report) 전용 뷰어.
+// 자동 전환 없이, 좌우 드래그 스와이프 또는 화살표 버튼 클릭으로만 컷이 넘어간다.
 export default function CounselingStoryView({ report, tags, onSave, isSaving, saveLabel }: CounselingStoryViewProps) {
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
@@ -123,13 +124,10 @@ export default function CounselingStoryView({ report, tags, onSave, isSaving, sa
     setStep(next);
   };
 
-  // 마지막 컷(행동 지침)은 자동으로 더 넘어가지 않고 멈춘 채로 남는다.
-  useEffect(() => {
-    if (step >= TOTAL_STEPS - 1) return;
-    const timer = window.setTimeout(() => goTo(step + 1, 1), STEP_DURATION_MS);
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
+  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (info.offset.x <= -DRAG_THRESHOLD_PX) goTo(step + 1, 1);
+    else if (info.offset.x >= DRAG_THRESHOLD_PX) goTo(step - 1, -1);
+  };
 
   const handleShare = async () => {
     const text = `${STEP_LABELS[step]}\n${contentFor(report, step)}`;
@@ -152,76 +150,82 @@ export default function CounselingStoryView({ report, tags, onSave, isSaving, sa
 
   return (
     <div
-      className={`relative mx-auto flex aspect-[9/16] max-h-[640px] w-full max-w-sm flex-col overflow-hidden rounded-3xl transition-colors duration-500 ${STEP_THEMES[step]}`}
+      className={`relative mx-auto flex w-full max-w-sm flex-col overflow-hidden rounded-3xl transition-colors duration-500 ${STEP_THEMES[step]}`}
     >
-      {/* 스토리 프로그레스 바 */}
-      <div className="absolute inset-x-0 top-0 z-20 flex gap-1 p-3">
-        {STEP_LABELS.map((_, i) => (
-          <div key={`track-${i}`} className="h-1 flex-1 overflow-hidden rounded-full bg-white/20">
-            <motion.div
-              key={`bar-${i}-${step}`}
-              className="h-full rounded-full bg-white"
-              initial={{ width: i < step ? "100%" : "0%" }}
-              animate={{ width: i <= step ? "100%" : "0%" }}
-              transition={i === step ? { duration: STEP_DURATION_MS / 1000, ease: "linear" } : { duration: 0 }}
-            />
-          </div>
-        ))}
-      </div>
+      <p className="pt-6 text-center text-xs font-medium tracking-wide text-white/80">{STEP_LABELS[step]}</p>
 
-      <p className="absolute inset-x-0 top-6 z-20 text-center text-xs font-medium tracking-wide text-white/80">
-        {STEP_LABELS[step]}
-      </p>
-
-      {/* 보이지 않는 탭 존: 좌측 30% 이전 컷, 우측 70% 다음 컷 */}
+      {/* 좌우 화살표: 클릭 시에만 컷이 넘어간다. 첫/마지막 컷에서는 비활성화. */}
       <button
         type="button"
         aria-label="이전 컷"
         onClick={() => goTo(step - 1, -1)}
-        className="absolute inset-y-0 left-0 z-10 w-[30%]"
-      />
+        disabled={step === 0}
+        className="absolute left-2 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-md transition-opacity disabled:pointer-events-none disabled:opacity-0"
+      >
+        ◀
+      </button>
       <button
         type="button"
         aria-label="다음 컷"
         onClick={() => goTo(step + 1, 1)}
-        className="absolute inset-y-0 right-0 z-10 w-[70%]"
-      />
+        disabled={step === TOTAL_STEPS - 1}
+        className="absolute right-2 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-md transition-opacity disabled:pointer-events-none disabled:opacity-0"
+      >
+        ▶
+      </button>
 
-      {/* 슬라이드 콘텐츠 */}
-      <div className="relative flex flex-1 items-center overflow-hidden px-6 pb-24 pt-16">
+      {/* 슬라이드 콘텐츠: 드래그 스와이프로도 컷을 넘길 수 있다. 텍스트 길이가 달라도
+          뷰포트가 덜컹거리지 않도록 min-h를 고정한다. */}
+      <div className="relative flex min-h-[400px] flex-1 items-center overflow-hidden px-6 py-8">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={step}
-            initial={{ x: direction > 0 ? "100%" : "-100%", opacity: 0 }}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.2}
+            onDragEnd={handleDragEnd}
+            initial={{ x: direction > 0 ? 100 : -100, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: direction > 0 ? "-100%" : "100%", opacity: 0 }}
+            exit={{ x: direction > 0 ? -100 : 100, opacity: 0 }}
             transition={{ duration: 0.35, ease: "easeInOut" }}
-            className="w-full"
+            className="w-full cursor-grab active:cursor-grabbing"
           >
             <StepContent step={step} report={report} tags={tags} />
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {/* 하단 고정 액션 바 */}
-      <div className="absolute inset-x-0 bottom-0 z-20 flex gap-2 bg-gradient-to-t from-black/70 to-transparent p-4 pt-10">
-        <button
-          type="button"
-          onClick={handleShare}
-          className="flex-1 rounded-full border border-white/30 bg-white/10 px-4 py-2.5 text-sm font-medium text-white backdrop-blur-md transition-colors hover:bg-white/20"
-        >
-          {shareCopied ? "✅ 복사 완료" : "🔗 공유하기"}
-        </button>
-        {onSave && (
+      {/* 하단: Dot 인디케이터 + 고정 액션 바 */}
+      <div className="relative z-20 flex flex-col items-center gap-3 bg-gradient-to-t from-black/70 to-transparent px-4 pb-4 pt-8">
+        <div className="flex items-center gap-1.5">
+          {Array.from({ length: TOTAL_STEPS }, (_, i) =>
+            i === step ? (
+              <span key={i} className="h-1.5 w-4 rounded-full bg-white transition-all" />
+            ) : (
+              <span key={i} className="h-1.5 w-1.5 rounded-full bg-white/30 transition-all" />
+            )
+          )}
+        </div>
+
+        <div className="flex w-full gap-2">
           <button
             type="button"
-            onClick={onSave}
-            disabled={isSaving}
-            className="flex-1 rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={handleShare}
+            className="flex-1 rounded-full border border-white/30 bg-white/10 px-4 py-2.5 text-sm font-medium text-white backdrop-blur-md transition-colors hover:bg-white/20"
           >
-            {isSaving ? "저장 중..." : saveLabel ?? "📖 기록장에 저장하기"}
+            {shareCopied ? "✅ 복사 완료" : "🔗 공유하기"}
           </button>
-        )}
+          {onSave && (
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={isSaving}
+              className="flex-1 rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSaving ? "저장 중..." : saveLabel ?? "📖 기록장에 저장하기"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
