@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { getPublicDream, type DreamEntryRecord } from "@/api/dream";
+import CounselingStoryView from "@/components/CounselingStoryView";
 import NavBar from "@/components/NavBar";
 
 // 홈 화면 우측 하단 실시간 토스트(LiveTicker)를 클릭했을 때 도착하는 익명 공개 상세 페이지.
@@ -102,38 +103,15 @@ export default function CommunityPostPage() {
               </div>
             </div>
 
-            {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 나눠 보여준다.
+            {/* 무의식 상담 리포트: 인스타그램 스토리 형태의 4컷 스와이프 카드 (읽기 전용 - 저장 액션 없음).
                 이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
             {entry.interpretation.counseling_report && (
-            <div className="mt-6 space-y-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
-              <p className="text-center text-xs tracking-wide text-indigo-300/70">🛋️ 무의식 상담 리포트</p>
-
-              <div>
-                <p className="text-xs font-medium text-violet-200">🛋️ 마음 읽기</p>
-                <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{entry.interpretation.counseling_report.empathy}</p>
+              <div className="mt-6">
+                <CounselingStoryView
+                  report={entry.interpretation.counseling_report}
+                  tags={entry.interpretation.tags}
+                />
               </div>
-
-              <div className="border-t border-white/5 pt-3">
-                <p className="text-xs font-medium text-violet-200">🔍 무의식의 무대</p>
-                <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
-                  {entry.interpretation.counseling_report.unconscious_stage}
-                </p>
-              </div>
-
-              <div className="border-t border-white/5 pt-3">
-                <p className="text-xs font-medium text-amber-200">⚠️ 현실 점검</p>
-                <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
-                  {entry.interpretation.counseling_report.reality_check}
-                </p>
-              </div>
-
-              <div className="border-t border-white/5 pt-3">
-                <p className="text-xs font-medium text-emerald-200">💡 오늘을 위한 행동 지침</p>
-                <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
-                  {entry.interpretation.counseling_report.action_plan}
-                </p>
-              </div>
-            </div>
             )}
           </div>
         )}

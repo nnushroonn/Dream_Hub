@@ -17,6 +17,7 @@ import {
   type DreamMood,
   type DreamSurvey,
 } from "@/api/dream";
+import CounselingStoryView from "@/components/CounselingStoryView";
 import DiaryCalendarPanel from "@/components/DiaryCalendarPanel";
 import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
 import DreamGuidePanel from "@/components/DreamGuidePanel";
@@ -938,63 +939,72 @@ export default function DiaryPage() {
                   </div>
                 </div>
 
-                {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 나눠 보여준다.
+                {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 인스타그램 스토리
+                    형태의 4컷 스와이프 카드로 보여준다. 저장 전 상태라 카드 하단 액션 바가 저장까지 겸한다.
                     이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
-                {interpretation.counseling_report && (
-                <div className="mt-6 space-y-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
-                  <p className="text-center text-xs tracking-wide text-indigo-300/70">🛋️ 무의식 상담 리포트</p>
+                {interpretation.counseling_report ? (
+                  <>
+                    <div className="mt-6">
+                      <CounselingStoryView
+                        report={interpretation.counseling_report}
+                        tags={interpretation.tags}
+                        onSave={handleSave}
+                        isSaving={isSaving}
+                        saveLabel={editingEntry ? "수정 내용 저장하고 확인" : "캘린더에 저장하고 확인"}
+                      />
+                    </div>
 
-                  <div>
-                    <p className="text-xs font-medium text-violet-200">🛋️ 마음 읽기</p>
-                    <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{interpretation.counseling_report.empathy}</p>
-                  </div>
+                    {saveError && (
+                      <p className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-300">
+                        {saveError}
+                      </p>
+                    )}
+                    {!isAuthenticated && (
+                      <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-center text-xs text-amber-200">
+                        저장하려면 로그인이 필요해요.
+                      </p>
+                    )}
 
-                  <div className="border-t border-white/5 pt-3">
-                    <p className="text-xs font-medium text-violet-200">🔍 무의식의 무대</p>
-                    <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
-                      {interpretation.counseling_report.unconscious_stage}
-                    </p>
-                  </div>
+                    <div className="mt-4 text-center">
+                      <Link
+                        href="/community"
+                        className="text-xs text-slate-400 underline-offset-2 transition-colors hover:text-violet-200 hover:underline"
+                      >
+                        커뮤니티로 이동
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {saveError && (
+                      <p className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-300">
+                        {saveError}
+                      </p>
+                    )}
+                    {!isAuthenticated && (
+                      <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-center text-xs text-amber-200">
+                        저장하려면 로그인이 필요해요.
+                      </p>
+                    )}
 
-                  <div className="border-t border-white/5 pt-3">
-                    <p className="text-xs font-medium text-amber-200">⚠️ 현실 점검</p>
-                    <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{interpretation.counseling_report.reality_check}</p>
-                  </div>
-
-                  <div className="border-t border-white/5 pt-3">
-                    <p className="text-xs font-medium text-emerald-200">💡 오늘을 위한 행동 지침</p>
-                    <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{interpretation.counseling_report.action_plan}</p>
-                  </div>
-                </div>
+                    <div className="mt-7 flex flex-col gap-2.5 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={!isAuthenticated || isSaving}
+                        className="flex-1 rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isSaving ? "저장 중..." : editingEntry ? "수정 내용 저장하고 확인" : "캘린더에 저장하고 확인"}
+                      </button>
+                      <Link
+                        href="/community"
+                        className="flex-1 rounded-full border border-white/10 px-5 py-2.5 text-center text-sm text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200"
+                      >
+                        커뮤니티로 이동
+                      </Link>
+                    </div>
+                  </>
                 )}
-
-                {saveError && (
-                  <p className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2.5 text-center text-xs text-red-300">
-                    {saveError}
-                  </p>
-                )}
-                {!isAuthenticated && (
-                  <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-center text-xs text-amber-200">
-                    저장하려면 로그인이 필요해요.
-                  </p>
-                )}
-
-                <div className="mt-7 flex flex-col gap-2.5 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={!isAuthenticated || isSaving}
-                    className="flex-1 rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isSaving ? "저장 중..." : editingEntry ? "수정 내용 저장하고 확인" : "캘린더에 저장하고 확인"}
-                  </button>
-                  <Link
-                    href="/community"
-                    className="flex-1 rounded-full border border-white/10 px-5 py-2.5 text-center text-sm text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200"
-                  >
-                    커뮤니티로 이동
-                  </Link>
-                </div>
               </>
             )}
           </div>
@@ -1103,40 +1113,15 @@ export default function DiaryPage() {
                 </div>
               </div>
 
-              {/* 무의식 상담 리포트: 해몽 본문과는 별개로, 공감/분석/경고/행동 4가지 관점을 나눠 보여준다.
+              {/* 무의식 상담 리포트: 인스타그램 스토리 형태의 4컷 스와이프 카드 (읽기 전용 - 저장 액션 없음).
                   이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
               {activeDetail.interpretation.counseling_report && (
-              <div className="mt-6 space-y-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
-                <p className="text-center text-xs tracking-wide text-indigo-300/70">🛋️ 무의식 상담 리포트</p>
-
-                <div>
-                  <p className="text-xs font-medium text-violet-200">🛋️ 마음 읽기</p>
-                  <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
-                    {activeDetail.interpretation.counseling_report.empathy}
-                  </p>
+                <div className="mt-6">
+                  <CounselingStoryView
+                    report={activeDetail.interpretation.counseling_report}
+                    tags={activeDetail.interpretation.tags}
+                  />
                 </div>
-
-                <div className="border-t border-white/5 pt-3">
-                  <p className="text-xs font-medium text-violet-200">🔍 무의식의 무대</p>
-                  <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
-                    {activeDetail.interpretation.counseling_report.unconscious_stage}
-                  </p>
-                </div>
-
-                <div className="border-t border-white/5 pt-3">
-                  <p className="text-xs font-medium text-amber-200">⚠️ 현실 점검</p>
-                  <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
-                    {activeDetail.interpretation.counseling_report.reality_check}
-                  </p>
-                </div>
-
-                <div className="border-t border-white/5 pt-3">
-                  <p className="text-xs font-medium text-emerald-200">💡 오늘을 위한 행동 지침</p>
-                  <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
-                    {activeDetail.interpretation.counseling_report.action_plan}
-                  </p>
-                </div>
-              </div>
               )}
             </div>
 
