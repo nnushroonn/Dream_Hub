@@ -84,6 +84,23 @@ function isWizardDraftDirty(draft: DreamSurvey | null): boolean {
   );
 }
 
+// ⚡ 10초 미니멀로 작성된 기록 판별: 백엔드 스키마엔 별도의 type/content 필드가 없고
+// 항상 같은 DreamSurvey 구조라서, 7단계 구조화 항목이 전부 비어 있고 자유 서술
+// (action_detail)만 채워져 있으면 미니멀 기록으로 간주한다.
+function isMinimalEntry(survey: DreamSurvey): boolean {
+  const hasStructuredAnswers = Boolean(
+    survey.brightness ||
+      survey.space_depth ||
+      survey.space_detail ||
+      survey.identity_factor ||
+      survey.target_detail ||
+      survey.action_physics ||
+      survey.reality_link ||
+      survey.reality_detail
+  );
+  return !hasStructuredAnswers && Boolean(survey.action_detail);
+}
+
 export default function DiaryPage() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -448,8 +465,12 @@ export default function DiaryPage() {
     setErrorMessage(null);
     setSaveError(null);
     setWizardKey((key) => key + 1);
-    // 이미 저장된 7단계 응답을 다시 다듬는 작업이라 항상 정밀 위저드로 연다.
-    setRecordMode("precise");
+    // ⚡ 10초 미니멀로 쓴 기록은 구조화된 7단계 데이터가 애초에 없으므로, 수정할 때도
+    // 원래 작성했던 미니멀 자유 서술 UI 그대로 열어준다. 그 외에는 정밀 위저드로 연다.
+    const minimal = isMinimalEntry(entry.survey);
+    setRecordMode(minimal ? "quick" : "precise");
+    setQuickTitle(minimal ? entry.title : "");
+    setQuickText(minimal ? entry.survey.action_detail : "");
     setDictionaryBridge(null);
     setCameFromDictionary(false);
     setWizardDraft(null);
@@ -659,7 +680,7 @@ export default function DiaryPage() {
 
             <div className="my-7 h-px bg-white/10" />
 
-            {/* 투트랙 기록 모드 탭: 기존 기록을 다듬는 수정 모드에서는 항상 정밀 위저드로 고정된다 */}
+            {/* 투트랙 기록 모드 탭: 기존 기록을 다듬는 수정 모드에서는 원래 작성했던 모드(quick/precise)로 고정된다 */}
             {!editingEntry && (
               <div className="mb-6 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-white/5 p-1.5 backdrop-blur-md">
                 <button
@@ -754,7 +775,7 @@ export default function DiaryPage() {
                     disabled={isLoading || !quickTitle.trim() || !quickText.trim()}
                     className="relative w-full rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-6 py-3 text-sm font-semibold text-white transition-all duration-300 group-hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    ⚡ 10초 만에 AI 해몽 받기
+                    {editingEntry ? "💾 수정 완료 및 재분석" : "⚡ 10초 만에 AI 해몽 받기"}
                   </button>
                 </div>
               </div>
