@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { getAuthErrorMessage } from "@/api/auth";
 import {
   buildDreamOneLineSummary,
+  buildDreamOriginalContent,
   createDream,
   deleteDream,
   requestAiInterpretation,
@@ -21,6 +22,7 @@ import CounselingStoryView, { shareCounselingReport } from "@/components/Counsel
 import DiaryCalendarPanel from "@/components/DiaryCalendarPanel";
 import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
 import DreamGuidePanel from "@/components/DreamGuidePanel";
+import DreamOriginalQuote from "@/components/DreamOriginalQuote";
 import DreamWizard from "@/components/DreamWizard";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
@@ -959,6 +961,7 @@ export default function DiaryPage() {
                 {interpretation.counseling_report ? (
                   <>
                     <div className="mt-6">
+                      <DreamOriginalQuote content={buildDreamOriginalContent(lastSurvey)} />
                       <CounselingStoryView
                         report={interpretation.counseling_report}
                         tags={interpretation.tags}
@@ -1131,6 +1134,7 @@ export default function DiaryPage() {
                   이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
               {activeDetail.interpretation.counseling_report && (
                 <div className="mt-6">
+                  <DreamOriginalQuote content={buildDreamOriginalContent(activeDetail.survey)} />
                   <CounselingStoryView
                     report={activeDetail.interpretation.counseling_report}
                     tags={activeDetail.interpretation.tags}

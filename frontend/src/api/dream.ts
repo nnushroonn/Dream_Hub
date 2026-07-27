@@ -107,6 +107,23 @@ export function buildDreamOneLineSummary(survey: DreamSurvey): string {
   return `${raw.slice(0, ONE_LINE_SUMMARY_MAX_LENGTH - 1).trimEnd()}…`;
 }
 
+// 해몽 결과 위에 인용구로 보여줄 "꿈 원문". 칩 선택(브라이트니스 등)은 유저가 직접 쓴 글이 아니라
+// 골라 누른 보기라 제외하고, 실제로 타이핑한 주관식 서술만 순서대로 이어 붙인다. ⚡ 빠른 기록은
+// action_detail 하나가 곧 원문 전체다.
+export function buildDreamOriginalContent(survey: DreamSurvey): string {
+  const writtenParts = [
+    survey.space_detail,
+    survey.target_detail,
+    survey.action_detail,
+    survey.reality_detail,
+    survey.final_memo,
+  ]
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+  return writtenParts.length > 0 ? writtenParts.join(" ") : survey.title.trim();
+}
+
 // 기존 해몽 리포트(description/expert_insight 등)와는 별개로 함께 내려오는 4단계 상담 리포트.
 // 공감형 심리 상담가 + 정신분석학자(프로이트/융) + 행동 분석가, 세 관점을 매번 전부 채운다.
 export interface CounselingReport {

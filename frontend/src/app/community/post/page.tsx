@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { getPublicDream, type DreamEntryRecord } from "@/api/dream";
+import { buildDreamOriginalContent, getPublicDream, type DreamEntryRecord } from "@/api/dream";
 import CounselingStoryView from "@/components/CounselingStoryView";
+import DreamOriginalQuote from "@/components/DreamOriginalQuote";
 import NavBar from "@/components/NavBar";
 
 // 홈 화면 우측 하단 실시간 토스트(LiveTicker)를 클릭했을 때 도착하는 익명 공개 상세 페이지.
@@ -107,6 +108,7 @@ export default function CommunityPostPage() {
                 이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
             {entry.interpretation.counseling_report && (
               <div className="mt-6">
+                <DreamOriginalQuote content={buildDreamOriginalContent(entry.survey)} />
                 <CounselingStoryView
                   report={entry.interpretation.counseling_report}
                   tags={entry.interpretation.tags}
