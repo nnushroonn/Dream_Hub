@@ -783,28 +783,25 @@ export default function CommunityPage() {
             )}
           </div>
 
-          {/* 사이드바: 탭과 무관하게 항상 노출 - 메인 액션(탭에 따라 글쓰기/내 꿈 공유하기로 전환) +
-              실시간 트렌드 위젯. flex flex-col gap-4로 묶어 두 박스의 가로 너비를 완벽히 일치시키고
-              수직 간격을 통일한다. */}
+          {/* 사이드바: 탭과 무관하게 항상 노출 - 내 꿈 공유하기 + 자유 글쓰기 액션을 둘 다 두고,
+              실시간 트렌드 위젯도 함께 붙인다. flex flex-col gap-4로 묶어 박스들의 가로 너비를
+              완벽히 일치시키고 수직 간격을 통일한다. */}
           <aside className="lg:col-span-4">
             <div className="flex flex-col gap-4 lg:sticky lg:top-6">
-              {tab === "dream" ? (
-                <button
-                  type="button"
-                  onClick={openShareDream}
-                  className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 font-medium text-white shadow-lg transition-all hover:from-purple-700 hover:to-indigo-700"
-                >
-                  🌙 내 꿈 공유하기
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={openCompose}
-                  className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 font-medium text-white shadow-lg transition-all hover:from-purple-700 hover:to-indigo-700"
-                >
-                  🖊️ 글쓰기
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={openShareDream}
+                className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 font-medium text-white shadow-lg transition-all hover:from-purple-700 hover:to-indigo-700"
+              >
+                🌙 내 꿈 공유하기
+              </button>
+              <button
+                type="button"
+                onClick={openCompose}
+                className="w-full rounded-xl border border-white/10 bg-white/5 py-3 font-medium text-slate-200 transition-all hover:border-violet-400/40 hover:bg-white/10"
+              >
+                🖊️ 자유 글쓰기
+              </button>
 
               <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
                 <p className="mb-4 text-lg font-bold text-white">🔥 지금 뜨는 꿈 상징</p>
