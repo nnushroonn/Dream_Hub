@@ -137,6 +137,12 @@ export default function DiaryPage() {
   const [activeDetailIndex, setActiveDetailIndex] = useState(0);
   const [detailVisible, setDetailVisible] = useState(true);
   const [detailShareCopied, setDetailShareCopied] = useState(false);
+  // 커뮤니티 공개 여부는 더 이상 작성 시점이 아니라, 저장된 기록의 상세 보기에서 나중에 정한다.
+  const [publishSettingsOpen, setPublishSettingsOpen] = useState(false);
+  const [publishIsAnonymous, setPublishIsAnonymous] = useState(true);
+  const [publishWithAiReport, setPublishWithAiReport] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const activeDetail = detailEntries?.[activeDetailIndex] ?? null;
 
   // 삭제 확인 모달
@@ -518,6 +524,8 @@ export default function DiaryPage() {
     setDetailEntries([...dayEntries].sort((a, b) => a.created_at.localeCompare(b.created_at)));
     setActiveDetailIndex(0);
     setDetailVisible(true);
+    setPublishSettingsOpen(false);
+    setPublishError(null);
   };
 
   // 캘린더의 "오늘의 무의식 기록하기" 유도 문구를 누르면, 모바일에서 아래에 있는
@@ -530,6 +538,8 @@ export default function DiaryPage() {
   const switchDetailTab = (index: number) => {
     if (!detailEntries || index === activeDetailIndex || index < 0 || index >= detailEntries.length) return;
     setDetailVisible(false);
+    setPublishSettingsOpen(false);
+    setPublishError(null);
     window.setTimeout(() => {
       setActiveDetailIndex(index);
       setDetailVisible(true);
@@ -543,6 +553,38 @@ export default function DiaryPage() {
     if (result === "copied") {
       setDetailShareCopied(true);
       window.setTimeout(() => setDetailShareCopied(false), 1600);
+    }
+  };
+
+  // 저장이 끝난 뒤 상세 보기에서 커뮤니티 공개 여부를 켜고 끈다. 이미 확정된 survey/interpretation은
+  // 그대로 재사용하고 is_public/is_anonymous/share_with_ai_analysis만 바꿔서, AI 재분석 없이 저장한다.
+  const handleTogglePublish = async (
+    entry: DreamEntryRecord,
+    nextIsPublic: boolean,
+    options?: { isAnonymous: boolean; shareWithAiAnalysis: boolean }
+  ) => {
+    setIsPublishing(true);
+    setPublishError(null);
+    try {
+      const payload = {
+        dream_date: entry.dream_date,
+        title: entry.title,
+        emotion: entry.emotion,
+        summary: entry.summary,
+        is_public: nextIsPublic,
+        is_anonymous: options?.isAnonymous ?? entry.is_anonymous,
+        share_with_ai_analysis: options?.shareWithAiAnalysis ?? entry.share_with_ai_analysis,
+        survey: entry.survey,
+        interpretation: entry.interpretation,
+      };
+      const saved = await updateDream(entry.id, payload);
+      upsertEntry(saved);
+      setDetailEntries((prev) => prev?.map((item) => (item.id === saved.id ? saved : item)) ?? prev);
+      setPublishSettingsOpen(false);
+    } catch (error) {
+      setPublishError(getAuthErrorMessage(error));
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -620,79 +662,18 @@ export default function DiaryPage() {
             </div>
 
 
-            {/* 고정형 메타 정보: 날짜 · 공개 범위. 꿈의 분위기는 정밀 기록 위저드의 Step 1로
-                옮겨졌다 - ⚡ 빠른 기록 모드에는 위저드가 없어 아래 빠른 기록 영역에 따로 둔다. */}
-            <div className="space-y-5">
-              <div>
-                <label className="text-xs text-indigo-300/70">날짜</label>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(event) => setSelectedDate(event.target.value)}
-                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-2.5 text-sm text-slate-100 [color-scheme:dark] focus:border-violet-400/60 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-indigo-300/70">공개 범위</label>
-                <div className="mt-2 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-white/5 p-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setIsPublic(false)}
-                    className={`rounded-xl px-3 py-2.5 text-xs font-medium transition-all duration-200 ${
-                      !isPublic
-                        ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                  >
-                    🔒 나만 보기
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsPublic(true)}
-                    className={`rounded-xl px-3 py-2.5 text-xs font-medium transition-all duration-200 ${
-                      isPublic
-                        ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                  >
-                    🌐 커뮤니티에 공유
-                  </button>
-                </div>
-
-                {/* 공개로 공유할 때만 의미 있는 두 가지 세부 설정: 어떤 이름으로 낼지, AI 리포트도 함께 낼지 */}
-                {isPublic && (
-                  <div className="mt-4 space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div>
-                      <label className="text-xs text-indigo-300/70">어떤 이름으로 공유할까요?</label>
-                      <div className="mt-2">
-                        <IdentitySwitch isAnonymous={isAnonymous} onChange={setIsAnonymous} nickname={nickname} />
-                      </div>
-                    </div>
-
-                    <label className="flex cursor-pointer items-center justify-between gap-3">
-                      <span className="text-xs leading-relaxed text-slate-300">
-                        체크 시 AI 해몽 결과도 피드에 함께 공개합니다
-                      </span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={shareWithAiAnalysis}
-                        onClick={() => setShareWithAiAnalysis((prev) => !prev)}
-                        className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
-                          shareWithAiAnalysis ? "bg-violet-500" : "bg-white/15"
-                        }`}
-                      >
-                        <span
-                          className={`ml-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
-                            shareWithAiAnalysis ? "translate-x-4" : "translate-x-0"
-                          }`}
-                        />
-                      </button>
-                    </label>
-                  </div>
-                )}
-              </div>
+            {/* 고정형 메타 정보: 날짜. 공개 범위는 더 이상 작성 시점에 정하지 않는다 - 일단 나만 보기로
+                저장한 뒤, 저장이 끝나고 상세 보기에서 원하면 그때 커뮤니티에 공개하는 흐름으로 옮겼다.
+                꿈의 분위기는 정밀 기록 위저드의 Step 1로 옮겨졌다 - ⚡ 빠른 기록 모드에는 위저드가 없어
+                아래 빠른 기록 영역에 따로 둔다. */}
+            <div>
+              <label className="text-xs text-indigo-300/70">날짜</label>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
+                className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-2.5 text-sm text-slate-100 [color-scheme:dark] focus:border-violet-400/60 focus:outline-none"
+              />
             </div>
 
             <div className="my-7 h-px bg-white/10" />
@@ -1094,6 +1075,94 @@ export default function DiaryPage() {
               <h3 className="mt-4 text-center text-2xl font-semibold text-white">
                 {activeDetail.emotion} {activeDetail.title}
               </h3>
+
+              {/* 커뮤니티 공개 여부: 작성 시점이 아니라, 저장이 끝난 이 상세 보기에서 나중에 정한다. */}
+              <div className="mt-3 flex justify-center">
+                {activeDetail.is_public ? (
+                  <button
+                    type="button"
+                    onClick={() => setPublishSettingsOpen((prev) => !prev)}
+                    className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-4 py-1.5 text-xs font-medium text-emerald-200 transition-colors hover:border-emerald-400/60"
+                  >
+                    🌐 커뮤니티에 공개 중
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPublishIsAnonymous(activeDetail.is_anonymous);
+                      setPublishWithAiReport(activeDetail.share_with_ai_analysis);
+                      setPublishSettingsOpen((prev) => !prev);
+                    }}
+                    className="rounded-full border border-violet-400/40 bg-violet-500/10 px-4 py-1.5 text-xs font-medium text-violet-200 transition-colors hover:border-violet-400/60"
+                  >
+                    🔒 나만 보는 중 · 커뮤니티에 공개하기
+                  </button>
+                )}
+              </div>
+
+              {publishSettingsOpen && (
+                <div className="mt-3 space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  {!activeDetail.is_public && (
+                    <>
+                      <div>
+                        <label className="text-xs text-indigo-300/70">어떤 이름으로 공개할까요?</label>
+                        <div className="mt-2">
+                          <IdentitySwitch isAnonymous={publishIsAnonymous} onChange={setPublishIsAnonymous} nickname={nickname} />
+                        </div>
+                      </div>
+
+                      <label className="flex cursor-pointer items-center justify-between gap-3">
+                        <span className="text-xs leading-relaxed text-slate-300">
+                          체크 시 AI 해몽 결과도 피드에 함께 공개합니다
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={publishWithAiReport}
+                          onClick={() => setPublishWithAiReport((prev) => !prev)}
+                          className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
+                            publishWithAiReport ? "bg-violet-500" : "bg-white/15"
+                          }`}
+                        >
+                          <span
+                            className={`ml-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
+                              publishWithAiReport ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </label>
+                    </>
+                  )}
+
+                  {publishError && <p className="text-xs text-red-300">{publishError}</p>}
+
+                  {activeDetail.is_public ? (
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePublish(activeDetail, false)}
+                      disabled={isPublishing}
+                      className="w-full rounded-full border border-red-400/30 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-200 transition-colors hover:border-red-400/50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isPublishing ? "처리 중..." : "비공개로 전환"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleTogglePublish(activeDetail, true, {
+                          isAnonymous: publishIsAnonymous,
+                          shareWithAiAnalysis: publishWithAiReport,
+                        })
+                      }
+                      disabled={isPublishing}
+                      className="w-full rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-4 py-2 text-xs font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isPublishing ? "공개하는 중..." : "🌐 커뮤니티에 공개하기"}
+                    </button>
+                  )}
+                </div>
+              )}
 
               <div className="mt-4">
                 <DreamOriginalQuote content={buildDreamOriginalContent(activeDetail.survey)} />
