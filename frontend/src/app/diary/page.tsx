@@ -334,8 +334,11 @@ export default function DiaryPage() {
     try {
       const result = await requestAiInterpretation({ date: selectedDate, emotion: mood, is_public: isPublic, survey });
       setInterpretation(result);
-    } catch {
-      setErrorMessage("AI 해몽 요청에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } catch (error) {
+      // 서버가 502로 알려주는 실제 실패 사유(getAuthErrorMessage가 response.data.detail을 그대로
+      // 뽑아온다)를 감성적인 문구로 덮지 않고 그대로 보여준다 - 유저가 일시적 오류임을 인지하고
+      // 같은 버튼을 다시 눌러 재시도할 수 있어야 한다.
+      setErrorMessage(getAuthErrorMessage(error));
       setIsModalOpen(false);
     } finally {
       setIsLoading(false);
@@ -378,8 +381,8 @@ export default function DiaryPage() {
     try {
       const result = await requestQuickAiInterpretation(title, text);
       setInterpretation(result);
-    } catch {
-      setErrorMessage("AI 해몽 요청에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } catch (error) {
+      setErrorMessage(getAuthErrorMessage(error));
       setIsModalOpen(false);
     } finally {
       setIsLoading(false);

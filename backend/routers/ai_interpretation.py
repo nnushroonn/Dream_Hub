@@ -1,14 +1,15 @@
 """AI 무의식 해몽: 6단계 문답 데이터를 그대로 LLM 시스템 프롬프트 인자로 주입해 실시간으로 해몽을 생성한다.
 
 정적 더미 텍스트를 전혀 보관하지 않는다 — 모든 해몽 문구는 매 요청마다 Claude가 동적으로 생성한다.
-API 오류나 파싱 실패 시에만 최소한의 폴백 데이터로 안전하게 대체한다.
+생성이 실패하면(파싱 오류, API 오류 등) 감성적인 문구로 그럴듯하게 덮어씌우지 않고, 있는 그대로
+502 에러를 던져 프론트가 "일시적 오류, 다시 시도해 주세요" 상태를 명확히 보여줄 수 있게 한다.
 """
 
 import json
 import logging
 
 import anthropic
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from database import get_settings
@@ -181,31 +182,6 @@ SYSTEM_PROMPT_DATA_TEMPLATE = """[유저의 6단계 무의식 데이터 리포�
 5. 현실과의 공명 (Reality Resonance): {reality_link} — 상세 서술: {reality_detail}
 6. 차원 제어 지수 (Vividness & Lucid): 선명도 {vividness}%, 자각몽 여부 {is_lucid}, 추가 잔상 메모: {final_memo}"""
 
-# API 오류·JSON 파싱 실패 시에만 쓰이는 최소한의 안전장치 (정적 케이스 데이터가 아님).
-FALLBACK_RESULT = {
-    "tags": ["#무의식", "#잔상"],
-    "description": (
-        "지금 이 순간, 당신의 무의식은 아직 말을 고르는 중이에요. 오늘 전해주신 조각들은 파동이 되어 저에게 닿았지만, "
-        "그 결을 온전히 풀어내기엔 잠시 시간이 더 필요한 듯합니다.\n\n"
-        "이런 침묵도 하나의 상징입니다 — 때로 무의식은 서두르지 않고 스스로 정리할 시간을 요구하니까요.\n\n"
-        "오늘 밤 다시 한 번 그 파동에 조용히 귀 기울여보세요. 당신의 자아는 이미 답을 향해 가고 있습니다."
-    ),
-    "selected_expert": "칼 융 (Carl Jung)",
-    "expert_badge": "🌌 분석심리학",
-    "expert_insight": "지금은 해몽 엔진이 잠시 침묵하는 시간이지만, 융이라면 이 침묵조차 무의식이 스스로 정리할 시간을 요구하는 신호라고 말했을 거예요. 조금 뒤 다시 찾아와 그 파동에 귀 기울여 보세요.",
-    "lucky_item": "작은 향초",
-    "lucky_item_reason": "지금은 해몽 엔진이 잠시 침묵하는 시간이라, 흔들림 없는 불빛처럼 당신의 마음을 차분히 가라앉혀 줄 향초를 권해드려요.",
-    "lucky_number": 3,
-    "lucky_number_reason": "3은 시작·과정·완성을 상징하는 숫자로, 지금의 기다림이 곧 완성으로 이어질 것이라는 신호로 해석할 수 있어요.",
-    "counseling_report": {
-        "empathy": "지금 이 순간의 혼란스러움, 그 마음 그대로도 충분히 이해받을 자격이 있어요.",
-        "unconscious_stage": "무대의 조명이 아직 완전히 켜지지 않은 상태라, 지금은 공간도 등장인물도 또렷하게 해석해 드리기 어려운 시간이에요.",
-        "reality_check": "꿈이 주는 위안은 위안대로 소중하지만, 그것이 현실의 결정을 대신할 수는 없다는 것만은 분명히 기억해 주세요.",
-        "action_plan": "오늘은 새로운 결정을 서두르지 말고, 지금 느낀 감정을 짧게라도 기록해 두세요.",
-    },
-}
-
-
 QUICK_SYSTEM_PROMPT_STATIC = """당신은 깊은 통찰력과 감성적인 언어 해설 능력을 겸비한 세계 최고의 심층 심리학자이자 꿈 분석 전문가(Dream Analyst)입니다. 프로이트, 융, 아들러, 게슈탈트 심리학 등 여러 학파에 두루 정통하며, 곧이어 주어지는 유저가 형식 없이 자유롭게 적은 꿈 서술 한 편을 분석해 신뢰감 있고 몽환적인 꿈해몽 보고서를 작성해야 합니다.
 
 {expert_matrix}
@@ -287,10 +263,14 @@ def build_quick_system_prompt(title: str, raw_text: str) -> tuple[str, str]:
 
 
 def request_interpretation(static_block: str, data_block: str) -> dict:
-    """Claude에 구조화 출력(JSON Schema)을 요청한다. 실패 시 최소 폴백 데이터로 대체한다.
+    """Claude에 구조화 출력(JSON Schema)을 요청한다.
 
     static_block(꿈 종류와 무관하게 항상 동일한 페르소나/지시사항)은 cache_control로 표시해,
-    Claude 프롬프트 캐싱이 반복 호출 시 그 부분의 입력 토큰 비용을 절감하게 한다."""
+    Claude 프롬프트 캐싱이 반복 호출 시 그 부분의 입력 토큰 비용을 절감하게 한다.
+
+    실패 시(파싱 오류, API 오류, 인증 누락 등) 감성적인 문구로 그럴듯하게 대체하지 않고,
+    원인을 서버 로그에 상세히 남긴 뒤 502로 그대로 실패를 알린다 - 프론트가 진짜 결과와
+    가짜 위로 문구를 구분하지 못하는 상황을 막기 위함이다."""
     try:
         settings = get_settings()
         if not settings.anthropic_api_key:
@@ -299,7 +279,9 @@ def request_interpretation(static_block: str, data_block: str) -> dict:
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
         response = client.messages.create(
             model=MODEL,
-            max_tokens=2048,
+            # counseling_report(4개 항목) 추가 이후 출력 스키마가 커져, 2048로는 응답이
+            # 중간에 잘려 JSONDecodeError가 나는 경우가 있었다 - 여유 있게 4096으로 상향.
+            max_tokens=4096,
             system=[
                 {"type": "text", "text": static_block, "cache_control": {"type": "ephemeral"}},
                 {"type": "text", "text": data_block},
@@ -316,8 +298,16 @@ def request_interpretation(static_block: str, data_block: str) -> dict:
         StopIteration,
         json.JSONDecodeError,
     ) as exc:
-        logger.warning("AI 해몽 생성 실패, 폴백 데이터로 대체합니다: %s", exc)
-        return dict(FALLBACK_RESULT)
+        logger.error(
+            "AI 해몽 생성 실패 - 원인: %s: %s",
+            type(exc).__name__,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="AI 해몽 생성에 실패했어요. 잠시 후 다시 시도해 주세요.",
+        ) from exc
 
 
 # --- 라우트: 얇은 HTTP 어댑터 --------------------------------------------
