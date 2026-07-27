@@ -619,15 +619,21 @@ export default function CommunityPage() {
                     ) : (
                       <div
                         key={post.id}
-                        className="flex items-center justify-between gap-4 border-b border-white/10 px-2 py-3 transition-colors hover:bg-white/5"
+                        role="link"
+                        tabIndex={0}
+                        onClick={() => router.push(`/community/board-post?id=${post.id}`)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") router.push(`/community/board-post?id=${post.id}`);
+                        }}
+                        className="flex cursor-pointer items-center justify-between gap-4 border-b border-white/10 px-2 py-3 transition-colors hover:bg-white/5"
                       >
                         <div className="min-w-0 flex-1">
-                          <Link href={`/community/board-post?id=${post.id}`} className="inline-flex min-w-0 items-baseline gap-1.5">
+                          <span className="inline-flex min-w-0 items-baseline gap-1.5">
                             <span className="truncate text-lg font-bold text-slate-100 hover:underline">{post.title}</span>
                             {post.comment_count > 0 && (
                               <span className="shrink-0 text-sm font-semibold text-violet-400">[{post.comment_count}]</span>
                             )}
-                          </Link>
+                          </span>
                           {post.content && <p className="mt-0.5 line-clamp-1 text-sm text-slate-400">{post.content}</p>}
                           <p className="mt-1 text-[11px] text-slate-500">
                             {post.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${post.author_display_name}`} · {formatPostTime(post.created_at)}
@@ -638,13 +644,17 @@ export default function CommunityPage() {
                             <div className="flex items-center gap-2 text-[11px] text-slate-500">
                               <Link
                                 href={`/community/board-post?id=${post.id}&edit=1`}
+                                onClick={(event) => event.stopPropagation()}
                                 className="underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
                               >
                                 ✏️ 수정
                               </Link>
                               <button
                                 type="button"
-                                onClick={() => setConfirmDeletePostId(post.id)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setConfirmDeletePostId(post.id);
+                                }}
                                 className="underline-offset-2 transition-colors hover:text-red-300 hover:underline"
                               >
                                 🗑️ 삭제
