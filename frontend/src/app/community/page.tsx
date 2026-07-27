@@ -13,6 +13,7 @@ import {
   createDream,
   createDreamComment,
   deleteCommunityPost,
+  deleteDreamComment,
   getCommunityPosts,
   getDreamComments,
   getDreamFeed,
@@ -20,6 +21,7 @@ import {
   requestQuickAiInterpretation,
   setDreamVisibility,
   toggleDreamEmpathy,
+  updateDreamComment,
   type AiInterpretation,
   type CommunityPost,
   type DreamFeedAiReport,
@@ -571,6 +573,8 @@ export default function CommunityPage() {
                           }
                           fetchComments={getDreamComments}
                           submitComment={createDreamComment}
+                          updateComment={updateDreamComment}
+                          deleteComment={deleteDreamComment}
                         />
                       </article>
                     ))

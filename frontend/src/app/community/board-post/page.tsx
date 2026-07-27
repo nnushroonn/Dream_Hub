@@ -8,11 +8,13 @@ import { getAuthErrorMessage } from "@/api/auth";
 import {
   createPostComment,
   deleteCommunityPost,
+  deletePostComment,
   getCommunityPost,
   getPostComments,
   POST_EDIT_WINDOW_MS,
   togglePostEmpathy,
   updateCommunityPost,
+  updatePostComment,
   type CommunityPost,
 } from "@/api/dream";
 import CommentSection from "@/components/CommentSection";
@@ -292,6 +294,8 @@ export default function BoardPostPage() {
                     onCommentCountChange={(count) => setPost((prev) => (prev ? { ...prev, comment_count: count } : prev))}
                     fetchComments={getPostComments}
                     submitComment={createPostComment}
+                    updateComment={updatePostComment}
+                    deleteComment={deletePostComment}
                   />
                 </div>
               </>

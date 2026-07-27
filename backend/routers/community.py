@@ -447,10 +447,16 @@ class CommunityCommentResponse(BaseModel):
     is_anonymous: bool
     author_display_name: str | None = None
     created_at: str
+    # 내가 쓴 댓글인지 - 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는 서버가 다시 한다.
+    is_mine: bool = False
 
 
 @router.get("/posts/{post_id}/comments", response_model=list[CommunityCommentResponse])
-def list_post_comments(post_id: int, db: Session = Depends(get_db)) -> list[dict]:
+def list_post_comments(
+    post_id: int,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+) -> list[dict]:
     post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
@@ -468,6 +474,7 @@ def list_post_comments(post_id: int, db: Session = Depends(get_db)) -> list[dict
             "is_anonymous": comment.is_anonymous,
             "author_display_name": _display_name(comment.user, comment.is_anonymous),
             "created_at": comment.created_at.isoformat(),
+            "is_mine": current_user is not None and comment.user_id == current_user.id,
         }
         for comment in comments
     ]
@@ -500,7 +507,65 @@ def create_post_comment(
         "is_anonymous": comment.is_anonymous,
         "author_display_name": _display_name(current_user, comment.is_anonymous),
         "created_at": comment.created_at.isoformat(),
+        "is_mine": True,
     }
+
+
+@router.put("/posts/{post_id}/comments/{comment_id}", response_model=CommunityCommentResponse)
+def update_post_comment(
+    post_id: int,
+    comment_id: int,
+    payload: CommunityCommentInput,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    comment = (
+        db.query(CommunityComment)
+        .filter(CommunityComment.id == comment_id, CommunityComment.post_id == post_id)
+        .first()
+    )
+    if comment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="댓글을 찾을 수 없습니다.")
+    if comment.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="본인이 작성한 댓글만 수정할 수 있습니다.")
+
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="내용을 입력해 주세요.")
+
+    comment.content = content
+    comment.is_anonymous = payload.is_anonymous
+    db.commit()
+    db.refresh(comment)
+    return {
+        "id": comment.id,
+        "content": comment.content,
+        "is_anonymous": comment.is_anonymous,
+        "author_display_name": _display_name(current_user, comment.is_anonymous),
+        "created_at": comment.created_at.isoformat(),
+        "is_mine": True,
+    }
+
+
+@router.delete("/posts/{post_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_post_comment(
+    post_id: int,
+    comment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    comment = (
+        db.query(CommunityComment)
+        .filter(CommunityComment.id == comment_id, CommunityComment.post_id == post_id)
+        .first()
+    )
+    if comment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="댓글을 찾을 수 없습니다.")
+    if comment.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="본인이 작성한 댓글만 삭제할 수 있습니다.")
+
+    db.delete(comment)
+    db.commit()
 
 
 # --- 💬 댓글: 🔮 무의식 피드에 공개된 꿈 기록에 다는 댓글 ------------------------
@@ -515,7 +580,11 @@ class DreamCommentInput(BaseModel):
 
 
 @router.get("/dream-feed/{dream_id}/comments", response_model=list[CommunityCommentResponse])
-def list_dream_comments(dream_id: int, db: Session = Depends(get_db)) -> list[dict]:
+def list_dream_comments(
+    dream_id: int,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+) -> list[dict]:
     entry = db.query(DreamEntry).filter(DreamEntry.id == dream_id, DreamEntry.status == DreamStatus.PUBLIC).first()
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공개된 꿈 기록을 찾을 수 없습니다.")
@@ -533,6 +602,7 @@ def list_dream_comments(dream_id: int, db: Session = Depends(get_db)) -> list[di
             "is_anonymous": comment.is_anonymous,
             "author_display_name": _display_name(comment.user, comment.is_anonymous),
             "created_at": comment.created_at.isoformat(),
+            "is_mine": current_user is not None and comment.user_id == current_user.id,
         }
         for comment in comments
     ]
@@ -567,4 +637,62 @@ def create_dream_comment(
         "is_anonymous": comment.is_anonymous,
         "author_display_name": _display_name(current_user, comment.is_anonymous),
         "created_at": comment.created_at.isoformat(),
+        "is_mine": True,
     }
+
+
+@router.put("/dream-feed/{dream_id}/comments/{comment_id}", response_model=CommunityCommentResponse)
+def update_dream_comment(
+    dream_id: int,
+    comment_id: int,
+    payload: DreamCommentInput,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    comment = (
+        db.query(DreamComment)
+        .filter(DreamComment.id == comment_id, DreamComment.dream_entry_id == dream_id)
+        .first()
+    )
+    if comment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="댓글을 찾을 수 없습니다.")
+    if comment.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="본인이 작성한 댓글만 수정할 수 있습니다.")
+
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="내용을 입력해 주세요.")
+
+    comment.content = content
+    comment.is_anonymous = payload.is_anonymous
+    db.commit()
+    db.refresh(comment)
+    return {
+        "id": comment.id,
+        "content": comment.content,
+        "is_anonymous": comment.is_anonymous,
+        "author_display_name": _display_name(current_user, comment.is_anonymous),
+        "created_at": comment.created_at.isoformat(),
+        "is_mine": True,
+    }
+
+
+@router.delete("/dream-feed/{dream_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_dream_comment(
+    dream_id: int,
+    comment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    comment = (
+        db.query(DreamComment)
+        .filter(DreamComment.id == comment_id, DreamComment.dream_entry_id == dream_id)
+        .first()
+    )
+    if comment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="댓글을 찾을 수 없습니다.")
+    if comment.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="본인이 작성한 댓글만 삭제할 수 있습니다.")
+
+    db.delete(comment)
+    db.commit()

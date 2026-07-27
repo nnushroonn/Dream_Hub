@@ -7,8 +7,10 @@ import { useRouter } from "next/navigation";
 import {
   buildDreamOriginalContent,
   createDreamComment,
+  deleteDreamComment,
   getDreamComments,
   getPublicDream,
+  updateDreamComment,
   type DreamEntryRecord,
 } from "@/api/dream";
 import CommentSection from "@/components/CommentSection";
@@ -151,6 +153,8 @@ export default function CommunityPostPage() {
                 onRequireLogin={() => router.push("/login")}
                 fetchComments={getDreamComments}
                 submitComment={createDreamComment}
+                updateComment={updateDreamComment}
+                deleteComment={deleteDreamComment}
               />
             </div>
           </div>

@@ -361,6 +361,8 @@ export interface CommunityComment {
   is_anonymous: boolean;
   author_display_name: string | null;
   created_at: string;
+  // 내가 쓴 댓글인지 - 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는 서버가 다시 한다.
+  is_mine: boolean;
 }
 
 export async function getPostComments(postId: number): Promise<CommunityComment[]> {
@@ -380,6 +382,23 @@ export async function createPostComment(
   return data;
 }
 
+export async function updatePostComment(
+  postId: number,
+  commentId: number,
+  content: string,
+  isAnonymous: boolean
+): Promise<CommunityComment> {
+  const { data } = await api.put<CommunityComment>(`/api/community/posts/${postId}/comments/${commentId}`, {
+    content,
+    is_anonymous: isAnonymous,
+  });
+  return data;
+}
+
+export async function deletePostComment(postId: number, commentId: number): Promise<void> {
+  await api.delete(`/api/community/posts/${postId}/comments/${commentId}`);
+}
+
 // 🔮 무의식 피드에 공개된 꿈 기록 댓글. 응답 구조는 자유 광장 댓글(CommunityComment)과 동일해
 // 그대로 재사용한다 - 공감(❤️)만으로는 부족한, 유저끼리 실제로 이야기를 나누는 자리다.
 export async function getDreamComments(dreamId: number): Promise<CommunityComment[]> {
@@ -397,6 +416,23 @@ export async function createDreamComment(
     is_anonymous: isAnonymous,
   });
   return data;
+}
+
+export async function updateDreamComment(
+  dreamId: number,
+  commentId: number,
+  content: string,
+  isAnonymous: boolean
+): Promise<CommunityComment> {
+  const { data } = await api.put<CommunityComment>(`/api/community/dream-feed/${dreamId}/comments/${commentId}`, {
+    content,
+    is_anonymous: isAnonymous,
+  });
+  return data;
+}
+
+export async function deleteDreamComment(dreamId: number, commentId: number): Promise<void> {
+  await api.delete(`/api/community/dream-feed/${dreamId}/comments/${commentId}`);
 }
 
 export interface CalendarDay {
