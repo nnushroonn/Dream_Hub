@@ -492,6 +492,12 @@ export default function DiaryPage() {
     setDetailVisible(true);
   };
 
+  // 캘린더의 "오늘의 무의식 기록하기" 유도 문구를 누르면, 모바일에서 아래에 있는
+  // 작성 에디터로 부드럽게 스크롤해 준다 (데스크톱은 이미 나란히 보이므로 체감 효과는 적다).
+  const scrollToEditor = () => {
+    document.getElementById("dream-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   // 탭/화살표로 다른 꿈을 볼 때 짧게 페이드 아웃-인 시켜 전환이 부드럽게 느껴지게 한다.
   const switchDetailTab = (index: number) => {
     if (!detailEntries || index === activeDetailIndex || index < 0 || index >= detailEntries.length) return;
@@ -541,10 +547,13 @@ export default function DiaryPage() {
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,360px)_1fr] lg:items-start">
           {/* 좌측: 꿈 별자리 캘린더 & 출석 체크 */}
-          <DiaryCalendarPanel onSelectDay={handleSelectDay} />
+          <DiaryCalendarPanel onSelectDay={handleSelectDay} onRequestWrite={scrollToEditor} />
 
           {/* 우측: 꿈 작성 에디터 - 저장/수정/삭제는 유저 소유 데이터라 로그인이 필요하다 */}
-          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md sm:p-8">
+          <div
+            id="dream-editor"
+            className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md sm:p-8"
+          >
             <div className="mb-5 flex items-center justify-between gap-3">
               {editingEntry ? (
                 <div className="flex flex-1 items-center justify-between rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-2.5 text-xs text-violet-200">

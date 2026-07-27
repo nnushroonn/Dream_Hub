@@ -54,6 +54,8 @@ interface ConstellationDotsProps {
   entries: Map<number, ConstellationEntry[]>;
   /** 불 켜진 노드를 클릭하면 그 날의 전체 기록 목록과 함께 호출된다 (상세 보기 오픈용) */
   onSelectEntry?: (dayEntries: ConstellationEntry[]) => void;
+  /** 오늘 날짜(1~31) - 조회 중인 달이 이번 달일 때만 넘어오며, 기록 유무와 무관하게 링으로 표시한다 */
+  todayDay?: number | null;
 }
 
 function cellCenter(gridIndex: number) {
@@ -62,7 +64,7 @@ function cellCenter(gridIndex: number) {
   return { x: col * CELL + CELL / 2, y: row * CELL + CELL / 2 };
 }
 
-export function ConstellationDots({ daysInMonth, startWeekday, entries, onSelectEntry }: ConstellationDotsProps) {
+export function ConstellationDots({ daysInMonth, startWeekday, entries, onSelectEntry, todayDay }: ConstellationDotsProps) {
   const [hoveredDay, setHoveredDay] = useState<number | null>(null);
 
   const totalCells = startWeekday + daysInMonth;
@@ -109,6 +111,7 @@ export function ConstellationDots({ daysInMonth, startWeekday, entries, onSelect
           const { x, y } = cellCenter(gridIndex);
           const isTopRow = Math.floor(gridIndex / COLS) === 0;
           const isHovered = hoveredDay === day;
+          const isToday = todayDay === day;
 
           // 감정이 섞인 성단(2개 이상 기록 + 서로 다른 무드)은 인라인 그라데이션으로 색을 섞는다.
           const clusterStyle: CSSProperties | undefined =
@@ -142,7 +145,7 @@ export function ConstellationDots({ daysInMonth, startWeekday, entries, onSelect
                           isHovered ? "scale-110" : ""
                         }`
                       : "cursor-default text-xs font-light text-slate-400/50 hover:bg-white/5 hover:backdrop-blur-sm"
-                  }`}
+                  } ${isToday ? "ring-2 ring-violet-300/80 ring-offset-2 ring-offset-slate-950" : ""}`}
                 >
                   <span className={entry ? "text-sm" : undefined}>{day}</span>
                 </button>

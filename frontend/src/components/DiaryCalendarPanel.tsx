@@ -29,9 +29,11 @@ function shiftMonth(date: Date, delta: number): Date {
 interface DiaryCalendarPanelProps {
   /** 불 켜진 별자리 노드를 클릭했을 때, 그 날의 꿈 기록 전체 목록을 들고 상세 보기를 열어달라는 콜백 */
   onSelectDay?: (dayEntries: DreamEntryRecord[]) => void;
+  /** 오늘 아직 출석하지 않았을 때, "오늘의 무의식 기록하기" 유도 문구를 클릭하면 호출된다 */
+  onRequestWrite?: () => void;
 }
 
-export default function DiaryCalendarPanel({ onSelectDay }: DiaryCalendarPanelProps) {
+export default function DiaryCalendarPanel({ onSelectDay, onRequestWrite }: DiaryCalendarPanelProps) {
   const entries = useSavedDreamsStore((state) => state.entries);
 
   // 조회 중인 달은 클라이언트 시각에 의존하므로, 서버/클라이언트 렌더 불일치를 피하려고
@@ -47,6 +49,8 @@ export default function DiaryCalendarPanel({ onSelectDay }: DiaryCalendarPanelPr
   const daysInMonth = viewDate ? daysInMonthOf(viewDate) : 30;
   const startWeekday = viewDate ? new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay() : 0;
   const isViewingCurrentMonth = viewDate ? monthKey === monthKeyOf(new Date()) : true;
+  // 링 표시용 "오늘" 날짜 - 다른 달을 조회 중일 때는 어느 셀에도 표시하지 않는다.
+  const todayDay = isViewingCurrentMonth ? new Date().getDate() : null;
 
   const goToPrevMonth = () => setViewDate((prev) => (prev ? shiftMonth(prev, -1) : prev));
   const goToNextMonth = () => setViewDate((prev) => (prev ? shiftMonth(prev, 1) : prev));
@@ -89,10 +93,33 @@ export default function DiaryCalendarPanel({ onSelectDay }: DiaryCalendarPanelPr
               : "border-amber-400/30 bg-amber-400/10 text-amber-200"
           }`}
         >
-          🔥 연속 {streakDays}일째 무의식 탐험 중{checkedInToday && " (오늘의 출석 완료)"}
+          🔥 연속 {streakDays}일째 무의식 탐험 중
+          {checkedInToday && " (오늘의 출석 완료)"}
+          {!checkedInToday && onRequestWrite && (
+            <button
+              type="button"
+              onClick={onRequestWrite}
+              className="underline decoration-dotted underline-offset-2 transition-colors hover:text-amber-100"
+            >
+              · 오늘의 무의식 기록하기
+            </button>
+          )}
         </div>
       ) : (
-        <p className="relative text-xs text-slate-500">아직 기록된 꿈이 없어요. 오늘 첫 발자국을 남겨보세요 ✨</p>
+        <p className="relative text-xs text-slate-500">
+          아직 기록된 꿈이 없어요.{" "}
+          {onRequestWrite ? (
+            <button
+              type="button"
+              onClick={onRequestWrite}
+              className="text-violet-300/80 underline decoration-dotted underline-offset-2 transition-colors hover:text-violet-200"
+            >
+              오늘 첫 발자국을 남겨보세요 ✨
+            </button>
+          ) : (
+            "오늘 첫 발자국을 남겨보세요 ✨"
+          )}
+        </p>
       )}
 
       <h2 className="relative mt-4 text-lg font-semibold text-slate-100">🌌 꿈 별자리 캘린더</h2>
@@ -127,6 +154,7 @@ export default function DiaryCalendarPanel({ onSelectDay }: DiaryCalendarPanelPr
           startWeekday={startWeekday}
           entries={entryMap}
           onSelectEntry={handleSelectDay}
+          todayDay={todayDay}
         />
       </div>
 
