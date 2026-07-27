@@ -110,14 +110,13 @@ export default function DiaryCalendarPanel({ onSelectDay, onRequestWrite }: Diar
               type="button"
               onClick={onRequestWrite}
               disabled={!onRequestWrite}
-              className="flex w-auto max-w-full flex-col items-center justify-center gap-0.5 rounded-2xl border border-purple-500/20 bg-purple-950/10 px-4 py-2 text-center text-[10px] transition-all duration-700 disabled:cursor-default lg:text-xs"
+              className="flex w-auto max-w-full flex-row items-center justify-center gap-1.5 overflow-x-auto whitespace-nowrap rounded-full border border-purple-500/20 bg-purple-950/10 px-4 py-2 text-center text-[10px] transition-all duration-700 no-scrollbar disabled:cursor-default lg:text-xs"
             >
-              <span className="flex items-center gap-1.5 whitespace-nowrap">
-                <span className="shrink-0 grayscale contrast-75 opacity-50 transition-all duration-500">🔥</span>
-                <span className="shrink-0 font-medium text-slate-400">{streakLapseWarning}</span>
-              </span>
-              <span className="whitespace-nowrap font-semibold text-purple-300">
-                · 밤사이 무의식을 기록해 볼까요?
+              <span className="shrink-0 grayscale contrast-75 opacity-50 transition-all duration-500">🔥</span>
+              <span className="shrink-0 font-normal text-slate-400">{streakLapseWarning}</span>
+              <span className="mx-2 shrink-0 text-slate-600">|</span>
+              <span className="shrink-0 font-semibold text-purple-300 transition-colors hover:text-purple-200">
+                밤사이 무의식을 기록해 볼까요?
               </span>
             </button>
           )}
