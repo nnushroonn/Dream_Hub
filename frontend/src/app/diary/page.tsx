@@ -908,6 +908,9 @@ export default function DiaryPage() {
                 {mood} {lastSurvey.title || "제목 없는 꿈"}
               </h3>
             </div>
+            <div className="mt-4">
+              <DreamOriginalQuote content={buildDreamOriginalContent(lastSurvey)} />
+            </div>
             <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center text-xs leading-relaxed text-slate-400">
               {buildDreamOneLineSummary(lastSurvey)}
             </div>
@@ -961,7 +964,6 @@ export default function DiaryPage() {
                 {interpretation.counseling_report ? (
                   <>
                     <div className="mt-6">
-                      <DreamOriginalQuote content={buildDreamOriginalContent(lastSurvey)} />
                       <CounselingStoryView
                         report={interpretation.counseling_report}
                         tags={interpretation.tags}
@@ -1093,6 +1095,10 @@ export default function DiaryPage() {
                 {activeDetail.emotion} {activeDetail.title}
               </h3>
 
+              <div className="mt-4">
+                <DreamOriginalQuote content={buildDreamOriginalContent(activeDetail.survey)} />
+              </div>
+
               <div className="mt-5 flex flex-wrap justify-center gap-2">
                 {activeDetail.interpretation.tags.map((tag) => (
                   <span
@@ -1134,7 +1140,6 @@ export default function DiaryPage() {
                   이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
               {activeDetail.interpretation.counseling_report && (
                 <div className="mt-6">
-                  <DreamOriginalQuote content={buildDreamOriginalContent(activeDetail.survey)} />
                   <CounselingStoryView
                     report={activeDetail.interpretation.counseling_report}
                     tags={activeDetail.interpretation.tags}

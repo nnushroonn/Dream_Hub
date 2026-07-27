@@ -68,6 +68,10 @@ export default function CommunityPostPage() {
             </h1>
             <p className="mt-1 text-xs text-slate-500">{entry.dream_date}</p>
 
+            <div className="mt-4">
+              <DreamOriginalQuote content={buildDreamOriginalContent(entry.survey)} />
+            </div>
+
             <div className="mt-5 flex flex-wrap gap-2">
               {entry.interpretation.tags.map((tag) => (
                 <span
@@ -108,7 +112,6 @@ export default function CommunityPostPage() {
                 이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
             {entry.interpretation.counseling_report && (
               <div className="mt-6">
-                <DreamOriginalQuote content={buildDreamOriginalContent(entry.survey)} />
                 <CounselingStoryView
                   report={entry.interpretation.counseling_report}
                   tags={entry.interpretation.tags}
