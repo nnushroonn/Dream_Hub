@@ -22,6 +22,7 @@ from models import (
     CommunityComment,
     CommunityPost,
     CommunityPostReaction,
+    DreamComment,
     DreamEntry,
     DreamStatus,
     Interaction,
@@ -67,6 +68,7 @@ class DreamFeedEntry(BaseModel):
     author_display_name: str | None = None
     share_with_ai_analysis: bool
     ai_report: DreamFeedAiReport | None = None
+    comment_count: int
 
 
 class EmpathyResponse(BaseModel):
@@ -80,6 +82,10 @@ def _dream_empathy_count(db: Session, dream_id: int) -> int:
         .filter(Interaction.dream_entry_id == dream_id, Interaction.type == InteractionType.LIKE)
         .count()
     )
+
+
+def _dream_comment_count(db: Session, dream_id: int) -> int:
+    return db.query(DreamComment).filter(DreamComment.dream_entry_id == dream_id).count()
 
 
 def _liked_dream_ids(db: Session, user: User, entries: list[DreamEntry]) -> set[int]:
@@ -114,6 +120,7 @@ def _build_dream_feed_entries(db: Session, entries: list[DreamEntry], liked_ids:
                 "is_anonymous": entry.is_anonymous,
                 "author_display_name": _display_name(entry.user, entry.is_anonymous),
                 "share_with_ai_analysis": entry.share_with_ai_analysis,
+                "comment_count": _dream_comment_count(db, entry.id),
                 "ai_report": (
                     {
                         "description": interpretation.get("description", ""),
@@ -389,6 +396,73 @@ def create_post_comment(
 
     comment = CommunityComment(
         post_id=post_id, user_id=current_user.id, content=content, is_anonymous=payload.is_anonymous
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return {
+        "id": comment.id,
+        "content": comment.content,
+        "is_anonymous": comment.is_anonymous,
+        "author_display_name": _display_name(current_user, comment.is_anonymous),
+        "created_at": comment.created_at.isoformat(),
+    }
+
+
+# --- 💬 댓글: 🔮 무의식 피드에 공개된 꿈 기록에 다는 댓글 ------------------------
+# 단순 공감(❤️)만으로는 부족한 "이용자끼리 실제로 이야기를 나누는" 자리 - 공개된 꿈이라면
+# 누구나(작성자 본인 포함) 댓글을 남길 수 있다. 응답 구조는 자유 광장 댓글과 동일해 그대로 재사용한다.
+
+
+class DreamCommentInput(BaseModel):
+    content: str = Field(min_length=1, max_length=500)
+    # 무의식 피드 자체의 기본 익명 관례를 따라 True (자유 광장 댓글은 False).
+    is_anonymous: bool = True
+
+
+@router.get("/dream-feed/{dream_id}/comments", response_model=list[CommunityCommentResponse])
+def list_dream_comments(dream_id: int, db: Session = Depends(get_db)) -> list[dict]:
+    entry = db.query(DreamEntry).filter(DreamEntry.id == dream_id, DreamEntry.status == DreamStatus.PUBLIC).first()
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공개된 꿈 기록을 찾을 수 없습니다.")
+
+    comments = (
+        db.query(DreamComment)
+        .filter(DreamComment.dream_entry_id == dream_id)
+        .order_by(DreamComment.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": comment.id,
+            "content": comment.content,
+            "is_anonymous": comment.is_anonymous,
+            "author_display_name": _display_name(comment.user, comment.is_anonymous),
+            "created_at": comment.created_at.isoformat(),
+        }
+        for comment in comments
+    ]
+
+
+@router.post(
+    "/dream-feed/{dream_id}/comments", response_model=CommunityCommentResponse, status_code=status.HTTP_201_CREATED
+)
+def create_dream_comment(
+    dream_id: int,
+    payload: DreamCommentInput,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    entry = db.query(DreamEntry).filter(DreamEntry.id == dream_id, DreamEntry.status == DreamStatus.PUBLIC).first()
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공개된 꿈 기록을 찾을 수 없습니다.")
+
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="내용을 입력해 주세요.")
+
+    comment = DreamComment(
+        dream_entry_id=dream_id, user_id=current_user.id, content=content, is_anonymous=payload.is_anonymous
     )
     db.add(comment)
     db.commit()

@@ -2,11 +2,20 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-import { buildDreamOriginalContent, getPublicDream, type DreamEntryRecord } from "@/api/dream";
+import {
+  buildDreamOriginalContent,
+  createDreamComment,
+  getDreamComments,
+  getPublicDream,
+  type DreamEntryRecord,
+} from "@/api/dream";
+import CommentSection from "@/components/CommentSection";
 import CounselingStoryView from "@/components/CounselingStoryView";
 import DreamOriginalQuote from "@/components/DreamOriginalQuote";
 import NavBar from "@/components/NavBar";
+import { useAuthStore } from "@/store/useAuthStore";
 
 // 홈 화면 우측 하단 실시간 토스트(LiveTicker)를 클릭했을 때 도착하는 익명 공개 상세 페이지.
 // 이 프로젝트는 Cloudflare Pages 정적 export(next.config.mjs output: "export")라 [id] 같은
@@ -15,6 +24,11 @@ import NavBar from "@/components/NavBar";
 // 로그인 여부와 무관하게 누구나 볼 수 있고, 작성자 정보는 응답에 아예 담겨 있지 않다
 // (백엔드 GET /api/dreams/public/{id}가 PUBLIC 상태의 실제 DreamEntry만 내려준다).
 export default function CommunityPostPage() {
+  const router = useRouter();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authUser = useAuthStore((state) => state.user);
+  const nickname = authUser?.nickname ?? "탐험가";
+
   const [entry, setEntry] = useState<DreamEntryRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -118,6 +132,22 @@ export default function CommunityPostPage() {
                 />
               </div>
             )}
+
+            {/* 💬 댓글: 이 꿈에 대해 다른 탐험가들과 이야기를 나눌 수 있는 자리 - 페이지 성격상
+                토글 없이 항상 펼쳐 둔다. CommentSection 자체가 위쪽 구분선을 이미 그려준다. */}
+            <div className="mt-6">
+              <p className="text-sm font-semibold text-white">💬 댓글</p>
+              <CommentSection
+                targetId={entry.id}
+                isOpen
+                defaultAnonymous
+                nickname={nickname}
+                isAuthenticated={isAuthenticated}
+                onRequireLogin={() => router.push("/login")}
+                fetchComments={getDreamComments}
+                submitComment={createDreamComment}
+              />
+            </div>
           </div>
         )}
       </main>

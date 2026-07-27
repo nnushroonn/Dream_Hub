@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
-import { createPostComment, getPostComments, type CommunityComment } from "@/api/dream";
+import type { CommunityComment } from "@/api/dream";
 
 function formatRelativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -19,7 +19,8 @@ function formatRelativeTime(iso: string): string {
 }
 
 interface CommentSectionProps {
-  postId: number;
+  /** 댓글이 달리는 대상(게시글/꿈 기록)의 id - fetchComments/submitComment 재요청 시 재사용 키로도 쓴다 */
+  targetId: number;
   isOpen: boolean;
   /** 댓글 익명 스위치의 기본값 - 본문(게시글) 자체의 익명 여부를 그대로 따른다 */
   defaultAnonymous: boolean;
@@ -27,16 +28,21 @@ interface CommentSectionProps {
   isAuthenticated: boolean;
   onRequireLogin: () => void;
   onCommentCountChange?: (count: number) => void;
+  /** 자유 광장 게시글/무의식 피드 꿈 기록 등, 댓글이 달리는 대상마다 다른 API를 주입받는다 */
+  fetchComments: (targetId: number) => Promise<CommunityComment[]>;
+  submitComment: (targetId: number, content: string, isAnonymous: boolean) => Promise<CommunityComment>;
 }
 
 export default function CommentSection({
-  postId,
+  targetId,
   isOpen,
   defaultAnonymous,
   nickname,
   isAuthenticated,
   onRequireLogin,
   onCommentCountChange,
+  fetchComments,
+  submitComment,
 }: CommentSectionProps) {
   const [comments, setComments] = useState<CommunityComment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -51,7 +57,7 @@ export default function CommentSection({
   useEffect(() => {
     if (!isOpen || hasLoaded) return;
     setIsLoading(true);
-    getPostComments(postId)
+    fetchComments(targetId)
       .then((result) => {
         setComments(result);
         onCommentCountChange?.(result.length);
@@ -62,7 +68,7 @@ export default function CommentSection({
         setHasLoaded(true);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, hasLoaded, postId]);
+  }, [isOpen, hasLoaded, targetId]);
 
   const handleSubmit = async () => {
     const content = commentText.trim();
@@ -74,7 +80,7 @@ export default function CommentSection({
     setError(null);
     setIsSubmitting(true);
     try {
-      const created = await createPostComment(postId, content, isCommentAnonymous);
+      const created = await submitComment(targetId, content, isCommentAnonymous);
       setComments((prev) => {
         const next = [...prev, created];
         onCommentCountChange?.(next.length);

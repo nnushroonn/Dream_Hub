@@ -7,8 +7,12 @@ import { useRouter } from "next/navigation";
 import { getAuthErrorMessage } from "@/api/auth";
 import {
   createCommunityPost,
+  createDreamComment,
+  createPostComment,
   getCommunityPosts,
+  getDreamComments,
   getDreamFeed,
+  getPostComments,
   getTrends,
   setDreamVisibility,
   toggleDreamEmpathy,
@@ -162,6 +166,8 @@ export default function CommunityPage() {
   const [dreams, setDreams] = useState<DreamFeedEntry[]>([]);
   const [isLoadingDreams, setIsLoadingDreams] = useState(true);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  // 한 번에 댓글 창을 펼칠 수 있는 꿈 기록은 하나 - 다른 꿈의 댓글을 열면 이전 것은 접힌다.
+  const [openDreamCommentsFor, setOpenDreamCommentsFor] = useState<number | null>(null);
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
@@ -437,13 +443,38 @@ export default function CommunityPage() {
 
                         {dream.share_with_ai_analysis && dream.ai_report && <AiReportAccordion report={dream.ai_report} />}
 
-                        <div className="mt-4">
+                        <div className="mt-4 flex items-center gap-2">
                           <DreamReactionButton
                             isLiked={dream.is_liked_by_me}
                             count={dream.empathy_count}
                             onToggle={() => handleDreamToggle(dream.id)}
                           />
+                          <button
+                            type="button"
+                            onClick={() => setOpenDreamCommentsFor((prev) => (prev === dream.id ? null : dream.id))}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                              openDreamCommentsFor === dream.id
+                                ? "border-violet-400/60 bg-violet-500/25 text-violet-100"
+                                : "border-white/10 text-slate-300 hover:border-violet-400/30 hover:text-slate-100"
+                            }`}
+                          >
+                            💬 댓글{dream.comment_count > 0 ? ` ${dream.comment_count}` : ""}
+                          </button>
                         </div>
+
+                        <CommentSection
+                          targetId={dream.id}
+                          isOpen={openDreamCommentsFor === dream.id}
+                          defaultAnonymous={dream.is_anonymous}
+                          nickname={nickname}
+                          isAuthenticated={isAuthenticated}
+                          onRequireLogin={() => router.push("/login")}
+                          onCommentCountChange={(count) =>
+                            setDreams((prev) => prev.map((d) => (d.id === dream.id ? { ...d, comment_count: count } : d)))
+                          }
+                          fetchComments={getDreamComments}
+                          submitComment={createDreamComment}
+                        />
                       </article>
                     ))
                   ) : (
@@ -496,7 +527,7 @@ export default function CommunityPage() {
                       </div>
 
                       <CommentSection
-                        postId={post.id}
+                        targetId={post.id}
                         isOpen={openCommentsFor === post.id}
                         defaultAnonymous={post.is_anonymous}
                         nickname={nickname}
@@ -505,6 +536,8 @@ export default function CommunityPage() {
                         onCommentCountChange={(count) =>
                           setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, comment_count: count } : p)))
                         }
+                        fetchComments={getPostComments}
+                        submitComment={createPostComment}
                       />
                     </article>
                   ))

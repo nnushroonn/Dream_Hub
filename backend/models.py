@@ -260,3 +260,22 @@ class CommunityComment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship()
+
+
+class DreamComment(Base):
+    """🔮 무의식 피드에 공개된 꿈 기록에 다는 댓글 - 단순 공감(❤️)을 넘어 유저끼리 실제로
+    이야기를 나눌 수 있도록 CommunityComment와 동일한 구조로 별도 테이블을 둔다.
+    기본값은 무의식 피드 자체의 기본 익명 관례를 따라 True (자유 광장 댓글은 False)."""
+
+    __tablename__ = "dream_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dream_entry_id: Mapped[int] = mapped_column(
+        ForeignKey("dream_entries.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    content: Mapped[str] = mapped_column(String(500), nullable=False)
+    is_anonymous: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user: Mapped["User"] = relationship()

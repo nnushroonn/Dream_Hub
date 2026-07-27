@@ -258,6 +258,7 @@ export interface DreamFeedEntry {
   is_anonymous: boolean;
   author_display_name: string | null;
   share_with_ai_analysis: boolean;
+  comment_count: number;
   ai_report: DreamFeedAiReport | null;
 }
 
@@ -335,6 +336,25 @@ export async function createPostComment(
   isAnonymous: boolean
 ): Promise<CommunityComment> {
   const { data } = await api.post<CommunityComment>(`/api/community/posts/${postId}/comments`, {
+    content,
+    is_anonymous: isAnonymous,
+  });
+  return data;
+}
+
+// 🔮 무의식 피드에 공개된 꿈 기록 댓글. 응답 구조는 자유 광장 댓글(CommunityComment)과 동일해
+// 그대로 재사용한다 - 공감(❤️)만으로는 부족한, 유저끼리 실제로 이야기를 나누는 자리다.
+export async function getDreamComments(dreamId: number): Promise<CommunityComment[]> {
+  const { data } = await api.get<CommunityComment[]>(`/api/community/dream-feed/${dreamId}/comments`);
+  return data;
+}
+
+export async function createDreamComment(
+  dreamId: number,
+  content: string,
+  isAnonymous: boolean
+): Promise<CommunityComment> {
+  const { data } = await api.post<CommunityComment>(`/api/community/dream-feed/${dreamId}/comments`, {
     content,
     is_anonymous: isAnonymous,
   });
