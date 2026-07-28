@@ -165,7 +165,7 @@ export default function CommunityPage() {
     }
     setShareDreamMode("existing");
     setShareDreamId(myPrivateDreams[0]?.id ?? null);
-    setShareDreamIsAnonymous(true);
+    setShareDreamIsAnonymous(false);
     setShareDreamWithAiReport(false);
     setShareDreamCaption("");
     setShareDreamError(null);
@@ -393,10 +393,10 @@ export default function CommunityPage() {
                                 <span className="shrink-0 text-sm font-semibold text-violet-400">[{dream.comment_count}]</span>
                               )}
                             </span>
-                            {firstLine(dream.summary).length >= 20 && (
+                            {firstLine(dream.share_caption ?? "").length >= 20 && (
                               <div className="relative mt-0.5">
                                 <p className="line-clamp-1 overflow-hidden text-ellipsis text-sm text-slate-400">
-                                  {firstLine(dream.summary)}
+                                  {firstLine(dream.share_caption ?? "")}
                                 </p>
                                 {/* 자유 광장과 동일한 페이드아웃 + 낚시글 스포일러 방지 로직 -
                                     첫 줄만 잘라 보여주고 우측 끝을 리스트 배경색으로 흐려지게 한다. */}

@@ -9,6 +9,36 @@ interface AttachedDreamViewerProps {
   interpretation: AiInterpretation;
 }
 
+// AI 해몽 본문(description)은 빈 줄(\n\n)로 문단이 구분된 산문이다 - 문단마다 mb-4 여백을 줘
+// 통글로 뭉쳐 보이지 않게 하고, 혹시 문단이 "**소제목**"처럼 마크다운 굵게 표시된 짧은 줄이면
+// 헤딩(font-bold text-slate-200 mt-6 mb-2)으로 승격해 글의 호흡을 나눠준다.
+function FormattedDreamText({ text }: { text: string }) {
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0);
+
+  return (
+    <>
+      {paragraphs.map((paragraph, index) => {
+        const headingMatch = paragraph.match(/^\*\*(.+)\*\*$/);
+        if (headingMatch) {
+          return (
+            <h3 key={index} className="mb-2 mt-6 font-bold text-slate-200 first:mt-0">
+              {headingMatch[1]}
+            </h3>
+          );
+        }
+        return (
+          <p key={index} className="mb-4 whitespace-pre-line text-sm leading-relaxed text-slate-300 last:mb-0">
+            {paragraph}
+          </p>
+        );
+      })}
+    </>
+  );
+}
+
 // 무의식 피드 상세 페이지의 "첨부된 꿈 데이터" 임베드 카드. 유저가 직접 쓴 본문(사담)과 섞여
 // 보이지 않도록 뚜렷한 테두리로 감싸, 원문/태그/AI 해몽/행운 정보/상담 리포트를 한데 담는다.
 export default function AttachedDreamViewer({ survey, interpretation }: AttachedDreamViewerProps) {
@@ -31,7 +61,9 @@ export default function AttachedDreamViewer({ survey, interpretation }: Attached
         </div>
       )}
 
-      <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-slate-300">{interpretation.description}</p>
+      <div className="mt-4">
+        <FormattedDreamText text={interpretation.description} />
+      </div>
 
       <div className="mt-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
         <div className="flex flex-wrap items-center gap-2">
