@@ -12,14 +12,15 @@ import {
   getCommunityPost,
   getPostComments,
   POST_EDIT_WINDOW_MS,
-  togglePostEmpathy,
   updateCommunityPost,
   updatePostComment,
+  voteOnPost,
   type CommunityPost,
 } from "@/api/dream";
 import CommentSection from "@/components/CommentSection";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
+import VoteButtons from "@/components/VoteButtons";
 import { useAuthStore } from "@/store/useAuthStore";
 
 function formatPostTime(iso: string): string {
@@ -84,20 +85,26 @@ export default function BoardPostPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleToggleEmpathy = async () => {
+  const handleVote = async (voteType: "up" | "down") => {
     if (!post) return;
     if (!isAuthenticated) {
       router.push("/login");
       return;
     }
     const previous = post;
-    setPost({
-      ...post,
-      is_liked_by_me: !post.is_liked_by_me,
-      empathy_count: post.empathy_count + (post.is_liked_by_me ? -1 : 1),
+    setPost((prev) => {
+      if (!prev) return prev;
+      let upvote_count = prev.upvote_count;
+      let downvote_count = prev.downvote_count;
+      if (prev.my_vote === "up") upvote_count -= 1;
+      if (prev.my_vote === "down") downvote_count -= 1;
+      const my_vote = prev.my_vote === voteType ? null : voteType;
+      if (my_vote === "up") upvote_count += 1;
+      if (my_vote === "down") downvote_count += 1;
+      return { ...prev, my_vote, upvote_count, downvote_count };
     });
     try {
-      const result = await togglePostEmpathy(post.id);
+      const result = await voteOnPost(post.id, voteType);
       setPost((prev) => (prev ? { ...prev, ...result } : prev));
     } catch {
       setPost(previous);
@@ -268,19 +275,14 @@ export default function BoardPostPage() {
 
                 <p className="mt-5 whitespace-pre-line text-base leading-relaxed text-slate-200">{post.content}</p>
 
-                <div className="mt-6 flex items-center gap-3 border-t border-white/[0.06] pt-4">
-                  <button
-                    type="button"
-                    onClick={handleToggleEmpathy}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                      post.is_liked_by_me
-                        ? "border-violet-400/60 bg-violet-500/25 text-violet-100"
-                        : "border-white/10 text-slate-300 hover:border-violet-400/30 hover:text-slate-100"
-                    }`}
-                  >
-                    ✨ 공감{post.empathy_count > 0 ? ` ${post.empathy_count}` : ""}
-                  </button>
-                  <span className="text-xs text-slate-500">💬 댓글 {post.comment_count}</span>
+                <div className="mt-6 border-t border-white/[0.06] pt-4">
+                  <VoteButtons
+                    myVote={post.my_vote}
+                    upvoteCount={post.upvote_count}
+                    downvoteCount={post.downvote_count}
+                    onVote={handleVote}
+                  />
+                  <p className="mt-3 text-center text-xs text-slate-500">💬 댓글 {post.comment_count}</p>
                 </div>
 
                 <div className="mt-2">

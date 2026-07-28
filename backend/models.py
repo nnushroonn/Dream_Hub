@@ -15,7 +15,8 @@ class DreamStatus(str, enum.Enum):
 
 
 class InteractionType(str, enum.Enum):
-    LIKE = "LIKE"  # 공감 ("저도 이런 꿈 꾼 적 있어요")
+    LIKE = "LIKE"  # 👍 좋아요(Upvote)
+    DISLIKE = "DISLIKE"  # 👎 싫어요(Downvote)
     SCRAP = "SCRAP"  # 스크랩북 저장
 
 
@@ -194,7 +195,11 @@ class DreamKeywordMap(Base):
 
 
 class Interaction(Base):
-    """꿈 게시물 단위의 유저 반응 - 공감(LIKE)과 스크랩북 저장(SCRAP)."""
+    """꿈 게시물 단위의 유저 반응 - 좋아요/싫어요(LIKE/DISLIKE 투표)와 스크랩북 저장(SCRAP).
+
+    유니크 제약이 (user_id, dream_entry_id, type)이라 DB 레벨에서는 한 유저가 같은 꿈에
+    LIKE와 DISLIKE 행을 동시에 가질 수 있지만, 라우터가 투표 시 항상 기존 LIKE/DISLIKE 행을
+    먼저 정리하고 하나만 남겨 상호 배타성을 애플리케이션 레벨에서 보장한다."""
 
     __tablename__ = "interactions"
     __table_args__ = (
@@ -235,7 +240,8 @@ class CommunityPost(Base):
 
 
 class CommunityPostReaction(Base):
-    """자유 광장 게시글의 '✨ 공감' 토글. (user_id, post_id) 유니크로 중복 공감을 막는다."""
+    """자유 광장 게시글의 👍/👎 투표. (user_id, post_id) 유니크라 한 유저는 게시글당 하나의
+    투표만 가지며, 방향을 바꾸면 새 행을 만들지 않고 is_upvote만 갱신한다."""
 
     __tablename__ = "community_post_reactions"
     __table_args__ = (
@@ -247,6 +253,9 @@ class CommunityPostReaction(Base):
     post_id: Mapped[int] = mapped_column(
         ForeignKey("community_posts.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # True면 👍 좋아요(Upvote), False면 👎 싫어요(Downvote). 좋아요/싫어요 도입 이전의 기존 행은
+    # 전부 '공감'이었으므로 마이그레이션 시 True로 채운다.
+    is_upvote: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

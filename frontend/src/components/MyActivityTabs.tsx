@@ -114,7 +114,7 @@ export default function MyActivityTabs() {
                     </Link>
                     <p className="mt-1 line-clamp-2 text-sm text-slate-400">{post.content}</p>
                     <p className="mt-2 text-[11px] text-slate-500">
-                      ✨ {post.empathy_count} · 💬 {post.comment_count}
+                      👍 {post.upvote_count} · 💬 {post.comment_count}
                     </p>
                   </div>
                 ))

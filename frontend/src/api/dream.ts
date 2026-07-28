@@ -257,8 +257,9 @@ export interface DreamFeedEntry {
   summary: string;
   tags: string[];
   dream_date: string;
-  empathy_count: number;
-  is_liked_by_me: boolean;
+  upvote_count: number;
+  downvote_count: number;
+  my_vote: "up" | "down" | null;
   is_anonymous: boolean;
   author_display_name: string | null;
   share_with_ai_analysis: boolean;
@@ -270,9 +271,10 @@ export interface DreamFeedEntry {
   ai_report: DreamFeedAiReport | null;
 }
 
-export interface EmpathyResult {
-  is_liked_by_me: boolean;
-  empathy_count: number;
+export interface VoteResult {
+  my_vote: "up" | "down" | null;
+  upvote_count: number;
+  downvote_count: number;
 }
 
 export async function getDreamFeed(): Promise<DreamFeedEntry[]> {
@@ -280,8 +282,8 @@ export async function getDreamFeed(): Promise<DreamFeedEntry[]> {
   return data;
 }
 
-export async function toggleDreamEmpathy(dreamId: number): Promise<EmpathyResult> {
-  const { data } = await api.post<EmpathyResult>(`/api/community/dream-feed/${dreamId}/empathy`);
+export async function voteOnDream(dreamId: number, voteType: "up" | "down"): Promise<VoteResult> {
+  const { data } = await api.post<VoteResult>(`/api/community/dream-feed/${dreamId}/vote`, { vote_type: voteType });
   return data;
 }
 
@@ -296,8 +298,9 @@ export interface CommunityPost {
   id: number;
   title: string;
   content: string;
-  empathy_count: number;
-  is_liked_by_me: boolean;
+  upvote_count: number;
+  downvote_count: number;
+  my_vote: "up" | "down" | null;
   is_anonymous: boolean;
   author_display_name: string | null;
   comment_count: number;
@@ -343,8 +346,8 @@ export async function deleteCommunityPost(postId: number): Promise<void> {
   await api.delete(`/api/community/posts/${postId}`);
 }
 
-export async function togglePostEmpathy(postId: number): Promise<EmpathyResult> {
-  const { data } = await api.post<EmpathyResult>(`/api/community/posts/${postId}/empathy`);
+export async function voteOnPost(postId: number, voteType: "up" | "down"): Promise<VoteResult> {
+  const { data } = await api.post<VoteResult>(`/api/community/posts/${postId}/vote`, { vote_type: voteType });
   return data;
 }
 

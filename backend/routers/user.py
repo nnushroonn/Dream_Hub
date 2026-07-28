@@ -89,7 +89,9 @@ def get_user_stats(current_user: User = Depends(get_current_user), db: Session =
     )
     my_post_ids = [row[0] for row in db.query(CommunityPost.id).filter(CommunityPost.user_id == current_user.id).all()]
     empathy_on_posts = (
-        db.query(CommunityPostReaction).filter(CommunityPostReaction.post_id.in_(my_post_ids)).count()
+        db.query(CommunityPostReaction)
+        .filter(CommunityPostReaction.post_id.in_(my_post_ids), CommunityPostReaction.is_upvote.is_(True))
+        .count()
         if my_post_ids
         else 0
     )

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,8 +20,8 @@ import {
   getTrends,
   requestQuickAiInterpretation,
   setDreamVisibility,
-  toggleDreamEmpathy,
   updateDreamComment,
+  voteOnDream,
   type AiInterpretation,
   type CommunityPost,
   type DreamFeedAiReport,
@@ -34,6 +34,7 @@ import DreamGuidePanel from "@/components/DreamGuidePanel";
 import DreamOriginalQuote from "@/components/DreamOriginalQuote";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
+import VoteButtons from "@/components/VoteButtons";
 import { MOOD_OPTIONS } from "@/lib/moodBucket";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
@@ -111,56 +112,6 @@ function AiReportAccordion({ report }: { report: DreamFeedAiReport }) {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
-
-// 🌀 나도 이런 꿈 꾼 적 있어: 클릭할 때마다 보랏빛 동심원이 밖으로 퍼져나가는 파동을 하나씩 더한다.
-// 애니메이션이 끝난 링은 onAnimationComplete에서 스스로 목록에서 지운다.
-function DreamReactionButton({
-  isLiked,
-  count,
-  onToggle,
-}: {
-  isLiked: boolean;
-  count: number;
-  onToggle: () => void;
-}) {
-  const [ripples, setRipples] = useState<number[]>([]);
-  const nextRippleId = useRef(0);
-
-  const handleClick = () => {
-    const id = nextRippleId.current++;
-    setRipples((prev) => [...prev, id]);
-    onToggle();
-  };
-
-  return (
-    <div className="relative inline-block">
-      <AnimatePresence>
-        {ripples.map((id) => (
-          <motion.span
-            key={id}
-            className="pointer-events-none absolute inset-0 rounded-full border border-violet-400/70"
-            initial={{ opacity: 0.7, scale: 0.7 }}
-            animate={{ opacity: 0, scale: 2.4 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.9, ease: "easeOut" }}
-            onAnimationComplete={() => setRipples((prev) => prev.filter((rippleId) => rippleId !== id))}
-          />
-        ))}
-      </AnimatePresence>
-      <button
-        type="button"
-        onClick={handleClick}
-        className={`relative rounded-full border px-4 py-2 text-xs font-medium transition-all duration-300 ${
-          isLiked
-            ? "border-violet-400/60 bg-violet-500/25 text-violet-100"
-            : "border-white/10 bg-white/5 text-slate-300 hover:border-violet-400/40 hover:bg-violet-500/10"
-        }`}
-      >
-        🌀 나도 이런 꿈 꾼 적 있어{count > 0 ? ` ${count}` : ""}
-      </button>
     </div>
   );
 }
@@ -252,25 +203,27 @@ export default function CommunityPage() {
     return dreams.filter((dream) => dream.tags.includes(activeTag));
   }, [dreams, activeTag]);
 
-  const handleDreamToggle = async (dreamId: number) => {
+  const handleDreamVote = async (dreamId: number, voteType: "up" | "down") => {
     if (!isAuthenticated) {
       router.push("/login");
       return;
     }
     const previous = dreams;
     setDreams((prev) =>
-      prev.map((dream) =>
-        dream.id === dreamId
-          ? {
-              ...dream,
-              is_liked_by_me: !dream.is_liked_by_me,
-              empathy_count: dream.empathy_count + (dream.is_liked_by_me ? -1 : 1),
-            }
-          : dream
-      )
+      prev.map((dream) => {
+        if (dream.id !== dreamId) return dream;
+        let upvote_count = dream.upvote_count;
+        let downvote_count = dream.downvote_count;
+        if (dream.my_vote === "up") upvote_count -= 1;
+        if (dream.my_vote === "down") downvote_count -= 1;
+        const my_vote = dream.my_vote === voteType ? null : voteType;
+        if (my_vote === "up") upvote_count += 1;
+        if (my_vote === "down") downvote_count += 1;
+        return { ...dream, my_vote, upvote_count, downvote_count };
+      })
     );
     try {
-      const result = await toggleDreamEmpathy(dreamId);
+      const result = await voteOnDream(dreamId, voteType);
       setDreams((prev) => prev.map((dream) => (dream.id === dreamId ? { ...dream, ...result } : dream)));
     } catch {
       setDreams(previous);
@@ -543,10 +496,11 @@ export default function CommunityPage() {
                         {dream.share_with_ai_analysis && dream.ai_report && <AiReportAccordion report={dream.ai_report} />}
 
                         <div className="mt-4 flex items-center gap-2">
-                          <DreamReactionButton
-                            isLiked={dream.is_liked_by_me}
-                            count={dream.empathy_count}
-                            onToggle={() => handleDreamToggle(dream.id)}
+                          <VoteButtons
+                            myVote={dream.my_vote}
+                            upvoteCount={dream.upvote_count}
+                            downvoteCount={dream.downvote_count}
+                            onVote={(voteType) => handleDreamVote(dream.id, voteType)}
                           />
                           <button
                             type="button"
@@ -665,7 +619,7 @@ export default function CommunityPage() {
                               </button>
                             </div>
                           )}
-                          <span className="text-xs text-slate-400">✨ {post.empathy_count}</span>
+                          <span className="text-xs text-slate-400">👍 {post.upvote_count}</span>
                         </div>
                       </div>
                     )
