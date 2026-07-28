@@ -34,6 +34,7 @@ import DreamGuidePanel from "@/components/DreamGuidePanel";
 import DreamOriginalQuote from "@/components/DreamOriginalQuote";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
+import SidebarBestList from "@/components/SidebarBestList";
 import VoteButtons from "@/components/VoteButtons";
 import { MOOD_OPTIONS } from "@/lib/moodBucket";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -681,6 +682,8 @@ export default function CommunityPage() {
                   )}
                 </div>
               </div>
+
+              <SidebarBestList />
             </div>
           </aside>
         </div>

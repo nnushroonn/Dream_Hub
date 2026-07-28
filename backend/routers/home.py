@@ -1,4 +1,4 @@
-"""메인 홈: 히어로 섹션 / 오늘의 베스트 꿈 추천 (더미 데이터) / 달 위상 위젯.
+"""메인 홈: 히어로 섹션 / 오늘의 베스트 꿈 추천(실제 좋아요 랭킹) / 달 위상 위젯.
 
 실시간 트렌드 키워드는 routers/trends.py가 실제 DB 데이터로 별도 제공한다."""
 
@@ -8,15 +8,22 @@ from datetime import date, datetime, time, timedelta, timezone
 
 import ephem
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import DreamEntry, DreamStatus
+from models import DreamEntry, DreamStatus, Interaction, InteractionType
 
 router = APIRouter(prefix="/api/home", tags=["home"])
 
 KST = timezone(timedelta(hours=9))
+
+# 베스트 피드는 절대 기준(예: "좋아요 100개 이상")이 아니라 최근 기간 내 상대 랭킹으로 뽑는다 -
+# 트래픽이 적은 초기 커뮤니티에서는 절대 기준을 쓰면 랭킹 자체가 텅 비어버리기 때문이다.
+# 트래픽이 늘어나면 이 값을 72(3일)나 24(1일)로 좁혀 "지금 뜨는 글" 체감을 올릴 수 있다.
+BEST_FEED_WINDOW_HOURS = 168
+# 좋아요가 0개인 글은 "인기글"이라 부를 수 없으니 랭킹에서 제외한다.
+BEST_FEED_MIN_UPVOTES = 1
 
 # 8가지 위상별 무드/설명 (phase_name으로 조회). 실제 달의 위상은 며칠씩 이어지므로,
 # 이 자리에는 "그 며칠 동안 계속 같아도 자연스러운" 무드 텍스트만 남긴다 - 매일 달라져야 하는
@@ -327,41 +334,32 @@ def get_moon_phase():
 
 
 @router.get("/best-dreams")
-def get_best_dreams():
+def get_best_dreams(limit: int = 3, db: Session = Depends(get_db)):
+    """베스트 피드: 최근 BEST_FEED_WINDOW_HOURS 시간 내 공개된 꿈 중 좋아요 1개 이상 받은 것만
+    대상으로, 좋아요 수 → 조회수 → 최신순으로 상대 랭킹을 매긴다. 홈 화면(limit=3)과 커뮤니티
+    사이드바(limit=5)가 이 하나의 엔드포인트를 limit만 다르게 호출해 재사용한다."""
+    limit = max(1, min(limit, 20))
+    window_start = datetime.now(timezone.utc) - timedelta(hours=BEST_FEED_WINDOW_HOURS)
+    upvote_count = func.count(Interaction.id)
+
+    rows = (
+        db.query(DreamEntry, upvote_count.label("upvote_count"))
+        .join(
+            Interaction,
+            (Interaction.dream_entry_id == DreamEntry.id) & (Interaction.type == InteractionType.LIKE),
+        )
+        .filter(DreamEntry.status == DreamStatus.PUBLIC, DreamEntry.created_at >= window_start)
+        .group_by(DreamEntry.id)
+        .having(upvote_count >= BEST_FEED_MIN_UPVOTES)
+        .order_by(upvote_count.desc(), DreamEntry.view_count.desc(), DreamEntry.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
     return {
         "dreams": [
-            {
-                "id": 1,
-                "title": "별빛 바다를 헤엄치는 꿈",
-                "content": "밤하늘을 날아 별들 사이를 헤엄치는 꿈을 꿨어요. 몸이 깃털처럼 가벼워서 자유로운 기분이었어요.",
-                "emotion": "😊",
-                "empathy_count": 342,
-                "author": "몽유별",
-            },
-            {
-                "id": 2,
-                "title": "이빨이 우수수 빠지는 꿈",
-                "content": "거울을 보는데 이빨이 하나둘 빠지기 시작했어요. 너무 생생해서 깨고 나서도 한참 입을 만졌어요.",
-                "emotion": "😨",
-                "empathy_count": 218,
-                "author": "밤그림자",
-            },
-            {
-                "id": 3,
-                "title": "돌아가신 할머니를 만난 꿈",
-                "content": "따뜻한 부엌에서 할머니가 밥을 차려주고 계셨어요. 오랜만에 느낀 포근함에 눈물이 났어요.",
-                "emotion": "😢",
-                "empathy_count": 401,
-                "author": "새벽공기",
-            },
-            {
-                "id": 4,
-                "title": "끝없이 쫓기던 꿈",
-                "content": "누군가에게 쫓기는데 다리가 마음처럼 움직이지 않았어요. 골목을 몇 번이나 꺾어 도망쳤어요.",
-                "emotion": "😱",
-                "empathy_count": 156,
-                "author": "구름걸음",
-            },
+            {"id": entry.id, "title": entry.title, "emotion": entry.emotion, "upvote_count": count}
+            for entry, count in rows
         ]
     }
 

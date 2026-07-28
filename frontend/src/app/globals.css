@@ -12,6 +12,7 @@
   --font-mono: var(--font-geist-mono);
   --animate-twinkle: twinkle 3.5s ease-in-out infinite;
   --animate-aurora: aurora-float 14s ease-in-out infinite;
+  --animate-shine: shine 3s linear infinite;
 }
 
 @keyframes twinkle {
@@ -34,6 +35,25 @@
   50% {
     transform: translate(30px, -40px) scale(1.15);
   }
+}
+
+/* 베스트 피드 1위 카드 테두리: 배경 위치를 계속 흘려보내 빛이 도는 듯한 럭셔리 테두리를 만든다. */
+@keyframes shine {
+  to {
+    background-position: 0% 0%, 300% center;
+  }
+}
+
+/* 이중 배경 트릭 - 안쪽(padding-box)은 카드 배경색, 바깥쪽(border-box)은 흐르는 그라디언트라
+   border-2 border-transparent와 겹치면 테두리 자리에만 그라디언트가 보인다. */
+.best-feed-shine-border {
+  background:
+    linear-gradient(#0b0b16, #0b0b16) padding-box,
+    linear-gradient(90deg, #fbbf24, #e879f9, #818cf8, #fbbf24) border-box;
+  background-size:
+    100% 100%,
+    300% 100%;
+  animation: shine 3s linear infinite;
 }
 
 @media (prefers-color-scheme: dark) {

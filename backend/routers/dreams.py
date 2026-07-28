@@ -139,6 +139,9 @@ def get_public_dream(dream_id: int, db: Session = Depends(get_db)):
     )
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공개된 꿈 기록을 찾을 수 없습니다.")
+    entry.view_count += 1
+    db.commit()
+    db.refresh(entry)
     return _to_response(entry)
 
 

@@ -5,16 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { decodeAccessToken } from "@/api/auth";
-import {
-  getBestDreams,
-  getExplorerCount,
-  getMoonPhase,
-  getTrends,
-  type BestDream,
-  type MoonPhase,
-  type Trend,
-} from "@/api/dream";
+import { getExplorerCount, getMoonPhase, getTrends, type MoonPhase, type Trend } from "@/api/dream";
 import DreamCalendarWidget from "@/components/DreamCalendarWidget";
+import HomeBestShowcase from "@/components/HomeBestShowcase";
 import LiveTicker from "@/components/LiveTicker";
 import MoonIcon from "@/components/MoonIcon";
 import NavBar from "@/components/NavBar";
@@ -23,8 +16,6 @@ import { syncTrendRankChanges, type TrendRankChange } from "@/lib/trendSnapshot"
 import { useAuthStore } from "@/store/useAuthStore";
 
 const EXPLORER_COUNT_POLL_MS = 5000;
-// 우측 사이드바 높이가 좌측 캘린더 영역과 균형을 이루도록 베스트 꿈은 2개까지만 노출한다.
-const BEST_DREAMS_DISPLAY_LIMIT = 2;
 
 interface Star {
   id: number;
@@ -41,13 +32,6 @@ interface Star {
 function toHashtagDisplay(keyword: string): string {
   return `#${keyword.trim().replace(/\s+/g, "_")}`;
 }
-
-const CARD_BANNERS = [
-  "from-violet-600/40 via-fuchsia-500/25 to-indigo-600/40",
-  "from-indigo-600/40 via-purple-500/25 to-pink-500/30",
-  "from-fuchsia-600/30 via-violet-500/25 to-blue-600/40",
-  "from-blue-600/30 via-indigo-500/25 to-fuchsia-600/30",
-];
 
 // 1~3위는 골드/실버/브론즈 네온 톤으로 순위 숫자와 카드 호버 글로우를 특별하게 강조한다.
 function rankStyle(index: number): { number: string; row: string } {
@@ -102,8 +86,6 @@ export default function HomePage() {
   const [trends, setTrends] = useState<Trend[]>([]);
   const [trendChanges, setTrendChanges] = useState<Record<string, TrendRankChange>>({});
   const [isLoadingTrends, setIsLoadingTrends] = useState(true);
-  const [bestDreams, setBestDreams] = useState<BestDream[]>([]);
-  const [likedIds, setLikedIds] = useState<Set<number>>(new Set());
   const [stars, setStars] = useState<Star[]>([]);
   const [moonPhase, setMoonPhase] = useState<MoonPhase | null>(null);
   const [isMoonModalOpen, setIsMoonModalOpen] = useState(false);
@@ -132,7 +114,6 @@ export default function HomePage() {
       })
       .catch(() => {})
       .finally(() => setIsLoadingTrends(false));
-    getBestDreams().then(setBestDreams).catch(() => {});
     getMoonPhase().then(setMoonPhase).catch(() => {});
   }, []);
 
@@ -183,26 +164,6 @@ export default function HomePage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isMoonModalOpen]);
-
-  const toggleEmpathy = (dreamId: number) => {
-    // TODO: 실제 구현 시 공감 API 연동 (현재는 낙관적 로컬 상태만 반영)
-    setLikedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(dreamId)) {
-        next.delete(dreamId);
-      } else {
-        next.add(dreamId);
-      }
-      return next;
-    });
-    setBestDreams((prev) =>
-      prev.map((dream) =>
-        dream.id === dreamId
-          ? { ...dream, empathy_count: dream.empathy_count + (likedIds.has(dreamId) ? -1 : 1) }
-          : dream
-      )
-    );
-  };
 
   return (
     // overflow-hidden을 여기 두면 어떤 자식이든 position: sticky가 조용히 깨진다(사이드바 광고
@@ -371,9 +332,11 @@ export default function HomePage() {
             </div>
 
             <DreamCalendarWidget />
+
+            <HomeBestShowcase />
           </div>
 
-          {/* 우측: 커뮤니티 데이터 영역 - 실시간 트렌드 키워드 + 오늘의 베스트 꿈 */}
+          {/* 우측: 커뮤니티 데이터 영역 - 실시간 트렌드 키워드 */}
           <div className="lg:col-span-4">
             {/* 실시간 트렌드 키워드: 꿈 기록소(공개 글) + 꿈해몽 사전(검색어) 실제 집계, 세로형 랭킹 리스트 */}
             <section>
@@ -419,57 +382,6 @@ export default function HomePage() {
                     아직 트렌드로 집계된 꿈이 없어요. 첫 기록을 남겨보세요 ✨
                   </p>
                 )}
-              </div>
-            </section>
-
-            {/* 오늘의 베스트 꿈: 사이드바 폭에 맞춘 컴팩트 리스트 카드 - 좌측 캘린더와 높이
-                균형이 깨지지 않도록 최대 2개만 노출하고, 나머지는 커뮤니티에서 보게 안내한다. */}
-            <section className="mt-10">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-100">🌠 오늘의 베스트 꿈</h2>
-                <Link href="/community" className="text-xs text-violet-300/70 underline-offset-2 hover:text-violet-200 hover:underline">
-                  더 보기 →
-                </Link>
-              </div>
-              <div className="mt-4 flex flex-col gap-3">
-                {bestDreams.slice(0, BEST_DREAMS_DISPLAY_LIMIT).map((dream, index) => {
-                  const isLiked = likedIds.has(dream.id);
-                  return (
-                    <article
-                      key={dream.id}
-                      className="group rounded-2xl border border-violet-400/10 bg-violet-950/30 p-4 backdrop-blur-md transition-all duration-300 hover:border-violet-400/40 hover:bg-violet-950/50"
-                    >
-                      <div className="flex items-start gap-3">
-                        <span
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-base ${
-                            CARD_BANNERS[index % CARD_BANNERS.length]
-                          }`}
-                        >
-                          {dream.emotion}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <h3 className="truncate text-sm font-semibold text-white">{dream.title}</h3>
-                          <p className="mt-1 line-clamp-3 text-xs text-slate-400">{dream.content}</p>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex items-center justify-between gap-2">
-                        <span className="truncate text-[11px] text-slate-500">by {dream.author}</span>
-                        <button
-                          type="button"
-                          onClick={() => toggleEmpathy(dream.id)}
-                          className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                            isLiked
-                              ? "border-violet-400 bg-violet-500/30 text-violet-100"
-                              : "border-white/10 text-slate-400 hover:border-violet-400/40 hover:text-violet-200"
-                          }`}
-                        >
-                          🙋 {dream.empathy_count}
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
               </div>
             </section>
 

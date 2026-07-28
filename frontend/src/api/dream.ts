@@ -49,13 +49,13 @@ export async function getExplorerCount(): Promise<number> {
 
 export type DreamMood = "good" | "neutral" | "nightmare";
 
-export interface BestDream {
+// 베스트 피드: 최근 168시간 내 좋아요 1개 이상 받은 공개 꿈을 상대 랭킹(좋아요→조회수→최신순)으로
+// 뽑은 실제 데이터. limit만 다르게 줘서 홈 화면(Top 3)과 커뮤니티 사이드바(Top 5)가 재사용한다.
+export interface BestFeedEntry {
   id: number;
   title: string;
-  content: string;
   emotion: string;
-  empathy_count: number;
-  author: string;
+  upvote_count: number;
 }
 
 export async function getTrends(): Promise<Trend[]> {
@@ -63,8 +63,8 @@ export async function getTrends(): Promise<Trend[]> {
   return data;
 }
 
-export async function getBestDreams(): Promise<BestDream[]> {
-  const { data } = await api.get<{ dreams: BestDream[] }>("/api/home/best-dreams");
+export async function getBestFeed(limit: number): Promise<BestFeedEntry[]> {
+  const { data } = await api.get<{ dreams: BestFeedEntry[] }>("/api/home/best-dreams", { params: { limit } });
   return data.dreams;
 }
 
