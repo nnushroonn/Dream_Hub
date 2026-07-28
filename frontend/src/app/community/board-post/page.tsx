@@ -273,7 +273,9 @@ export default function BoardPostPage() {
                   </div>
                 )}
 
-                <p className="mt-5 whitespace-pre-line text-base leading-relaxed text-slate-200">{post.content}</p>
+                {/* whitespace-pre-line은 연속된 빈 줄을 하나로 뭉개버려 유저가 의도적으로 넣은
+                    "스크롤 압박" 엔터 도배가 사라진다 - pre-wrap으로 모든 줄바꿈/공백을 그대로 보존한다. */}
+                <p className="mt-5 whitespace-pre-wrap text-base leading-relaxed text-slate-200">{post.content}</p>
 
                 <div className="mt-6 border-t border-white/[0.06] pt-4">
                   <VoteButtons

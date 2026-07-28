@@ -50,6 +50,12 @@ function formatPostTime(iso: string): string {
   return new Date(iso).toLocaleString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+// 리스트 미리보기 스포일러 방지: "반전은 다음 줄에" 같은 낚시글을 첫 줄만 잘라 보여주면, 유저가
+// 일부러 엔터를 여러 번 눌러 감춰둔 반전 텍스트가 리스트에서 미리 새어나가지 않는다.
+function firstLine(content: string): string {
+  return content.split(/\r\n|\n/)[0];
+}
+
 // 익명 글은 카드 테두리에 은은한 보랏빛 오라클 광채를 둘러 일반(닉네임) 글과 시각적으로 구분한다.
 // bg-white/[0.02] + backdrop-blur-md로 어두운 배경 위에서 카드가 확실한 레이어로 분리되게 한다.
 function cardClass(isAnonymous: boolean): string {
@@ -595,10 +601,10 @@ export default function CommunityPage() {
                               <span className="shrink-0 text-sm font-semibold text-violet-400">[{post.comment_count}]</span>
                             )}
                           </span>
-                          {post.content.length >= 20 && (
+                          {firstLine(post.content).length >= 20 && (
                             <div className="relative mt-0.5">
                               <p className="line-clamp-1 overflow-hidden text-ellipsis text-sm text-slate-400">
-                                {post.content}
+                                {firstLine(post.content)}
                               </p>
                               {/* 우측 끝을 리스트 배경색(slate-950)으로 페이드아웃시켜 텍스트가 갑자기
                                   잘리지 않고 스르륵 사라지는 것처럼 보이게 한다 - 호기심을 자극하는
