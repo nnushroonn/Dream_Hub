@@ -7,15 +7,16 @@ AI 해몽(POST /api/dream-interpretation)은 별도로 비로그인 상태에서
 """
 
 from datetime import date as PyDate, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import DreamEntry, DreamStatus, User
+from models import DreamEntry, DreamStatus, Interaction, InteractionType, User
 from routers.ai_interpretation import CounselingReportInput, DreamSurveyInput
-from routers.auth import get_current_user
+from routers.auth import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/api/dreams", tags=["dreams"])
 
@@ -68,9 +69,19 @@ class DreamEntryResponse(BaseModel):
     interpretation: AiInterpretationPayload
     created_at: datetime
     updated_at: datetime
+    # 공개 상세 조회(get_public_dream)에서만 실제 값이 채워진다 - 소유자 전용 CRUD 응답(목록/생성/
+    # 수정)에서는 굳이 계산하지 않고 기본값(0/None)을 그대로 둔다.
+    upvote_count: int = 0
+    downvote_count: int = 0
+    my_vote: Literal["up", "down"] | None = None
 
 
-def _to_response(entry: DreamEntry) -> DreamEntryResponse:
+def _to_response(
+    entry: DreamEntry,
+    upvote_count: int = 0,
+    downvote_count: int = 0,
+    my_vote: Literal["up", "down"] | None = None,
+) -> DreamEntryResponse:
     return DreamEntryResponse(
         id=entry.id,
         dream_date=entry.dream_date,
@@ -86,6 +97,9 @@ def _to_response(entry: DreamEntry) -> DreamEntryResponse:
         interpretation=entry.interpretation,
         created_at=entry.created_at,
         updated_at=entry.updated_at,
+        upvote_count=upvote_count,
+        downvote_count=downvote_count,
+        my_vote=my_vote,
     )
 
 
@@ -128,10 +142,17 @@ def list_dreams(current_user: User = Depends(get_current_user), db: Session = De
 
 
 @router.get("/public/{dream_id}", response_model=DreamEntryResponse)
-def get_public_dream(dream_id: int, db: Session = Depends(get_db)):
+def get_public_dream(
+    dream_id: int,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
     """커뮤니티 상세 페이지용 익명 공개 조회 - 로그인 불필요. 소유자 정보는 응답에 담기지
     않으므로(_to_response에 user_id가 없음) 그대로 반환해도 '익명의 탐험가' 컨셉이 유지된다.
-    PUBLIC 상태가 아닌 글은 존재 자체를 노출하지 않기 위해 404로 통일한다."""
+    PUBLIC 상태가 아닌 글은 존재 자체를 노출하지 않기 위해 404로 통일한다.
+
+    무의식 피드가 리스트형으로 바뀌면서 좋아요/싫어요 투표 UI가 이 상세 페이지로만 옮겨왔기
+    때문에, 여기서도 community.py의 dream-feed 목록과 동일하게 투표 집계를 계산해 내려준다."""
     entry = (
         db.query(DreamEntry)
         .filter(DreamEntry.id == dream_id, DreamEntry.status == DreamStatus.PUBLIC)
@@ -142,7 +163,32 @@ def get_public_dream(dream_id: int, db: Session = Depends(get_db)):
     entry.view_count += 1
     db.commit()
     db.refresh(entry)
-    return _to_response(entry)
+
+    upvote_count = (
+        db.query(Interaction)
+        .filter(Interaction.dream_entry_id == dream_id, Interaction.type == InteractionType.LIKE)
+        .count()
+    )
+    downvote_count = (
+        db.query(Interaction)
+        .filter(Interaction.dream_entry_id == dream_id, Interaction.type == InteractionType.DISLIKE)
+        .count()
+    )
+    my_vote: Literal["up", "down"] | None = None
+    if current_user is not None:
+        my_interaction = (
+            db.query(Interaction)
+            .filter(
+                Interaction.dream_entry_id == dream_id,
+                Interaction.user_id == current_user.id,
+                Interaction.type.in_([InteractionType.LIKE, InteractionType.DISLIKE]),
+            )
+            .first()
+        )
+        if my_interaction is not None:
+            my_vote = "up" if my_interaction.type == InteractionType.LIKE else "down"
+
+    return _to_response(entry, upvote_count, downvote_count, my_vote)
 
 
 @router.post("", response_model=DreamEntryResponse, status_code=status.HTTP_201_CREATED)

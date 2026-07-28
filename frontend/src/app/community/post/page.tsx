@@ -11,12 +11,14 @@ import {
   getDreamComments,
   getPublicDream,
   updateDreamComment,
+  voteOnDream,
   type DreamEntryRecord,
 } from "@/api/dream";
 import CommentSection from "@/components/CommentSection";
 import CounselingStoryView from "@/components/CounselingStoryView";
 import DreamOriginalQuote from "@/components/DreamOriginalQuote";
 import NavBar from "@/components/NavBar";
+import VoteButtons from "@/components/VoteButtons";
 import { useAuthStore } from "@/store/useAuthStore";
 
 // 홈 화면 우측 하단 실시간 토스트(LiveTicker)를 클릭했을 때 도착하는 익명 공개 상세 페이지.
@@ -49,6 +51,32 @@ export default function CommunityPostPage() {
       .finally(() => setIsLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleVote = async (voteType: "up" | "down") => {
+    if (!entry) return;
+    if (!isAuthenticated) {
+      router.push("/login");
+      return;
+    }
+    const previous = entry;
+    setEntry((prev) => {
+      if (!prev) return prev;
+      let upvote_count = prev.upvote_count;
+      let downvote_count = prev.downvote_count;
+      if (prev.my_vote === "up") upvote_count -= 1;
+      if (prev.my_vote === "down") downvote_count -= 1;
+      const my_vote = prev.my_vote === voteType ? null : voteType;
+      if (my_vote === "up") upvote_count += 1;
+      if (my_vote === "down") downvote_count += 1;
+      return { ...prev, my_vote, upvote_count, downvote_count };
+    });
+    try {
+      const result = await voteOnDream(entry.id, voteType);
+      setEntry((prev) => (prev ? { ...prev, ...result } : prev));
+    } catch {
+      setEntry(previous);
+    }
+  };
 
   return (
     <div className="relative min-h-screen bg-slate-950 text-slate-100">
@@ -139,6 +167,17 @@ export default function CommunityPostPage() {
                 />
               </div>
             )}
+
+            {/* 👍/👎 좋아요·싫어요: 무의식 피드가 리스트형으로 바뀌면서 투표는 이제 이 상세
+                페이지에서만 이뤄진다 (리스트에는 집계된 upvote_count만 노출). */}
+            <div className="mt-6 border-t border-white/[0.06] pt-5">
+              <VoteButtons
+                myVote={entry.my_vote}
+                upvoteCount={entry.upvote_count}
+                downvoteCount={entry.downvote_count}
+                onVote={handleVote}
+              />
+            </div>
 
             {/* 💬 댓글: 이 꿈에 대해 다른 탐험가들과 이야기를 나눌 수 있는 자리 - 페이지 성격상
                 토글 없이 항상 펼쳐 둔다. CommentSection 자체가 위쪽 구분선을 이미 그려준다. */}

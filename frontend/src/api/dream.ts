@@ -180,6 +180,11 @@ export interface DreamEntryRecord {
   interpretation: AiInterpretation;
   created_at: string;
   updated_at: string;
+  // 공개 상세 조회(getPublicDream)에서만 실제 값이 채워진다. 그 외(listDreams 등 내 소유 CRUD
+  // 응답)에서는 서버가 기본값(0/null)을 그대로 내려준다.
+  upvote_count: number;
+  downvote_count: number;
+  my_vote: "up" | "down" | null;
 }
 
 export interface DreamEntryPayload {

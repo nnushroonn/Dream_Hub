@@ -1,41 +1,30 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { getAuthErrorMessage } from "@/api/auth";
 import {
   buildDreamOneLineSummary,
-  buildDreamOriginalContent,
   createCommunityPost,
   createDream,
-  createDreamComment,
   deleteCommunityPost,
-  deleteDreamComment,
   getCommunityPosts,
-  getDreamComments,
   getDreamFeed,
   getTrends,
   requestQuickAiInterpretation,
   setDreamVisibility,
-  updateDreamComment,
-  voteOnDream,
   type AiInterpretation,
   type CommunityPost,
-  type DreamFeedAiReport,
   type DreamFeedEntry,
   type Trend,
 } from "@/api/dream";
-import CommentSection from "@/components/CommentSection";
 import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
 import DreamGuidePanel from "@/components/DreamGuidePanel";
-import DreamOriginalQuote from "@/components/DreamOriginalQuote";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
 import SidebarBestList from "@/components/SidebarBestList";
-import VoteButtons from "@/components/VoteButtons";
 import { MOOD_OPTIONS } from "@/lib/moodBucket";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
@@ -56,73 +45,6 @@ function firstLine(content: string): string {
   return content.split(/\r\n|\n/)[0];
 }
 
-// 익명 글은 카드 테두리에 은은한 보랏빛 오라클 광채를 둘러 일반(닉네임) 글과 시각적으로 구분한다.
-// bg-white/[0.02] + backdrop-blur-md로 어두운 배경 위에서 카드가 확실한 레이어로 분리되게 한다.
-function cardClass(isAnonymous: boolean): string {
-  const base = "rounded-xl bg-white/[0.02] p-5 backdrop-blur-md transition-all duration-300";
-  return isAnonymous
-    ? `${base} border border-violet-400/25 shadow-[0_0_18px_rgba(167,139,250,0.12)] hover:border-violet-400/50 hover:shadow-[0_0_28px_rgba(167,139,250,0.22)]`
-    : `${base} border border-white/[0.06] hover:border-violet-400/30 hover:shadow-[0_0_20px_rgba(167,139,250,0.12)]`;
-}
-
-function AuthorLine({ isAnonymous, displayName }: { isAnonymous: boolean; displayName: string | null }) {
-  return (
-    <div className="flex items-center gap-1.5 text-[11px]">
-      {isAnonymous ? (
-        <>
-          <span>🎭</span>
-          <span className="text-violet-300/80">익명의 탐험가</span>
-        </>
-      ) : (
-        <>
-          <span className="text-slate-500">👤</span>
-          <span className="text-slate-400">{displayName}</span>
-        </>
-      )}
-    </div>
-  );
-}
-
-// 🔮 AI 무의식 리포트 함께 보기: shareWithAiAnalysis가 true인 카드에서만 노출되는 아코디언.
-function AiReportAccordion({ report }: { report: DreamFeedAiReport }) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <div className="mt-3">
-      <button
-        type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center gap-1.5 text-xs font-medium text-purple-300 transition-colors hover:text-purple-200"
-      >
-        🔮 AI 무의식 리포트 함께 보기
-        <span className={`inline-block transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}>▾</span>
-      </button>
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            className="overflow-hidden"
-          >
-            <div className="mt-3 rounded-lg border border-purple-500/20 bg-purple-950/20 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
-                  {report.expert_badge}
-                </span>
-                <span className="text-xs text-violet-300/80">{report.selected_expert}의 시선</span>
-              </div>
-              <p className="mt-2.5 whitespace-pre-line text-sm leading-relaxed text-slate-300">{report.description}</p>
-              <p className="mt-2.5 text-xs leading-relaxed text-slate-400">{report.expert_insight}</p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 export default function CommunityPage() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -134,8 +56,6 @@ export default function CommunityPage() {
   const [dreams, setDreams] = useState<DreamFeedEntry[]>([]);
   const [isLoadingDreams, setIsLoadingDreams] = useState(true);
   const [activeTag, setActiveTag] = useState<string | null>(null);
-  // 한 번에 댓글 창을 펼칠 수 있는 꿈 기록은 하나 - 다른 꿈의 댓글을 열면 이전 것은 접힌다.
-  const [openDreamCommentsFor, setOpenDreamCommentsFor] = useState<number | null>(null);
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
@@ -211,33 +131,6 @@ export default function CommunityPage() {
     if (!activeTag) return dreams;
     return dreams.filter((dream) => dream.tags.includes(activeTag));
   }, [dreams, activeTag]);
-
-  const handleDreamVote = async (dreamId: number, voteType: "up" | "down") => {
-    if (!isAuthenticated) {
-      router.push("/login");
-      return;
-    }
-    const previous = dreams;
-    setDreams((prev) =>
-      prev.map((dream) => {
-        if (dream.id !== dreamId) return dream;
-        let upvote_count = dream.upvote_count;
-        let downvote_count = dream.downvote_count;
-        if (dream.my_vote === "up") upvote_count -= 1;
-        if (dream.my_vote === "down") downvote_count -= 1;
-        const my_vote = dream.my_vote === voteType ? null : voteType;
-        if (my_vote === "up") upvote_count += 1;
-        if (my_vote === "down") downvote_count += 1;
-        return { ...dream, my_vote, upvote_count, downvote_count };
-      })
-    );
-    try {
-      const result = await voteOnDream(dreamId, voteType);
-      setDreams((prev) => prev.map((dream) => (dream.id === dreamId ? { ...dream, ...result } : dream)));
-    } catch {
-      setDreams(previous);
-    }
-  };
 
   const handleDeletePost = async (postId: number) => {
     if (isDeletingPost) return;
@@ -469,77 +362,56 @@ export default function CommunityPage() {
                   })}
                 </div>
 
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col">
                   {isLoadingDreams ? (
-                    Array.from({ length: 3 }, (_, index) => (
-                      <div key={index} className="h-28 animate-pulse rounded-xl border border-white/[0.06] bg-white/[0.02]" />
+                    Array.from({ length: 5 }, (_, index) => (
+                      <div key={index} className="h-14 animate-pulse border-b border-white/10 bg-white/[0.02]" />
                     ))
                   ) : filteredDreams.length > 0 ? (
                     filteredDreams.map((dream) => (
-                      <article key={dream.id} className={cardClass(dream.is_anonymous)}>
-                        <div className="mb-3 flex items-center justify-between gap-3">
-                          <AuthorLine isAnonymous={dream.is_anonymous} displayName={dream.author_display_name} />
-                          <span className="shrink-0 text-[11px] text-slate-500">{dream.dream_date}</span>
-                        </div>
-                        {dream.share_caption && (
-                          <p className="mb-3 rounded-lg border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-sm leading-relaxed text-violet-100">
-                            💭 {dream.share_caption}
-                          </p>
-                        )}
-                        <h3 className="truncate text-sm font-semibold text-white">
-                          {dream.emotion} {dream.title}
-                        </h3>
-                        <div className="mt-2">
-                          <DreamOriginalQuote content={buildDreamOriginalContent(dream.survey)} />
-                        </div>
-                        {dream.tags.length > 0 && (
-                          <div className="mt-3 flex flex-wrap gap-1.5">
-                            {dream.tags.map((tag) => (
-                              <span key={tag} className="text-[11px] text-violet-300/70">
-                                {toHashtagDisplay(tag)}
-                              </span>
-                            ))}
+                      <div
+                        key={dream.id}
+                        role="link"
+                        tabIndex={0}
+                        onClick={() => router.push(`/community/post?id=${dream.id}`)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") router.push(`/community/post?id=${dream.id}`);
+                        }}
+                        className="flex cursor-pointer items-center justify-between gap-4 border-b border-white/10 px-2 py-3 transition-colors hover:bg-white/5"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          {/* 자유 광장 리스트의 "글 번호" 자리를 대신해, 좌측에 이 꿈의 메인 감정
+                              이모지를 배치한다 - 무의식 피드 행임을 한눈에 구분해 준다. */}
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-lg">
+                            {dream.emotion}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <span className="inline-flex min-w-0 flex-wrap items-baseline gap-1.5">
+                              <span className="truncate text-lg font-bold text-slate-100 hover:underline">{dream.title}</span>
+                              <span className="shrink-0 rounded bg-purple-900 px-2 text-xs text-purple-200">🌙 꿈 기록</span>
+                              {dream.comment_count > 0 && (
+                                <span className="shrink-0 text-sm font-semibold text-violet-400">[{dream.comment_count}]</span>
+                              )}
+                            </span>
+                            {firstLine(dream.summary).length >= 20 && (
+                              <div className="relative mt-0.5">
+                                <p className="line-clamp-1 overflow-hidden text-ellipsis text-sm text-slate-400">
+                                  {firstLine(dream.summary)}
+                                </p>
+                                {/* 자유 광장과 동일한 페이드아웃 + 낚시글 스포일러 방지 로직 -
+                                    첫 줄만 잘라 보여주고 우측 끝을 리스트 배경색으로 흐려지게 한다. */}
+                                <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-slate-950 to-transparent" />
+                              </div>
+                            )}
+                            <p className="mt-1 text-[11px] text-slate-500">
+                              {dream.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${dream.author_display_name}`} · {dream.dream_date}
+                            </p>
                           </div>
-                        )}
-
-                        {dream.share_with_ai_analysis && dream.ai_report && <AiReportAccordion report={dream.ai_report} />}
-
-                        <div className="mt-4 flex items-center gap-2">
-                          <VoteButtons
-                            myVote={dream.my_vote}
-                            upvoteCount={dream.upvote_count}
-                            downvoteCount={dream.downvote_count}
-                            onVote={(voteType) => handleDreamVote(dream.id, voteType)}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setOpenDreamCommentsFor((prev) => (prev === dream.id ? null : dream.id))}
-                            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                              openDreamCommentsFor === dream.id
-                                ? "border-violet-400/60 bg-violet-500/25 text-violet-100"
-                                : "border-white/10 text-slate-300 hover:border-violet-400/30 hover:text-slate-100"
-                            }`}
-                          >
-                            💬 댓글{dream.comment_count > 0 ? ` ${dream.comment_count}` : ""}
-                          </button>
                         </div>
-
-                        <CommentSection
-                          targetId={dream.id}
-                          isOpen={openDreamCommentsFor === dream.id}
-                          defaultAnonymous={dream.is_anonymous}
-                          nickname={nickname}
-                          isAuthenticated={isAuthenticated}
-                          onRequireLogin={() => router.push("/login")}
-                          onCommentCountChange={(count) =>
-                            setDreams((prev) => prev.map((d) => (d.id === dream.id ? { ...d, comment_count: count } : d)))
-                          }
-                          fetchComments={getDreamComments}
-                          submitComment={createDreamComment}
-                          updateComment={updateDreamComment}
-                          deleteComment={deleteDreamComment}
-                        />
-                      </article>
+                        <div className="flex shrink-0 items-center gap-3">
+                          <span className="text-xs text-slate-400">👍 {dream.upvote_count}</span>
+                        </div>
+                      </div>
                     ))
                   ) : (
                     <p className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-8 text-center text-xs text-slate-500">
