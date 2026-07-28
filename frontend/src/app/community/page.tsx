@@ -162,7 +162,9 @@ export default function CommunityPage() {
   // 무의식 피드에서도 곧바로 글을 쓸 수 있게 해달라는 요청으로 추가된 탭.
   const [shareDreamMode, setShareDreamMode] = useState<"existing" | "new">("existing");
   const [shareDreamId, setShareDreamId] = useState<number | null>(null);
-  const [shareDreamIsAnonymous, setShareDreamIsAnonymous] = useState(true);
+  // 자유 광장과 마찬가지로 기본값은 닉네임 공개(false) - 하이브리드 익명 뱃지 시스템 도입 이후
+  // 두 탭의 기본 아이덴티티를 통일했다.
+  const [shareDreamIsAnonymous, setShareDreamIsAnonymous] = useState(false);
   const [shareDreamWithAiReport, setShareDreamWithAiReport] = useState(false);
   // 꿈 내용과는 별개로, 공유하면서 덧붙이는 한마디(질문/자랑거리 등) - 무의식 피드 카드 상단에 노출된다.
   const [shareDreamCaption, setShareDreamCaption] = useState("");

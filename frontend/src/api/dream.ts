@@ -368,8 +368,11 @@ export interface CommunityComment {
   // 내가 쓴 댓글인지 - 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는 서버가 다시 한다.
   is_mine: boolean;
   parent_id: number | null;
-  // 게시물(글/꿈 기록) 작성자 본인이 남긴 댓글인지 - [작성자] 뱃지 노출용.
+  // 게시물(글/꿈 기록) 작성자 본인이 남긴 댓글인지 - "글쓴이" 뱃지 노출용.
   is_post_author: boolean;
+  // 익명 댓글이면 이 게시물 안에서 몇 번째 익명 유저인지(1부터) - "익명2"처럼 표시한다.
+  // 글쓴이 본인의 익명 댓글/실명 댓글은 항상 null.
+  anonymous_index: number | null;
 }
 
 export async function getPostComments(postId: number): Promise<CommunityComment[]> {

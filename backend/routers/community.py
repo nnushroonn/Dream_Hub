@@ -510,14 +510,34 @@ class CommunityCommentResponse(BaseModel):
     # 내가 쓴 댓글인지 - 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는 서버가 다시 한다.
     is_mine: bool = False
     parent_id: int | None = None
-    # 게시물(자유 광장 글/꿈 기록) 작성자 본인이 남긴 댓글인지 - [작성자] 뱃지 노출용. 실제
+    # 게시물(자유 광장 글/꿈 기록) 작성자 본인이 남긴 댓글인지 - "글쓴이" 뱃지 노출용. 실제
     # user_id는 응답에 담기지 않으므로 이 불리언만으로는 신원이 드러나지 않는다.
     is_post_author: bool = False
+    # 익명 댓글이면 이 게시물 안에서 몇 번째로 등장한 익명 유저인지(1부터) - "익명2"처럼 표시해
+    # 같은 유저의 여러 댓글/답글을 구분할 수 있게 한다. 글쓴이 본인의 익명 댓글은 항상 "글쓴이"로만
+    # 표시되므로 번호를 매기지 않는다(None). 실명 댓글도 None.
+    anonymous_index: int | None = None
+
+
+def _build_anonymous_index_map(comments: list, owner_user_id: int) -> dict[int, int]:
+    """댓글을 작성 시각 오름차순으로 훑으며, 글쓴이 본인이 아닌 익명 댓글에 한해 유저별로
+    처음 등장한 순서대로 1부터 번호를 매긴다 - 같은 유저면 답글을 몇 개 달든 항상 같은 번호를 받는다."""
+    mapping: dict[int, int] = {}
+    for comment in comments:
+        if comment.is_anonymous and comment.user_id != owner_user_id and comment.user_id not in mapping:
+            mapping[comment.user_id] = len(mapping) + 1
+    return mapping
 
 
 def _comment_to_response(
-    comment: CommunityComment | DreamComment, current_user_id: int | None, owner_user_id: int
+    comment: CommunityComment | DreamComment,
+    current_user_id: int | None,
+    owner_user_id: int,
+    anonymous_index_map: dict[int, int],
 ) -> dict:
+    anonymous_index = None
+    if comment.is_anonymous and comment.user_id != owner_user_id:
+        anonymous_index = anonymous_index_map.get(comment.user_id)
     return {
         "id": comment.id,
         "content": comment.content,
@@ -527,7 +547,17 @@ def _comment_to_response(
         "is_mine": current_user_id is not None and comment.user_id == current_user_id,
         "parent_id": comment.parent_id,
         "is_post_author": comment.user_id == owner_user_id,
+        "anonymous_index": anonymous_index,
     }
+
+
+def _all_post_comments(db: Session, post_id: int) -> list[CommunityComment]:
+    return (
+        db.query(CommunityComment)
+        .filter(CommunityComment.post_id == post_id)
+        .order_by(CommunityComment.created_at.asc())
+        .all()
+    )
 
 
 @router.get("/posts/{post_id}/comments", response_model=list[CommunityCommentResponse])
@@ -540,14 +570,10 @@ def list_post_comments(
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
 
-    comments = (
-        db.query(CommunityComment)
-        .filter(CommunityComment.post_id == post_id)
-        .order_by(CommunityComment.created_at.asc())
-        .all()
-    )
+    comments = _all_post_comments(db, post_id)
     current_user_id = current_user.id if current_user else None
-    return [_comment_to_response(comment, current_user_id, post.user_id) for comment in comments]
+    anon_map = _build_anonymous_index_map(comments, post.user_id)
+    return [_comment_to_response(comment, current_user_id, post.user_id, anon_map) for comment in comments]
 
 
 @router.post("/posts/{post_id}/comments", response_model=CommunityCommentResponse, status_code=status.HTTP_201_CREATED)
@@ -583,7 +609,8 @@ def create_post_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
-    return _comment_to_response(comment, current_user.id, post.user_id)
+    anon_map = _build_anonymous_index_map(_all_post_comments(db, post_id), post.user_id)
+    return _comment_to_response(comment, current_user.id, post.user_id, anon_map)
 
 
 @router.put("/posts/{post_id}/comments/{comment_id}", response_model=CommunityCommentResponse)
@@ -615,7 +642,8 @@ def update_post_comment(
     comment.is_anonymous = payload.is_anonymous
     db.commit()
     db.refresh(comment)
-    return _comment_to_response(comment, current_user.id, post.user_id)
+    anon_map = _build_anonymous_index_map(_all_post_comments(db, post_id), post.user_id)
+    return _comment_to_response(comment, current_user.id, post.user_id, anon_map)
 
 
 @router.delete("/posts/{post_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -652,6 +680,15 @@ class DreamCommentInput(BaseModel):
     parent_id: int | None = None
 
 
+def _all_dream_comments(db: Session, dream_id: int) -> list[DreamComment]:
+    return (
+        db.query(DreamComment)
+        .filter(DreamComment.dream_entry_id == dream_id)
+        .order_by(DreamComment.created_at.asc())
+        .all()
+    )
+
+
 @router.get("/dream-feed/{dream_id}/comments", response_model=list[CommunityCommentResponse])
 def list_dream_comments(
     dream_id: int,
@@ -662,14 +699,10 @@ def list_dream_comments(
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공개된 꿈 기록을 찾을 수 없습니다.")
 
-    comments = (
-        db.query(DreamComment)
-        .filter(DreamComment.dream_entry_id == dream_id)
-        .order_by(DreamComment.created_at.asc())
-        .all()
-    )
+    comments = _all_dream_comments(db, dream_id)
     current_user_id = current_user.id if current_user else None
-    return [_comment_to_response(comment, current_user_id, entry.user_id) for comment in comments]
+    anon_map = _build_anonymous_index_map(comments, entry.user_id)
+    return [_comment_to_response(comment, current_user_id, entry.user_id, anon_map) for comment in comments]
 
 
 @router.post(
@@ -711,7 +744,8 @@ def create_dream_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
-    return _comment_to_response(comment, current_user.id, entry.user_id)
+    anon_map = _build_anonymous_index_map(_all_dream_comments(db, dream_id), entry.user_id)
+    return _comment_to_response(comment, current_user.id, entry.user_id, anon_map)
 
 
 @router.put("/dream-feed/{dream_id}/comments/{comment_id}", response_model=CommunityCommentResponse)
@@ -743,7 +777,8 @@ def update_dream_comment(
     comment.is_anonymous = payload.is_anonymous
     db.commit()
     db.refresh(comment)
-    return _comment_to_response(comment, current_user.id, entry.user_id)
+    anon_map = _build_anonymous_index_map(_all_dream_comments(db, dream_id), entry.user_id)
+    return _comment_to_response(comment, current_user.id, entry.user_id, anon_map)
 
 
 @router.delete("/dream-feed/{dream_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)

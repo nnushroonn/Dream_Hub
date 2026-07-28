@@ -19,7 +19,9 @@ function formatRelativeTime(iso: string): string {
 }
 
 function commentDisplayLabel(comment: CommunityComment): string {
-  return comment.is_anonymous ? "익명의 탐험가" : comment.author_display_name ?? "탐험가";
+  if (comment.is_post_author) return "글쓴이";
+  if (comment.is_anonymous) return `익명${comment.anonymous_index ?? ""}`;
+  return comment.author_display_name ?? "탐험가";
 }
 
 interface CommentSectionProps {
@@ -251,19 +253,21 @@ export default function CommentSection({
         <div className="flex-1 rounded-lg border border-white/[0.04] bg-black/20 p-3 text-sm">
           <div className="flex items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-1.5">
-              {comment.is_anonymous ? (
+              {comment.is_post_author ? (
+                // 글쓴이 최우선 판별: 익명 체크 여부와 무관하게 항상 "글쓴이" 뱃지만 보여준다.
+                <span className="rounded bg-purple-600 px-1.5 py-0.5 text-xs text-white">글쓴이</span>
+              ) : comment.is_anonymous ? (
                 <>
                   <span className="text-xs">🎭</span>
-                  <span className="text-xs text-violet-300/80">익명의 탐험가</span>
+                  <span className="text-xs text-violet-300/80">
+                    익명{comment.anonymous_index ?? ""}
+                  </span>
                 </>
               ) : (
                 <>
                   <span className="text-xs text-slate-500">👤</span>
                   <span className="text-xs text-slate-400">{comment.author_display_name}</span>
                 </>
-              )}
-              {comment.is_post_author && (
-                <span className="rounded bg-purple-600 px-1.5 py-0.5 text-xs text-white">작성자</span>
               )}
               <span className="text-xs text-slate-500">· {formatRelativeTime(comment.created_at)}</span>
             </div>
@@ -354,24 +358,20 @@ export default function CommentSection({
         className="w-full resize-none rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
       />
       {error && <p className="text-xs text-red-300">{error}</p>}
-      <div className="flex items-center justify-between">
-        <label className="flex cursor-pointer items-center gap-2">
-          <span className="text-[11px] font-medium text-slate-300">🎭 익명</span>
+      <div className="flex items-center justify-end gap-3">
+        <label className="flex cursor-pointer items-center gap-1.5">
           <button
             type="button"
-            role="switch"
+            role="checkbox"
             aria-checked={isCommentAnonymous}
             onClick={() => setIsCommentAnonymous((prev) => !prev)}
-            className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
-              isCommentAnonymous ? "bg-violet-500" : "bg-white/15"
+            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+              isCommentAnonymous ? "border-violet-400 bg-violet-500" : "border-white/25 bg-transparent"
             }`}
           >
-            <span
-              className={`ml-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
-                isCommentAnonymous ? "translate-x-4" : "translate-x-0"
-              }`}
-            />
+            {isCommentAnonymous && <span className="text-[10px] leading-none text-white">✓</span>}
           </button>
+          <span className="text-[11px] font-medium text-slate-300">익명</span>
         </label>
         <button
           type="button"
