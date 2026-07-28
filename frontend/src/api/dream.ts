@@ -358,6 +358,7 @@ export async function getMyPosts(): Promise<CommunityPost[]> {
 }
 
 // 💬 자유 광장 게시글 댓글. 게시글과 동일한 아이덴티티 선택(익명/닉네임)을 댓글 단위로도 고를 수 있다.
+// 티키타카를 위한 1-Depth 답글: parent_id가 있으면 답글이고, 답글에는 다시 답글을 달 수 없다.
 export interface CommunityComment {
   id: number;
   content: string;
@@ -366,6 +367,9 @@ export interface CommunityComment {
   created_at: string;
   // 내가 쓴 댓글인지 - 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는 서버가 다시 한다.
   is_mine: boolean;
+  parent_id: number | null;
+  // 게시물(글/꿈 기록) 작성자 본인이 남긴 댓글인지 - [작성자] 뱃지 노출용.
+  is_post_author: boolean;
 }
 
 export async function getPostComments(postId: number): Promise<CommunityComment[]> {
@@ -376,11 +380,13 @@ export async function getPostComments(postId: number): Promise<CommunityComment[
 export async function createPostComment(
   postId: number,
   content: string,
-  isAnonymous: boolean
+  isAnonymous: boolean,
+  parentId?: number | null
 ): Promise<CommunityComment> {
   const { data } = await api.post<CommunityComment>(`/api/community/posts/${postId}/comments`, {
     content,
     is_anonymous: isAnonymous,
+    parent_id: parentId ?? null,
   });
   return data;
 }
@@ -412,11 +418,13 @@ export async function getDreamComments(dreamId: number): Promise<CommunityCommen
 export async function createDreamComment(
   dreamId: number,
   content: string,
-  isAnonymous: boolean
+  isAnonymous: boolean,
+  parentId?: number | null
 ): Promise<CommunityComment> {
   const { data } = await api.post<CommunityComment>(`/api/community/dream-feed/${dreamId}/comments`, {
     content,
     is_anonymous: isAnonymous,
+    parent_id: parentId ?? null,
   });
   return data;
 }

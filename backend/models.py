@@ -263,7 +263,10 @@ class CommunityPostReaction(Base):
 
 
 class CommunityComment(Base):
-    """자유 광장 게시글의 댓글. 게시글과 동일한 아이덴티티 선택 시스템(is_anonymous)을 그대로 쓴다."""
+    """자유 광장 게시글의 댓글. 게시글과 동일한 아이덴티티 선택 시스템(is_anonymous)을 그대로 쓴다.
+
+    parent_id가 있으면 답글(대댓글) - 라우터가 답글의 답글은 막아 항상 1-Depth를 유지한다.
+    부모 댓글이 삭제되면 그 답글들도 함께 지워지도록 ondelete="CASCADE"로 걸어둔다."""
 
     __tablename__ = "community_comments"
 
@@ -272,6 +275,9 @@ class CommunityComment(Base):
         ForeignKey("community_posts.id", ondelete="CASCADE"), nullable=False, index=True
     )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("community_comments.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     content: Mapped[str] = mapped_column(String(500), nullable=False)
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -282,7 +288,9 @@ class CommunityComment(Base):
 class DreamComment(Base):
     """🔮 무의식 피드에 공개된 꿈 기록에 다는 댓글 - 단순 공감(❤️)을 넘어 유저끼리 실제로
     이야기를 나눌 수 있도록 CommunityComment와 동일한 구조로 별도 테이블을 둔다.
-    기본값은 무의식 피드 자체의 기본 익명 관례를 따라 True (자유 광장 댓글은 False)."""
+    기본값은 무의식 피드 자체의 기본 익명 관례를 따라 True (자유 광장 댓글은 False).
+
+    parent_id가 있으면 답글(대댓글) - 라우터가 답글의 답글은 막아 항상 1-Depth를 유지한다."""
 
     __tablename__ = "dream_comments"
 
@@ -291,6 +299,9 @@ class DreamComment(Base):
         ForeignKey("dream_entries.id", ondelete="CASCADE"), nullable=False, index=True
     )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("dream_comments.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     content: Mapped[str] = mapped_column(String(500), nullable=False)
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

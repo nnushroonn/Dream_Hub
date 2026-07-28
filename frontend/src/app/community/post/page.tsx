@@ -155,6 +155,7 @@ export default function CommunityPostPage() {
                 submitComment={createDreamComment}
                 updateComment={updateDreamComment}
                 deleteComment={deleteDreamComment}
+                stickyInput
               />
             </div>
           </div>

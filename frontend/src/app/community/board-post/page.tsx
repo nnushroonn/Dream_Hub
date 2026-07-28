@@ -297,6 +297,7 @@ export default function BoardPostPage() {
                     fetchComments={getPostComments}
                     submitComment={createPostComment}
                     updateComment={updatePostComment}
+                    stickyInput
                     deleteComment={deletePostComment}
                   />
                 </div>

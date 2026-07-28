@@ -490,11 +490,15 @@ def vote_on_post(
 
 
 # --- 💬 댓글: 자유 광장 게시글에 달리는 댓글 ----------------------------------
+# 티키타카(빠른 대화)를 위해 원댓글-답글 1-Depth까지만 허용한다. 답글의 답글은 항상 거절해
+# 트리가 무한정 깊어지는 걸 막는다 - 프론트도 '답글 달기' 버튼을 원댓글에만 노출해 이를 반영한다.
 
 
 class CommunityCommentInput(BaseModel):
     content: str = Field(min_length=1, max_length=500)
     is_anonymous: bool = False
+    # 답글이면 원댓글의 id. 원댓글이면 None.
+    parent_id: int | None = None
 
 
 class CommunityCommentResponse(BaseModel):
@@ -505,6 +509,25 @@ class CommunityCommentResponse(BaseModel):
     created_at: str
     # 내가 쓴 댓글인지 - 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는 서버가 다시 한다.
     is_mine: bool = False
+    parent_id: int | None = None
+    # 게시물(자유 광장 글/꿈 기록) 작성자 본인이 남긴 댓글인지 - [작성자] 뱃지 노출용. 실제
+    # user_id는 응답에 담기지 않으므로 이 불리언만으로는 신원이 드러나지 않는다.
+    is_post_author: bool = False
+
+
+def _comment_to_response(
+    comment: CommunityComment | DreamComment, current_user_id: int | None, owner_user_id: int
+) -> dict:
+    return {
+        "id": comment.id,
+        "content": comment.content,
+        "is_anonymous": comment.is_anonymous,
+        "author_display_name": _display_name(comment.user, comment.is_anonymous),
+        "created_at": comment.created_at.isoformat(),
+        "is_mine": current_user_id is not None and comment.user_id == current_user_id,
+        "parent_id": comment.parent_id,
+        "is_post_author": comment.user_id == owner_user_id,
+    }
 
 
 @router.get("/posts/{post_id}/comments", response_model=list[CommunityCommentResponse])
@@ -523,17 +546,8 @@ def list_post_comments(
         .order_by(CommunityComment.created_at.asc())
         .all()
     )
-    return [
-        {
-            "id": comment.id,
-            "content": comment.content,
-            "is_anonymous": comment.is_anonymous,
-            "author_display_name": _display_name(comment.user, comment.is_anonymous),
-            "created_at": comment.created_at.isoformat(),
-            "is_mine": current_user is not None and comment.user_id == current_user.id,
-        }
-        for comment in comments
-    ]
+    current_user_id = current_user.id if current_user else None
+    return [_comment_to_response(comment, current_user_id, post.user_id) for comment in comments]
 
 
 @router.post("/posts/{post_id}/comments", response_model=CommunityCommentResponse, status_code=status.HTTP_201_CREATED)
@@ -551,20 +565,25 @@ def create_post_comment(
     if not content:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="내용을 입력해 주세요.")
 
+    parent_id = payload.parent_id
+    if parent_id is not None:
+        parent = (
+            db.query(CommunityComment)
+            .filter(CommunityComment.id == parent_id, CommunityComment.post_id == post_id)
+            .first()
+        )
+        if parent is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="답글을 달 댓글을 찾을 수 없습니다.")
+        if parent.parent_id is not None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="답글에는 답글을 달 수 없어요.")
+
     comment = CommunityComment(
-        post_id=post_id, user_id=current_user.id, content=content, is_anonymous=payload.is_anonymous
+        post_id=post_id, user_id=current_user.id, content=content, is_anonymous=payload.is_anonymous, parent_id=parent_id
     )
     db.add(comment)
     db.commit()
     db.refresh(comment)
-    return {
-        "id": comment.id,
-        "content": comment.content,
-        "is_anonymous": comment.is_anonymous,
-        "author_display_name": _display_name(current_user, comment.is_anonymous),
-        "created_at": comment.created_at.isoformat(),
-        "is_mine": True,
-    }
+    return _comment_to_response(comment, current_user.id, post.user_id)
 
 
 @router.put("/posts/{post_id}/comments/{comment_id}", response_model=CommunityCommentResponse)
@@ -575,6 +594,9 @@ def update_post_comment(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
     comment = (
         db.query(CommunityComment)
         .filter(CommunityComment.id == comment_id, CommunityComment.post_id == post_id)
@@ -593,14 +615,7 @@ def update_post_comment(
     comment.is_anonymous = payload.is_anonymous
     db.commit()
     db.refresh(comment)
-    return {
-        "id": comment.id,
-        "content": comment.content,
-        "is_anonymous": comment.is_anonymous,
-        "author_display_name": _display_name(current_user, comment.is_anonymous),
-        "created_at": comment.created_at.isoformat(),
-        "is_mine": True,
-    }
+    return _comment_to_response(comment, current_user.id, post.user_id)
 
 
 @router.delete("/posts/{post_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -633,6 +648,8 @@ class DreamCommentInput(BaseModel):
     content: str = Field(min_length=1, max_length=500)
     # 무의식 피드 자체의 기본 익명 관례를 따라 True (자유 광장 댓글은 False).
     is_anonymous: bool = True
+    # 답글이면 원댓글의 id. 원댓글이면 None.
+    parent_id: int | None = None
 
 
 @router.get("/dream-feed/{dream_id}/comments", response_model=list[CommunityCommentResponse])
@@ -651,17 +668,8 @@ def list_dream_comments(
         .order_by(DreamComment.created_at.asc())
         .all()
     )
-    return [
-        {
-            "id": comment.id,
-            "content": comment.content,
-            "is_anonymous": comment.is_anonymous,
-            "author_display_name": _display_name(comment.user, comment.is_anonymous),
-            "created_at": comment.created_at.isoformat(),
-            "is_mine": current_user is not None and comment.user_id == current_user.id,
-        }
-        for comment in comments
-    ]
+    current_user_id = current_user.id if current_user else None
+    return [_comment_to_response(comment, current_user_id, entry.user_id) for comment in comments]
 
 
 @router.post(
@@ -681,20 +689,29 @@ def create_dream_comment(
     if not content:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="내용을 입력해 주세요.")
 
+    parent_id = payload.parent_id
+    if parent_id is not None:
+        parent = (
+            db.query(DreamComment)
+            .filter(DreamComment.id == parent_id, DreamComment.dream_entry_id == dream_id)
+            .first()
+        )
+        if parent is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="답글을 달 댓글을 찾을 수 없습니다.")
+        if parent.parent_id is not None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="답글에는 답글을 달 수 없어요.")
+
     comment = DreamComment(
-        dream_entry_id=dream_id, user_id=current_user.id, content=content, is_anonymous=payload.is_anonymous
+        dream_entry_id=dream_id,
+        user_id=current_user.id,
+        content=content,
+        is_anonymous=payload.is_anonymous,
+        parent_id=parent_id,
     )
     db.add(comment)
     db.commit()
     db.refresh(comment)
-    return {
-        "id": comment.id,
-        "content": comment.content,
-        "is_anonymous": comment.is_anonymous,
-        "author_display_name": _display_name(current_user, comment.is_anonymous),
-        "created_at": comment.created_at.isoformat(),
-        "is_mine": True,
-    }
+    return _comment_to_response(comment, current_user.id, entry.user_id)
 
 
 @router.put("/dream-feed/{dream_id}/comments/{comment_id}", response_model=CommunityCommentResponse)
@@ -705,6 +722,9 @@ def update_dream_comment(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    entry = db.query(DreamEntry).filter(DreamEntry.id == dream_id).first()
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공개된 꿈 기록을 찾을 수 없습니다.")
     comment = (
         db.query(DreamComment)
         .filter(DreamComment.id == comment_id, DreamComment.dream_entry_id == dream_id)
@@ -723,14 +743,7 @@ def update_dream_comment(
     comment.is_anonymous = payload.is_anonymous
     db.commit()
     db.refresh(comment)
-    return {
-        "id": comment.id,
-        "content": comment.content,
-        "is_anonymous": comment.is_anonymous,
-        "author_display_name": _display_name(current_user, comment.is_anonymous),
-        "created_at": comment.created_at.isoformat(),
-        "is_mine": True,
-    }
+    return _comment_to_response(comment, current_user.id, entry.user_id)
 
 
 @router.delete("/dream-feed/{dream_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
