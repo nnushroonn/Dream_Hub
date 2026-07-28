@@ -240,6 +240,8 @@ export default function CommunityPage() {
                               )}
                               <p className="mt-1 text-[11px] text-slate-500">
                                 {dream.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${dream.author_display_name}`} · {dream.dream_date}
+                                {" "}
+                                · 조회 {dream.view_count}
                               </p>
                             </div>
                           </div>
@@ -322,6 +324,8 @@ export default function CommunityPage() {
                           )}
                           <p className="mt-1 text-[11px] text-slate-500">
                             {post.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${post.author_display_name}`} · {formatPostTime(post.created_at)}
+                            {" "}
+                            · 조회 {post.view_count}
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-3">

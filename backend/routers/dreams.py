@@ -9,14 +9,16 @@ AI 해몽(POST /api/dream-interpretation)은 별도로 비로그인 상태에서
 from datetime import date as PyDate, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import redis
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from database import get_db
+from database import get_db, get_redis
 from models import DreamEntry, DreamStatus, Interaction, InteractionType, User
 from routers.ai_interpretation import CounselingReportInput, DreamSurveyInput
 from routers.auth import get_current_user, get_current_user_optional
+from view_tracking import should_count_view
 
 router = APIRouter(prefix="/api/dreams", tags=["dreams"])
 
@@ -83,6 +85,8 @@ class DreamEntryResponse(BaseModel):
     upvote_count: int = 0
     downvote_count: int = 0
     my_vote: Literal["up", "down"] | None = None
+    # 공개 상세 조회(get_public_dream)에서만 실제 값이 채워진다 - 목록/생성/수정 응답은 0.
+    view_count: int = 0
 
 
 def _to_response(
@@ -110,6 +114,7 @@ def _to_response(
         upvote_count=upvote_count,
         downvote_count=downvote_count,
         my_vote=my_vote,
+        view_count=entry.view_count,
     )
 
 
@@ -156,8 +161,10 @@ def list_dreams(current_user: User = Depends(get_current_user), db: Session = De
 @router.get("/public/{dream_id}", response_model=DreamEntryResponse)
 def get_public_dream(
     dream_id: int,
+    request: Request,
     current_user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
 ):
     """커뮤니티 상세 페이지용 익명 공개 조회 - 로그인 불필요. 소유자 정보는 응답에 담기지
     않으므로(_to_response에 user_id가 없음) 그대로 반환해도 '익명의 탐험가' 컨셉이 유지된다.
@@ -172,9 +179,12 @@ def get_public_dream(
     )
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공개된 꿈 기록을 찾을 수 없습니다.")
-    entry.view_count += 1
-    db.commit()
-    db.refresh(entry)
+
+    identity = f"user:{current_user.id}" if current_user else f"ip:{request.client.host if request.client else 'unknown'}"
+    if should_count_view(redis_client, "dream", dream_id, identity):
+        entry.view_count += 1
+        db.commit()
+        db.refresh(entry)
 
     upvote_count = (
         db.query(Interaction)

@@ -20,11 +20,12 @@
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+import redis
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from database import get_db
+from database import get_db, get_redis
 from models import (
     CommunityComment,
     CommunityPost,
@@ -42,6 +43,7 @@ from routers.ai_interpretation import DreamSurveyInput
 from routers.auth import get_current_user, get_current_user_optional
 from routers.notifications import create_notification
 from storage import upload_community_image
+from view_tracking import should_count_view
 
 # 글쓰기에서 한 게시글에 첨부할 수 있는 이미지 최대 장수 - 프론트(MAX_COMPOSE_IMAGES)와 동일하게 맞춘다.
 MAX_POST_IMAGES = 3
@@ -60,6 +62,13 @@ def _display_name(user: User, is_anonymous: bool) -> str | None:
     if is_anonymous:
         return None
     return user.nickname
+
+
+def _viewer_identity(request: Request, current_user: User | None) -> str:
+    """조회수 중복 방지용 방문자 식별자 - 로그인 유저는 user_id, 비로그인은 IP로 대신한다."""
+    if current_user is not None:
+        return f"user:{current_user.id}"
+    return f"ip:{request.client.host if request.client else 'unknown'}"
 
 
 # --- 🔮 무의식 피드: 공개된 실제 꿈 기록 -------------------------------------
@@ -92,6 +101,7 @@ class DreamFeedEntry(BaseModel):
     survey: DreamSurveyInput
     ai_report: DreamFeedAiReport | None = None
     comment_count: int
+    view_count: int
 
 
 class VoteInput(BaseModel):
@@ -159,6 +169,7 @@ def _build_dream_feed_entries(db: Session, entries: list[DreamEntry], my_votes: 
                 "share_caption": entry.share_caption,
                 "survey": entry.survey,
                 "comment_count": _dream_comment_count(db, entry.id),
+                "view_count": entry.view_count,
                 "ai_report": (
                     {
                         "description": interpretation.get("description", ""),
@@ -296,6 +307,9 @@ class CommunityPostResponse(BaseModel):
     comment_count: int
     created_at: str
     image_urls: list[str] = []
+    # 상세 조회(get_community_post)에서만 어뷰징 방지 로직을 거쳐 증가한다 - 목록/생성/수정
+    # 응답은 그 시점의 현재 값을 그대로 내려줄 뿐 증가시키지 않는다.
+    view_count: int = 0
     # 내가 쓴 글인지 - 수정/삭제 버튼 노출 여부를 프론트가 이걸로 판단한다. 실제 권한 체크는
     # PUT/DELETE 엔드포인트가 서버에서 다시 하므로, 이 값은 순전히 UI 표시용이다.
     is_mine: bool = False
@@ -352,6 +366,7 @@ def _build_post_entries(
                 "comment_count": _post_comment_count(db, post.id),
                 "created_at": post.created_at.isoformat(),
                 "image_urls": post.image_urls or [],
+                "view_count": post.view_count,
                 "is_mine": current_user_id is not None and post.user_id == current_user_id,
             }
         )
@@ -371,13 +386,21 @@ def list_community_posts(
 @router.get("/posts/{post_id}", response_model=CommunityPostResponse)
 def get_community_post(
     post_id: int,
+    request: Request,
     current_user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
 ) -> dict:
     """리스트에서 제목을 눌러 들어오는 자유 광장 게시글 상세 - 로그인 없이도 조회 가능."""
     post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
+
+    if should_count_view(redis_client, "post", post_id, _viewer_identity(request, current_user)):
+        post.view_count += 1
+        db.commit()
+        db.refresh(post)
+
     my_votes = _my_post_votes(db, current_user, [post]) if current_user else {}
     return _build_post_entries(db, [post], my_votes, current_user.id if current_user else None)[0]
 
@@ -440,6 +463,7 @@ def create_community_post(
         "comment_count": 0,
         "created_at": post.created_at.isoformat(),
         "image_urls": post.image_urls or [],
+        "view_count": 0,
         "is_mine": True,
     }
 
@@ -483,6 +507,7 @@ def update_community_post(
         "comment_count": _post_comment_count(db, post.id),
         "created_at": post.created_at.isoformat(),
         "image_urls": post.image_urls or [],
+        "view_count": post.view_count,
         "is_mine": True,
     }
 

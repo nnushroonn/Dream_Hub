@@ -253,6 +253,9 @@ class CommunityPost(Base):
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     # 글쓰기에서 첨부한 이미지들의 R2 공개 URL 목록(최대 3장) - 순서가 곧 노출 순서.
     image_urls: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False, server_default="{}")
+    # 상세 조회(GET /api/community/posts/{id})가 호출될 때마다 증가 - 어뷰징 방지는
+    # view_tracking.should_count_view()가 Redis로 24시간 중복을 걸러준 뒤에만 커밋한다.
+    view_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship()

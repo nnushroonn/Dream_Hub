@@ -120,7 +120,9 @@ export default function CommunityPostPage() {
             <h1 className="mt-1 text-2xl font-semibold text-white">
               {entry.emotion} {entry.title}
             </h1>
-            <p className="mt-1 text-xs text-slate-500">{entry.dream_date}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {entry.dream_date} · 조회 {entry.view_count.toLocaleString()}
+            </p>
 
             {/* 공백만 있는 사담(예: 엔터만 몇 번 친 경우)까지 걸러내야 빈 여백만 남는 걸 막을 수
                 있어, 단순 truthy 체크가 아니라 trim() 결과로 존재 여부를 판단한다. */}

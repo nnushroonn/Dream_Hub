@@ -254,6 +254,8 @@ export default function BoardPostPage() {
 
                 <p className="mt-1.5 text-xs text-slate-500">
                   {post.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${post.author_display_name}`} · {formatPostTime(post.created_at)}
+                  {" "}
+                  · 조회 {post.view_count.toLocaleString()}
                 </p>
 
                 {confirmDelete && (

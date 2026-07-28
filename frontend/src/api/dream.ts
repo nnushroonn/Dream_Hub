@@ -188,6 +188,8 @@ export interface DreamEntryRecord {
   upvote_count: number;
   downvote_count: number;
   my_vote: "up" | "down" | null;
+  // 공개 상세 조회(getPublicDream)에서만 실제 값이 채워진다.
+  view_count: number;
 }
 
 export interface DreamEntryPayload {
@@ -283,6 +285,7 @@ export interface DreamFeedEntry {
   // 이 survey로 buildDreamOriginalContent를 다시 돌려야 한다.
   survey: DreamSurvey;
   comment_count: number;
+  view_count: number;
   ai_report: DreamFeedAiReport | null;
 }
 
@@ -322,6 +325,8 @@ export interface CommunityPost {
   created_at: string;
   // 글쓰기에서 첨부한 이미지들의 R2 공개 URL 목록(최대 3장, 순서대로 노출).
   image_urls: string[];
+  // 상세 조회(getCommunityPost)에서만 어뷰징 방지를 거쳐 증가한다.
+  view_count: number;
   // 내가 쓴 글인지 - 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는 서버가 다시 한다.
   is_mine: boolean;
 }
