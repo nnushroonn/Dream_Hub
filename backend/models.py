@@ -20,6 +20,17 @@ class InteractionType(str, enum.Enum):
     SCRAP = "SCRAP"  # 스크랩북 저장
 
 
+class NotificationType(str, enum.Enum):
+    COMMENT = "COMMENT"
+    LIKE = "LIKE"
+    BEST = "BEST"  # 베스트 피드 진입 - 현재 자동 트리거는 없고 타입만 정의되어 있다(스케줄러 부재).
+
+
+class NotificationTargetType(str, enum.Enum):
+    POST = "POST"  # 자유 광장 글
+    DREAM = "DREAM"  # 무의식 피드 꿈 기록
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -307,3 +318,39 @@ class DreamComment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship()
+
+
+class Notification(Base):
+    """GNB 종 아이콘 알림 - 내 글/꿈에 달린 댓글과 좋아요를 알려준다.
+
+    target_id는 target_type(POST/DREAM)에 따라 community_posts.id 또는 dream_entries.id를
+    가리키는 다형적 참조라 실제 FK 제약은 걸지 않는다(두 테이블을 동시에 걸 수 없음).
+    comment_id도 마찬가지로 target_type에 따라 community_comments/dream_comments 중 하나를
+    가리키는 느슨한 참조다. 대상 글/댓글이 나중에 지워져도 알림 행 자체는 남고, 클릭하면
+    상세 페이지의 기존 404/댓글-없음 처리로 자연스럽게 흡수된다."""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # 알림을 받는 사람(내 글/꿈의 주인). 이 유저가 탈퇴하면 알림도 함께 지운다.
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    # 알림을 발생시킨 사람(댓글 작성자/투표한 사람). 탈퇴해도 알림 자체는 남기고 이 값만 비운다.
+    actor_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # LIKE(좋아요)는 투표 자체에 익명 선택지가 없어 항상 True로 저장해 행위자 이름을 감춘다.
+    # COMMENT는 그 댓글을 쓸 때 고른 is_anonymous 값을 그대로 스냅샷한다.
+    actor_is_anonymous: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    type: Mapped[NotificationType] = mapped_column(SAEnum(NotificationType, name="notification_type"), nullable=False)
+    target_type: Mapped[NotificationTargetType] = mapped_column(
+        SAEnum(NotificationTargetType, name="notification_target_type"), nullable=False
+    )
+    target_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    comment_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # 알림 문구에 쓸 스냅샷 텍스트(글 제목 또는 댓글 내용 일부) - 대상이 나중에 수정/삭제돼도
+    # 알림 문구는 발생 당시 그대로 남는다.
+    preview_text: Mapped[str] = mapped_column(String(300), nullable=False)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    actor: Mapped[Optional["User"]] = relationship(foreign_keys=[actor_id])

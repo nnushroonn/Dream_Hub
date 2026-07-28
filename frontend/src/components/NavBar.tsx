@@ -8,6 +8,7 @@ import { listDreams } from "@/api/dream";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 import { useUnsavedChangesStore } from "@/store/useUnsavedChangesStore";
+import NotificationBell from "./NotificationBell";
 import UnsavedChangesGuardModal from "./UnsavedChangesGuardModal";
 
 const NAV_ITEMS = [
@@ -85,6 +86,7 @@ export default function NavBar() {
         <div className="flex items-center gap-3 text-sm">
           {isAuthenticated && user ? (
             <>
+              <NotificationBell />
               <span className="hidden text-indigo-300/70 sm:inline">{user.nickname}</span>
               <button
                 type="button"

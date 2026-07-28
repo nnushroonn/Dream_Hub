@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import type { CommunityComment } from "@/api/dream";
@@ -47,6 +47,9 @@ interface CommentSectionProps {
   /** 상세 페이지에서만 true로 켜서 입력 폼을 화면 하단에 고정한다 - 카드에 인라인으로 끼워 넣는
    * 피드 목록(community/page.tsx)에서는 여러 개가 동시에 열릴 수 있어 기본값(false)을 그대로 쓴다. */
   stickyInput?: boolean;
+  /** 알림 드롭다운에서 댓글 항목을 눌러 들어왔을 때(?highlightComment=)의 대상 댓글 id -
+   * 댓글이 로드되면 그 위치로 스크롤하고 잠깐 하이라이트한다. */
+  highlightCommentId?: number | null;
 }
 
 export default function CommentSection({
@@ -62,10 +65,15 @@ export default function CommentSection({
   updateComment,
   deleteComment,
   stickyInput = false,
+  highlightCommentId = null,
 }: CommentSectionProps) {
   const [comments, setComments] = useState<CommunityComment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
+  // 알림에서 들어왔을 때 딱 한 번만 스크롤+하이라이트하기 위한 가드 - highlightedId가 다시
+  // null로 꺼진 뒤에도 댓글 목록이 갱신될 때마다 재실행되는 걸 막는다.
+  const hasScrolledToHighlightRef = useRef(false);
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
 
   const [commentText, setCommentText] = useState("");
   const [isCommentAnonymous, setIsCommentAnonymous] = useState(defaultAnonymous);
@@ -99,6 +107,19 @@ export default function CommentSection({
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, hasLoaded, targetId]);
+
+  // 댓글이 로드되면 알림에서 지정한 댓글로 스크롤 이동 + 잠깐 하이라이트한다. 한 번 실행되면
+  // ref 가드가 다시 실행을 막아, 이후 새 댓글이 달려 목록이 갱신돼도 재스크롤되지 않는다.
+  useEffect(() => {
+    if (!highlightCommentId || !hasLoaded || hasScrolledToHighlightRef.current) return;
+    const el = document.getElementById(`comment-${highlightCommentId}`);
+    if (!el) return;
+    hasScrolledToHighlightRef.current = true;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedId(highlightCommentId);
+    const timer = setTimeout(() => setHighlightedId(null), 2500);
+    return () => clearTimeout(timer);
+  }, [hasLoaded, highlightCommentId]);
 
   const handleSubmit = async () => {
     const content = commentText.trim();
@@ -250,7 +271,12 @@ export default function CommentSection({
         className={`mb-2 flex items-start gap-1.5 ${isReply ? "ml-8" : ""}`}
       >
         {isReply && <span className="mt-3 shrink-0 text-sm text-slate-500">↳</span>}
-        <div className="flex-1 rounded-lg border border-white/[0.04] bg-black/20 p-3 text-sm">
+        <div
+          id={`comment-${comment.id}`}
+          className={`flex-1 rounded-lg border p-3 text-sm transition-colors duration-500 ${
+            comment.id === highlightedId ? "border-violet-400/60 bg-violet-500/15" : "border-white/[0.04] bg-black/20"
+          }`}
+        >
           <div className="flex items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-1.5">
               {comment.is_post_author ? (

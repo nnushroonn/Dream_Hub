@@ -36,9 +36,16 @@ export default function CommunityPostPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
+  // 알림 드롭다운에서 댓글 항목을 눌러 들어오면 ?highlightComment=로 대상 댓글 id가 붙는다.
+  const [highlightCommentId, setHighlightCommentId] = useState<number | null>(null);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = Number(params.get("id"));
+    const highlightComment = Number(params.get("highlightComment"));
+    if (Number.isFinite(highlightComment) && highlightComment > 0) {
+      setHighlightCommentId(highlightComment);
+    }
     if (!Number.isFinite(id) || id <= 0) {
       setNotFound(true);
       setIsLoading(false);
@@ -151,6 +158,7 @@ export default function CommunityPostPage() {
                 updateComment={updateDreamComment}
                 deleteComment={deleteDreamComment}
                 stickyInput
+                highlightCommentId={highlightCommentId}
               />
             </div>
           </div>

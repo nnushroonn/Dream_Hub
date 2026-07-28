@@ -34,10 +34,13 @@ from models import (
     DreamStatus,
     Interaction,
     InteractionType,
+    NotificationTargetType,
+    NotificationType,
     User,
 )
 from routers.ai_interpretation import DreamSurveyInput
 from routers.auth import get_current_user, get_current_user_optional
+from routers.notifications import create_notification
 
 router = APIRouter(prefix="/api/community", tags=["community"])
 
@@ -242,6 +245,18 @@ def vote_on_dream(
         db.add(Interaction(user_id=current_user.id, dream_entry_id=dream_id, type=requested_type))
         db.commit()
         my_vote = payload.vote_type
+
+    if my_vote == "up":
+        create_notification(
+            db,
+            user_id=entry.user_id,
+            actor_id=current_user.id,
+            actor_is_anonymous=True,  # 투표엔 익명 선택지가 없어 항상 이름을 감춘다.
+            type_=NotificationType.LIKE,
+            target_type=NotificationTargetType.DREAM,
+            target_id=dream_id,
+            preview_text=entry.title,
+        )
 
     up, down = _dream_vote_counts(db, dream_id)
     return {"my_vote": my_vote, "upvote_count": up, "downvote_count": down}
@@ -485,6 +500,18 @@ def vote_on_post(
         db.commit()
         my_vote = payload.vote_type
 
+    if my_vote == "up":
+        create_notification(
+            db,
+            user_id=post.user_id,
+            actor_id=current_user.id,
+            actor_is_anonymous=True,  # 투표엔 익명 선택지가 없어 항상 이름을 감춘다.
+            type_=NotificationType.LIKE,
+            target_type=NotificationTargetType.POST,
+            target_id=post_id,
+            preview_text=post.title,
+        )
+
     up, down = _post_vote_counts(db, post_id)
     return {"my_vote": my_vote, "upvote_count": up, "downvote_count": down}
 
@@ -609,6 +636,19 @@ def create_post_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
+
+    create_notification(
+        db,
+        user_id=post.user_id,
+        actor_id=current_user.id,
+        actor_is_anonymous=comment.is_anonymous,
+        type_=NotificationType.COMMENT,
+        target_type=NotificationTargetType.POST,
+        target_id=post_id,
+        comment_id=comment.id,
+        preview_text=comment.content,
+    )
+
     anon_map = _build_anonymous_index_map(_all_post_comments(db, post_id), post.user_id)
     return _comment_to_response(comment, current_user.id, post.user_id, anon_map)
 
@@ -744,6 +784,19 @@ def create_dream_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
+
+    create_notification(
+        db,
+        user_id=entry.user_id,
+        actor_id=current_user.id,
+        actor_is_anonymous=comment.is_anonymous,
+        type_=NotificationType.COMMENT,
+        target_type=NotificationTargetType.DREAM,
+        target_id=dream_id,
+        comment_id=comment.id,
+        preview_text=comment.content,
+    )
+
     anon_map = _build_anonymous_index_map(_all_dream_comments(db, dream_id), entry.user_id)
     return _comment_to_response(comment, current_user.id, entry.user_id, anon_map)
 
