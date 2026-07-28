@@ -130,7 +130,12 @@ export default function CommunityPostPage() {
 
             {/* Middle: 첨부된 꿈 데이터(원문/태그/AI 해몽/행운/상담 리포트) - 위 본문과 뚜렷이
                 구분되는 카드 안에 담아 "첨부 파일"처럼 보이게 한다. */}
-            <AttachedDreamViewer survey={entry.survey} interpretation={entry.interpretation} />
+            <AttachedDreamViewer
+              id={entry.id}
+              survey={entry.survey}
+              summary={entry.summary}
+              tags={entry.interpretation?.tags ?? []}
+            />
 
             {/* Bottom: 👍/👎 투표(중앙 정렬) + 하이브리드 익명 댓글. */}
             <div className="border-t border-white/[0.06] pt-5">
