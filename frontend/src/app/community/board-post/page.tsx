@@ -284,6 +284,15 @@ export default function BoardPostPage() {
                     "스크롤 압박" 엔터 도배가 사라진다 - pre-wrap으로 모든 줄바꿈/공백을 그대로 보존한다. */}
                 <p className="mt-5 whitespace-pre-wrap text-base leading-relaxed text-slate-200">{post.content}</p>
 
+                {post.image_urls.length > 0 && (
+                  <div className="mt-4 flex flex-col gap-3">
+                    {post.image_urls.map((url) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={url} src={url} alt="" className="w-full rounded-xl border border-white/10 object-cover" />
+                    ))}
+                  </div>
+                )}
+
                 <div className="mt-6 border-t border-white/[0.06] pt-4">
                   <VoteButtons
                     myVote={post.my_vote}

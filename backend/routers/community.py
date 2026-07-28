@@ -20,8 +20,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -41,6 +41,10 @@ from models import (
 from routers.ai_interpretation import DreamSurveyInput
 from routers.auth import get_current_user, get_current_user_optional
 from routers.notifications import create_notification
+from storage import upload_community_image
+
+# 글쓰기에서 한 게시글에 첨부할 수 있는 이미지 최대 장수 - 프론트(MAX_COMPOSE_IMAGES)와 동일하게 맞춘다.
+MAX_POST_IMAGES = 3
 
 router = APIRouter(prefix="/api/community", tags=["community"])
 
@@ -269,6 +273,15 @@ class CommunityPostInput(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1, max_length=1000)
     is_anonymous: bool = False
+    # /api/community/images로 미리 업로드해 받은 R2 공개 URL 목록 - 게시 시점에 함께 저장한다.
+    image_urls: list[str] = Field(default_factory=list)
+
+    @field_validator("image_urls")
+    @classmethod
+    def _limit_image_count(cls, value: list[str]) -> list[str]:
+        if len(value) > MAX_POST_IMAGES:
+            raise ValueError(f"이미지는 최대 {MAX_POST_IMAGES}장까지 첨부할 수 있습니다.")
+        return value
 
 
 class CommunityPostResponse(BaseModel):
@@ -282,6 +295,7 @@ class CommunityPostResponse(BaseModel):
     author_display_name: str | None = None
     comment_count: int
     created_at: str
+    image_urls: list[str] = []
     # 내가 쓴 글인지 - 수정/삭제 버튼 노출 여부를 프론트가 이걸로 판단한다. 실제 권한 체크는
     # PUT/DELETE 엔드포인트가 서버에서 다시 하므로, 이 값은 순전히 UI 표시용이다.
     is_mine: bool = False
@@ -337,6 +351,7 @@ def _build_post_entries(
                 "author_display_name": _display_name(post.user, post.is_anonymous),
                 "comment_count": _post_comment_count(db, post.id),
                 "created_at": post.created_at.isoformat(),
+                "image_urls": post.image_urls or [],
                 "is_mine": current_user_id is not None and post.user_id == current_user_id,
             }
         )
@@ -380,6 +395,18 @@ def list_my_posts(current_user: User = Depends(get_current_user), db: Session = 
     return _build_post_entries(db, posts, my_votes, current_user.id)
 
 
+@router.post("/images", status_code=status.HTTP_201_CREATED)
+async def upload_community_post_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """글쓰기 화면에서 이미지를 고르는 즉시 호출 - 반환된 url을 모아뒀다가 게시 시점에
+    CommunityPostInput.image_urls로 함께 보낸다."""
+    content = await file.read()
+    url = upload_community_image(content, file.content_type or "")
+    return {"url": url}
+
+
 @router.post("/posts", response_model=CommunityPostResponse, status_code=status.HTTP_201_CREATED)
 def create_community_post(
     payload: CommunityPostInput,
@@ -391,7 +418,13 @@ def create_community_post(
     if not title or not content:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="제목과 내용을 모두 입력해 주세요.")
 
-    post = CommunityPost(user_id=current_user.id, title=title, content=content, is_anonymous=payload.is_anonymous)
+    post = CommunityPost(
+        user_id=current_user.id,
+        title=title,
+        content=content,
+        is_anonymous=payload.is_anonymous,
+        image_urls=payload.image_urls,
+    )
     db.add(post)
     db.commit()
     db.refresh(post)
@@ -406,6 +439,7 @@ def create_community_post(
         "author_display_name": _display_name(current_user, post.is_anonymous),
         "comment_count": 0,
         "created_at": post.created_at.isoformat(),
+        "image_urls": post.image_urls or [],
         "is_mine": True,
     }
 
@@ -448,6 +482,7 @@ def update_community_post(
         "author_display_name": _display_name(current_user, post.is_anonymous),
         "comment_count": _post_comment_count(db, post.id),
         "created_at": post.created_at.isoformat(),
+        "image_urls": post.image_urls or [],
         "is_mine": True,
     }
 

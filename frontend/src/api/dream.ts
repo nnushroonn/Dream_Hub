@@ -320,6 +320,8 @@ export interface CommunityPost {
   author_display_name: string | null;
   comment_count: number;
   created_at: string;
+  // 글쓰기에서 첨부한 이미지들의 R2 공개 URL 목록(최대 3장, 순서대로 노출).
+  image_urls: string[];
   // 내가 쓴 글인지 - 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는 서버가 다시 한다.
   is_mine: boolean;
 }
@@ -335,8 +337,29 @@ export async function getCommunityPost(postId: number): Promise<CommunityPost> {
   return data;
 }
 
-export async function createCommunityPost(title: string, content: string, isAnonymous: boolean): Promise<CommunityPost> {
-  const { data } = await api.post<CommunityPost>("/api/community/posts", { title, content, is_anonymous: isAnonymous });
+// 글쓰기에서 이미지를 고르는 즉시 하나씩 업로드해 R2 공개 URL을 받는다 - 게시 시점에는
+// 이미 업로드된 URL 목록만 createCommunityPost로 함께 보낸다.
+export async function uploadCommunityImage(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await api.post<{ url: string }>("/api/community/images", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data.url;
+}
+
+export async function createCommunityPost(
+  title: string,
+  content: string,
+  isAnonymous: boolean,
+  imageUrls: string[] = []
+): Promise<CommunityPost> {
+  const { data } = await api.post<CommunityPost>("/api/community/posts", {
+    title,
+    content,
+    is_anonymous: isAnonymous,
+    image_urls: imageUrls,
+  });
   return data;
 }
 

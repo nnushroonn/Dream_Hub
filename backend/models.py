@@ -251,6 +251,8 @@ class CommunityPost(Base):
     content: Mapped[str] = mapped_column(String(1000), nullable=False)
     # 기본값은 자유 광장의 기본 모드(닉네임 공개)에 맞춰 false.
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    # 글쓰기에서 첨부한 이미지들의 R2 공개 URL 목록(최대 3장) - 순서가 곧 노출 순서.
+    image_urls: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship()

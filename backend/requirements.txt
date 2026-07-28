@@ -18,3 +18,4 @@ fastapi-mail==1.6.5
 itsdangerous==2.2.0
 ephem==4.2.1
 anthropic==0.117.1
+boto3==1.35.99

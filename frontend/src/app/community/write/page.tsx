@@ -12,6 +12,7 @@ import {
   listDreams,
   requestQuickAiInterpretation,
   setDreamVisibility,
+  uploadCommunityImage,
   type AiInterpretation,
 } from "@/api/dream";
 import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
@@ -180,10 +181,13 @@ export default function CommunityWritePage() {
     setPostError(null);
     setIsPosting(true);
     try {
-      await createCommunityPost(title, content, composeIsAnonymous);
+      // 이미지는 게시 시점에 순서대로 하나씩 R2로 업로드한 뒤, 받은 공개 URL 목록만
+      // createCommunityPost에 함께 실어 보낸다.
+      const imageUrls = await Promise.all(selectedImages.map((file) => uploadCommunityImage(file)));
+      await createCommunityPost(title, content, composeIsAnonymous, imageUrls);
       router.push("/community?tab=board");
-    } catch {
-      setPostError("게시에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } catch (error) {
+      setPostError(getAuthErrorMessage(error));
     } finally {
       setIsPosting(false);
     }

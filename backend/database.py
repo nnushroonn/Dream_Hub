@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     # AI 꿈 해몽 (Anthropic)
     anthropic_api_key: str = ""
 
+    # 자유 광장 이미지 첨부 - Cloudflare R2(S3 호환) 오브젝트 스토리지
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket_name: str = ""
+    # 버킷의 공개 접근 URL(Public Development URL 또는 커스텀 도메인) - 끝에 슬래시 없이.
+    r2_public_base_url: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
