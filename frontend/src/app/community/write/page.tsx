@@ -321,16 +321,9 @@ export default function CommunityWritePage() {
             {isPosting ? "게시 중..." : "게시하기"}
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={handleSubmitShareDream}
-            disabled={isDreamSubmitDisabled}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-all ${
-              isDreamSubmitDisabled ? "cursor-not-allowed bg-slate-700 text-slate-500" : "bg-purple-600 hover:bg-purple-500"
-            }`}
-          >
-            {isSharingDream ? "공개하는 중..." : "🌐 공개하기"}
-          </button>
+          // 무의식 광장 글쓰기의 게시 액션은 AI 공개 토글 아래의 큰 공개하기 버튼 하나로
+          // 단일화했다 - 헤더의 작은 버튼과 중복되어 있던 것을 정리.
+          <div className="w-6 shrink-0" aria-hidden />
         )}
       </div>
 
@@ -428,14 +421,16 @@ export default function CommunityWritePage() {
               </div>
             </div>
 
-            {/* 자유 광장과 완전히 동일한 제목 입력 - 커뮤니티 리스트 뷰의 메인 텍스트가 된다. */}
+            {/* 커뮤니티 리스트 뷰의 메인 텍스트가 되는 제목 입력 - "불러오기"로 기존 기록을 고르면
+                제목이 자동으로 채워지는데, 그래도 언제든 클릭해 고쳐 쓸 수 있다는 게 또렷이
+                보이도록 뚜렷한 테두리와 넉넉한 여백의 인풋 스타일을 준다. */}
             <input
               type="text"
               value={shareDreamTitle}
               onChange={(event) => setShareDreamTitle(event.target.value)}
               placeholder="제목을 입력하세요"
               maxLength={200}
-              className="mt-4 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+              className="mt-4 w-full rounded-lg border border-slate-700 bg-transparent p-3 text-white placeholder:text-slate-500 outline-none focus:border-purple-500"
             />
 
             {/* 본문(사담) - 자유 광장과 동일한 넓은 textarea. */}
