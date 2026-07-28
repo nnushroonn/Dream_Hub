@@ -309,22 +309,10 @@ export default function CommunityWritePage() {
         <h1 className="flex-1 truncate text-center text-sm font-semibold text-white">
           {writeType === "dream" ? "🌙 무의식 광장 글쓰기" : "💬 자유 광장 글쓰기"}
         </h1>
-        {writeType === "board" ? (
-          <button
-            type="button"
-            onClick={handleCreatePost}
-            disabled={isBoardSubmitDisabled}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-all ${
-              isBoardSubmitDisabled ? "cursor-not-allowed bg-slate-700 text-slate-500" : "bg-purple-600 hover:bg-purple-500"
-            }`}
-          >
-            {isPosting ? "게시 중..." : "게시하기"}
-          </button>
-        ) : (
-          // 무의식 광장 글쓰기의 게시 액션은 AI 공개 토글 아래의 큰 공개하기 버튼 하나로
-          // 단일화했다 - 헤더의 작은 버튼과 중복되어 있던 것을 정리.
-          <div className="w-6 shrink-0" aria-hidden />
-        )}
+        {/* 게시 액션은 본문 하단의 큰 버튼 하나로 단일화했다 - 헤더의 작은 버튼과 중복되어
+            있던 것을 자유 광장/무의식 광장 두 흐름 모두에서 정리. 뒤로가기 아이콘과 같은
+            폭의 빈 공간만 남겨 타이틀이 어긋나지 않게 한다. */}
+        <div className="w-6 shrink-0" aria-hidden />
       </div>
 
       {/* 본문: 모바일에서는 꽉 차게, 데스크톱에서는 가독성을 위해 중앙 정렬된 적당한 너비로. */}
@@ -411,6 +399,17 @@ export default function CommunityWritePage() {
             )}
 
             {postError && <p className="mt-2 text-xs text-red-300">{postError}</p>}
+
+            <button
+              type="button"
+              onClick={handleCreatePost}
+              disabled={isBoardSubmitDisabled}
+              className={`mt-5 w-full rounded-xl py-3 text-sm font-semibold text-white transition-colors ${
+                isBoardSubmitDisabled ? "cursor-not-allowed bg-slate-700 text-slate-500" : "bg-purple-600 hover:bg-purple-500"
+              }`}
+            >
+              {isPosting ? "게시 중..." : "게시하기"}
+            </button>
           </>
         ) : (
           <>
