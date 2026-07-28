@@ -26,6 +26,7 @@ import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
 import SidebarBestList from "@/components/SidebarBestList";
+import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
 import { MOOD_OPTIONS } from "@/lib/moodBucket";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
@@ -93,6 +94,7 @@ export default function CommunityPage() {
   // 짤 첨부 - 실제 업로드 연동 전, 선택/미리보기/삭제 UI만 먼저 구현한다.
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const composeFileInputRef = useRef<HTMLInputElement>(null);
+  const composeTextareaRef = useAutoResizeTextarea(composeText);
 
   // 🌙 내 꿈 공유하기 모달: 꿈 기록소에 저장은 해뒀지만 아직 비공개인 내 기록 중 하나를 골라
   // 커뮤니티에 공개한다. AI 재분석 없이 setDreamVisibility()로 공개 범위만 바꾼다.
@@ -112,6 +114,7 @@ export default function CommunityPage() {
   // 무의식 피드 상세 페이지 상단에 유저가 직접 쓴 말로 노출된다.
   const [shareDreamTitle, setShareDreamTitle] = useState("");
   const [shareDreamCaption, setShareDreamCaption] = useState("");
+  const shareDreamCaptionRef = useAutoResizeTextarea(shareDreamCaption);
   // 자유 광장과 마찬가지로 기본값은 닉네임 공개(false) - 하이브리드 익명 뱃지 시스템 도입 이후
   // 두 모드의 기본 아이덴티티를 통일했다.
   const [shareDreamIsAnonymous, setShareDreamIsAnonymous] = useState(false);
@@ -123,6 +126,7 @@ export default function CommunityPage() {
   // shareDreamWithAiReport 토글이 켜져 있을 때만 제출 시점에 한 번 호출한다(선택적 처리).
   const [newDreamMood, setNewDreamMood] = useState(MOOD_OPTIONS[3].emoji);
   const [newDreamContent, setNewDreamContent] = useState("");
+  const newDreamContentRef = useAutoResizeTextarea(newDreamContent);
   const [isAnalyzingNewDream, setIsAnalyzingNewDream] = useState(false);
 
   useEffect(() => {
@@ -657,307 +661,323 @@ export default function CommunityPage() {
         </div>
       </main>
 
-      {/* 자유 광장 글쓰기 모달: CommunityPostForm - 아이덴티티 선택 시스템 포함 */}
+      {/* 자유 광장 글쓰기 모달: CommunityPostForm - 아이덴티티 선택 시스템 포함.
+          모바일에서는 h-full로 화면을 꽉 채워 네이티브 앱 작성 화면처럼, 데스크톱에서는
+          중앙에 뜨는 넉넉한 카드로 보이도록 반응형으로 크기를 바꾼다. */}
       {isComposeOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center md:px-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleCloseCompose} />
 
-          <div className="relative w-full max-w-md rounded-3xl border border-violet-400/30 bg-white/10 p-7 shadow-[0_0_60px_rgba(139,92,246,0.25)] backdrop-blur-2xl">
-            <button
-              type="button"
-              onClick={handleCloseCompose}
-              aria-label="닫기"
-              className="absolute right-5 top-5 text-slate-400 transition-colors hover:text-white"
-            >
-              ✕
-            </button>
-
-            <h2 className="text-lg font-semibold text-white">✏️ 자유 광장에 글쓰기</h2>
-
-            <div className="mt-4">
-              <label className="text-xs text-indigo-300/70">어떤 이름으로 남길까요?</label>
-              <div className="mt-2">
-                <IdentitySwitch isAnonymous={composeIsAnonymous} onChange={setComposeIsAnonymous} nickname={nickname} />
-              </div>
-            </div>
-
-            <input
-              type="text"
-              value={composeTitle}
-              onChange={(event) => setComposeTitle(event.target.value)}
-              placeholder="제목을 입력하세요"
-              maxLength={POST_TITLE_MAX_LENGTH}
-              autoFocus
-              className="mt-4 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
-            />
-            <div className="mt-1 flex justify-end">
-              <span className={`text-xs ${composeTitle.length >= POST_TITLE_MAX_LENGTH ? "text-red-500" : "text-slate-500"}`}>
-                {composeTitle.length}/{POST_TITLE_MAX_LENGTH}
-              </span>
-            </div>
-
-            <textarea
-              value={composeText}
-              onChange={(event) => setComposeText(event.target.value)}
-              placeholder="자유롭게 이야기를 나눠보세요..."
-              rows={4}
-              maxLength={POST_CONTENT_MAX_LENGTH}
-              className="w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
-            />
-            <div className="mt-1 flex justify-end">
-              <span className={`text-xs ${composeText.length >= POST_CONTENT_MAX_LENGTH ? "text-red-500" : "text-slate-500"}`}>
-                {composeText.length}/{POST_CONTENT_MAX_LENGTH}
-              </span>
-            </div>
-
-            {/* 짤 첨부: textarea 하단 좌측에 아이콘 버튼 + 첨부 매수 표시. 실제 input은 숨기고
-                버튼 클릭 시 ref로 클릭 이벤트를 위임한다. */}
-            <div className="flex items-center gap-2">
+          <div className="relative flex h-full w-full flex-col overflow-y-auto border border-violet-400/30 bg-white/10 shadow-[0_0_60px_rgba(139,92,246,0.25)] backdrop-blur-2xl md:h-auto md:max-h-[85vh] md:max-w-2xl md:rounded-2xl lg:max-w-3xl">
+            {/* 헤더: 닫기(좌) / 제목(중앙) / 게시하기(우) - 모바일 네이티브 앱의 작성 화면과
+                동일한 위치 감각을 데스크톱에서도 그대로 유지해 두 레이아웃의 UX 낙차를 없앤다. */}
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 px-6 py-4 md:px-8">
               <button
                 type="button"
-                onClick={() => composeFileInputRef.current?.click()}
-                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200"
+                onClick={handleCloseCompose}
+                aria-label="닫기"
+                className="shrink-0 text-slate-400 transition-colors hover:text-white"
               >
-                <ImageIcon className="h-3.5 w-3.5" />
-                이미지
+                ✕
               </button>
-              <span className="text-xs text-slate-500">
-                ({selectedImages.length}/{MAX_COMPOSE_IMAGES})
-              </span>
-              <input
-                ref={composeFileInputRef}
-                type="file"
-                accept="image/jpeg, image/png, image/gif"
-                multiple
-                hidden
-                onChange={handleSelectImages}
-              />
-            </div>
-
-            {selectedImages.length > 0 && (
-              <div className="mt-2 flex flex-row gap-2 overflow-x-auto pb-1">
-                {selectedImages.map((file, index) => (
-                  <div key={index} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10">
-                    {/* blob URL 미리보기라 next/image 로더 대상이 아니다 - 일반 img가 맞다. */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={imagePreviewUrls[index]} alt="" className="h-full w-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveImage(index)}
-                      aria-label="이미지 삭제"
-                      className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black"
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {postError && <p className="mt-2 text-xs text-red-300">{postError}</p>}
-
-            <div className="mt-4 flex justify-end">
+              <h2 className="flex-1 truncate text-center text-sm font-semibold text-white">✏️ 자유 광장에 글쓰기</h2>
               <button
                 type="button"
                 onClick={handleCreatePost}
                 disabled={!composeTitle.trim() || !composeText.trim() || isPosting}
-                className={`rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-all ${
+                className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-all ${
                   !composeTitle.trim() || !composeText.trim() || isPosting
                     ? "cursor-not-allowed bg-slate-700 text-slate-500"
-                    : "bg-purple-600 hover:-translate-y-0.5 hover:bg-purple-500"
+                    : "bg-purple-600 hover:bg-purple-500"
                 }`}
               >
                 {isPosting ? "게시 중..." : "게시하기"}
               </button>
+            </div>
+
+            <div className="flex-1 p-6 md:p-8">
+              <div>
+                <label className="text-xs text-indigo-300/70">어떤 이름으로 남길까요?</label>
+                <div className="mt-2">
+                  <IdentitySwitch isAnonymous={composeIsAnonymous} onChange={setComposeIsAnonymous} nickname={nickname} />
+                </div>
+              </div>
+
+              <input
+                type="text"
+                value={composeTitle}
+                onChange={(event) => setComposeTitle(event.target.value)}
+                placeholder="제목을 입력하세요"
+                maxLength={POST_TITLE_MAX_LENGTH}
+                autoFocus
+                className="mt-4 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+              />
+              <div className="mt-1 flex justify-end">
+                <span className={`text-xs ${composeTitle.length >= POST_TITLE_MAX_LENGTH ? "text-red-500" : "text-slate-500"}`}>
+                  {composeTitle.length}/{POST_TITLE_MAX_LENGTH}
+                </span>
+              </div>
+
+              <textarea
+                ref={composeTextareaRef}
+                value={composeText}
+                onChange={(event) => setComposeText(event.target.value)}
+                placeholder="자유롭게 이야기를 나눠보세요..."
+                maxLength={POST_CONTENT_MAX_LENGTH}
+                className="min-h-[200px] w-full resize-none overflow-hidden rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+              />
+              <div className="mt-1 flex justify-end">
+                <span className={`text-xs ${composeText.length >= POST_CONTENT_MAX_LENGTH ? "text-red-500" : "text-slate-500"}`}>
+                  {composeText.length}/{POST_CONTENT_MAX_LENGTH}
+                </span>
+              </div>
+
+              {/* 짤 첨부: textarea 하단 좌측에 아이콘 버튼 + 첨부 매수 표시. 실제 input은 숨기고
+                  버튼 클릭 시 ref로 클릭 이벤트를 위임한다. */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => composeFileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200"
+                >
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  이미지
+                </button>
+                <span className="text-xs text-slate-500">
+                  ({selectedImages.length}/{MAX_COMPOSE_IMAGES})
+                </span>
+                <input
+                  ref={composeFileInputRef}
+                  type="file"
+                  accept="image/jpeg, image/png, image/gif"
+                  multiple
+                  hidden
+                  onChange={handleSelectImages}
+                />
+              </div>
+
+              {selectedImages.length > 0 && (
+                <div className="mt-2 flex flex-row gap-2 overflow-x-auto pb-1">
+                  {selectedImages.map((file, index) => (
+                    <div key={index} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10">
+                      {/* blob URL 미리보기라 next/image 로더 대상이 아니다 - 일반 img가 맞다. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={imagePreviewUrls[index]} alt="" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(index)}
+                        aria-label="이미지 삭제"
+                        className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {postError && <p className="mt-2 text-xs text-red-300">{postError}</p>}
             </div>
           </div>
         </div>
       )}
 
       {/* 🌙 내 꿈 공유하기 모달: 자유 광장 글쓰기와 동일한 필드 구성(익명 토글 → 제목 → 본문)
-          아래에, 꿈 데이터를 "불러오기"(기존 비공개 기록 선택) 또는 "직접 쓰기" 중 골라 첨부한다. */}
+          아래에, 꿈 데이터를 "불러오기"(기존 비공개 기록 선택) 또는 "직접 쓰기" 중 골라 첨부한다.
+          자유 광장 모달과 동일하게 모바일에서는 전체화면, 데스크톱에서는 넉넉한 카드로 반응형 확장한다. */}
       {isShareDreamOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center md:px-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !isSharingDream && setIsShareDreamOpen(false)} />
 
-          <div className="relative max-h-[85vh] w-full max-w-md overflow-y-auto rounded-3xl border border-violet-400/30 bg-white/10 p-7 shadow-[0_0_60px_rgba(139,92,246,0.25)] backdrop-blur-2xl">
-            <button
-              type="button"
-              onClick={() => setIsShareDreamOpen(false)}
-              aria-label="닫기"
-              className="absolute right-5 top-5 text-slate-400 transition-colors hover:text-white"
-            >
-              ✕
-            </button>
-
-            <h2 className="text-lg font-semibold text-white">🌙 내 꿈 공유하기</h2>
-
-            <div className="mt-4">
-              <label className="text-xs text-indigo-300/70">어떤 이름으로 공개할까요?</label>
-              <div className="mt-2">
-                <IdentitySwitch isAnonymous={shareDreamIsAnonymous} onChange={setShareDreamIsAnonymous} nickname={nickname} />
-              </div>
-            </div>
-
-            {/* 자유 광장과 완전히 동일한 제목 입력 - 커뮤니티 리스트 뷰의 메인 텍스트가 된다. */}
-            <input
-              type="text"
-              value={shareDreamTitle}
-              onChange={(event) => setShareDreamTitle(event.target.value)}
-              placeholder="제목을 입력하세요"
-              maxLength={200}
-              className="mt-4 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
-            />
-
-            {/* 본문(사담) - 자유 광장과 동일한 넓은 textarea. 라벨 없이 플레이스홀더로 작성을 유도한다. */}
-            <textarea
-              value={shareDreamCaption}
-              onChange={(event) => setShareDreamCaption(event.target.value)}
-              placeholder="꿈에 대한 질문이나 재미있는 썰을 자유롭게 풀어보세요 (예: 어제 이런 꿈 꿨는데 길몽인가요?)"
-              rows={4}
-              maxLength={1000}
-              className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
-            />
-
-            {/* 첨부 모드 세그먼트 컨트롤: 불러오기 ↔ 직접 쓰기 */}
-            <div className="mt-4 flex rounded-lg bg-slate-800 p-1">
+          <div className="relative flex h-full w-full flex-col overflow-y-auto border border-violet-400/30 bg-white/10 shadow-[0_0_60px_rgba(139,92,246,0.25)] backdrop-blur-2xl md:h-auto md:max-h-[85vh] md:max-w-2xl md:rounded-2xl lg:max-w-3xl">
+            {/* 헤더: 닫기(좌) / 제목(중앙) / 공개하기(우) - 자유 광장 글쓰기 모달과 동일한
+                네이티브 앱 스타일 배치. */}
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 px-6 py-4 md:px-8">
               <button
                 type="button"
-                onClick={() => {
-                  setAttachmentMode("load");
-                  setShareDreamWithAiReport(false);
-                }}
-                className={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${
-                  attachmentMode === "load" ? "bg-violet-500/30 text-white" : "text-slate-400 hover:text-slate-200"
-                }`}
+                onClick={() => setIsShareDreamOpen(false)}
+                disabled={isSharingDream}
+                aria-label="닫기"
+                className="shrink-0 text-slate-400 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
-                📂 불러오기
+                ✕
               </button>
+              <h2 className="flex-1 truncate text-center text-sm font-semibold text-white">🌙 내 꿈 공유하기</h2>
               <button
                 type="button"
-                onClick={() => {
-                  setAttachmentMode("write");
-                  setShareDreamWithAiReport(false);
-                }}
-                className={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${
-                  attachmentMode === "write" ? "bg-violet-500/30 text-white" : "text-slate-400 hover:text-slate-200"
+                onClick={handleSubmitShareDream}
+                disabled={
+                  isSharingDream ||
+                  isAnalyzingNewDream ||
+                  !shareDreamTitle.trim() ||
+                  (attachmentMode === "load" ? !shareDreamId : !newDreamContent.trim())
+                }
+                className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-all ${
+                  isSharingDream ||
+                  isAnalyzingNewDream ||
+                  !shareDreamTitle.trim() ||
+                  (attachmentMode === "load" ? !shareDreamId : !newDreamContent.trim())
+                    ? "cursor-not-allowed bg-slate-700 text-slate-500"
+                    : "bg-purple-600 hover:bg-purple-500"
                 }`}
               >
-                ✏️ 직접 쓰기
+                {isSharingDream ? "공개하는 중..." : "🌐 공개하기"}
               </button>
             </div>
 
-            {attachmentMode === "write" && isAnalyzingNewDream ? (
-              <div className="mt-5">
-                <DreamAnalyzerLoading />
-                <p className="mt-3 text-center text-xs text-violet-300/80">AI가 해몽을 분석 중입니다...</p>
-              </div>
-            ) : (
-              <>
-                {attachmentMode === "load" ? (
-                  myPrivateDreams.length === 0 ? (
-                    <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
-                      아직 공유할 수 있는 비공개 기록이 없어요.
-                      <br />
-                      꿈 기록소에서 먼저 꿈을 기록하거나, 위에서 "✏️ 직접 쓰기"를 선택해 보세요.
-                    </p>
-                  ) : (
-                    <div className="mt-4 max-h-48 space-y-2 overflow-y-auto pr-1">
-                      {myPrivateDreams.map((entry) => (
-                        <button
-                          key={entry.id}
-                          type="button"
-                          onClick={() => {
-                            setShareDreamId(entry.id);
-                            setShareDreamTitle(entry.title);
-                          }}
-                          className={`w-full rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors ${
-                            shareDreamId === entry.id
-                              ? "border-violet-400/70 bg-violet-500/15 text-white"
-                              : "border-white/10 bg-white/5 text-slate-300 hover:border-violet-400/30"
-                          }`}
-                        >
-                          <span className="flex items-center justify-between gap-2">
-                            <span className="truncate">
-                              {entry.emotion} {entry.title}
-                            </span>
-                            <span className="shrink-0 text-[11px] text-slate-500">{entry.dream_date}</span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )
-                ) : (
-                  <div className="mt-4">
-                    <div className="flex flex-wrap gap-2">
-                      {MOOD_OPTIONS.map((option) => (
-                        <button
-                          key={option.emoji}
-                          type="button"
-                          onClick={() => setNewDreamMood(option.emoji)}
-                          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs backdrop-blur-md transition-all duration-200 ${
-                            newDreamMood === option.emoji
-                              ? "border-violet-400/70 bg-violet-500/25 text-white"
-                              : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
-                          }`}
-                        >
-                          <span className="text-sm">{option.emoji}</span>
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                    {/* 사담(위 textarea)과 헷갈리지 않도록 보라색 테두리/배경으로 시각적으로 구분한다. */}
-                    <textarea
-                      value={newDreamContent}
-                      onChange={(event) => setNewDreamContent(event.target.value)}
-                      placeholder="어떤 꿈을 꾸셨나요? 꿈 내용을 자세히 적어주세요."
-                      rows={5}
-                      className="mt-2 w-full resize-none rounded-xl border border-purple-500/50 bg-purple-900/10 px-4 py-3 text-sm text-white placeholder:text-slate-500/60 focus:border-purple-400/70 focus:outline-none"
-                    />
-                  </div>
-                )}
-
-                <label className="mt-4 flex cursor-pointer items-center justify-between gap-3">
-                  <span className="text-xs leading-relaxed text-slate-300">
-                    {attachmentMode === "load"
-                      ? "체크 시 AI 해몽 결과도 피드에 함께 공개합니다"
-                      : "AI 해몽 분석 함께 받기 (선택)"}
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={shareDreamWithAiReport}
-                    onClick={() => setShareDreamWithAiReport((prev) => !prev)}
-                    className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
-                      shareDreamWithAiReport ? "bg-violet-500" : "bg-white/15"
-                    }`}
-                  >
-                    <span
-                      className={`ml-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
-                        shareDreamWithAiReport ? "translate-x-4" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </label>
-
-                {shareDreamError && <p className="mt-3 text-xs text-red-300">{shareDreamError}</p>}
-
-                <div className="mt-5 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleSubmitShareDream}
-                    disabled={
-                      isSharingDream ||
-                      !shareDreamTitle.trim() ||
-                      (attachmentMode === "load" ? !shareDreamId : !newDreamContent.trim())
-                    }
-                    className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isSharingDream ? "공개하는 중..." : "🌐 커뮤니티에 공개하기"}
-                  </button>
+            <div className="flex-1 p-6 md:p-8">
+              <div>
+                <label className="text-xs text-indigo-300/70">어떤 이름으로 공개할까요?</label>
+                <div className="mt-2">
+                  <IdentitySwitch isAnonymous={shareDreamIsAnonymous} onChange={setShareDreamIsAnonymous} nickname={nickname} />
                 </div>
-              </>
-            )}
+              </div>
+
+              {/* 자유 광장과 완전히 동일한 제목 입력 - 커뮤니티 리스트 뷰의 메인 텍스트가 된다. */}
+              <input
+                type="text"
+                value={shareDreamTitle}
+                onChange={(event) => setShareDreamTitle(event.target.value)}
+                placeholder="제목을 입력하세요"
+                maxLength={200}
+                className="mt-4 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+              />
+
+              {/* 본문(사담) - 자유 광장과 동일한 넓은 textarea. 라벨 없이 플레이스홀더로 작성을 유도한다. */}
+              <textarea
+                ref={shareDreamCaptionRef}
+                value={shareDreamCaption}
+                onChange={(event) => setShareDreamCaption(event.target.value)}
+                placeholder="꿈에 대한 질문이나 재미있는 썰을 자유롭게 풀어보세요 (예: 어제 이런 꿈 꿨는데 길몽인가요?)"
+                maxLength={1000}
+                className="mt-3 min-h-[120px] w-full resize-none overflow-hidden rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+              />
+
+              {/* 첨부 모드 세그먼트 컨트롤: 불러오기 ↔ 직접 쓰기 */}
+              <div className="mt-4 flex rounded-lg bg-slate-800 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAttachmentMode("load");
+                    setShareDreamWithAiReport(false);
+                  }}
+                  className={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${
+                    attachmentMode === "load" ? "bg-violet-500/30 text-white" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  📂 불러오기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAttachmentMode("write");
+                    setShareDreamWithAiReport(false);
+                  }}
+                  className={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${
+                    attachmentMode === "write" ? "bg-violet-500/30 text-white" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  ✏️ 직접 쓰기
+                </button>
+              </div>
+
+              {attachmentMode === "write" && isAnalyzingNewDream ? (
+                <div className="mt-5">
+                  <DreamAnalyzerLoading />
+                  <p className="mt-3 text-center text-xs text-violet-300/80">AI가 해몽을 분석 중입니다...</p>
+                </div>
+              ) : (
+                <>
+                  {attachmentMode === "load" ? (
+                    myPrivateDreams.length === 0 ? (
+                      <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
+                        아직 공유할 수 있는 비공개 기록이 없어요.
+                        <br />
+                        꿈 기록소에서 먼저 꿈을 기록하거나, 위에서 "✏️ 직접 쓰기"를 선택해 보세요.
+                      </p>
+                    ) : (
+                      <div className="mt-4 max-h-48 space-y-2 overflow-y-auto pr-1">
+                        {myPrivateDreams.map((entry) => (
+                          <button
+                            key={entry.id}
+                            type="button"
+                            onClick={() => {
+                              setShareDreamId(entry.id);
+                              setShareDreamTitle(entry.title);
+                            }}
+                            className={`w-full rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors ${
+                              shareDreamId === entry.id
+                                ? "border-violet-400/70 bg-violet-500/15 text-white"
+                                : "border-white/10 bg-white/5 text-slate-300 hover:border-violet-400/30"
+                            }`}
+                          >
+                            <span className="flex items-center justify-between gap-2">
+                              <span className="truncate">
+                                {entry.emotion} {entry.title}
+                              </span>
+                              <span className="shrink-0 text-[11px] text-slate-500">{entry.dream_date}</span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    <div className="mt-4">
+                      <div className="flex flex-wrap gap-2">
+                        {MOOD_OPTIONS.map((option) => (
+                          <button
+                            key={option.emoji}
+                            type="button"
+                            onClick={() => setNewDreamMood(option.emoji)}
+                            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs backdrop-blur-md transition-all duration-200 ${
+                              newDreamMood === option.emoji
+                                ? "border-violet-400/70 bg-violet-500/25 text-white"
+                                : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
+                            }`}
+                          >
+                            <span className="text-sm">{option.emoji}</span>
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                      {/* 사담(위 textarea)과 헷갈리지 않도록 보라색 테두리/배경으로 시각적으로 구분한다. */}
+                      <textarea
+                        ref={newDreamContentRef}
+                        value={newDreamContent}
+                        onChange={(event) => setNewDreamContent(event.target.value)}
+                        placeholder="어떤 꿈을 꾸셨나요? 꿈 내용을 자세히 적어주세요."
+                        className="mt-2 min-h-[160px] w-full resize-none overflow-hidden rounded-xl border border-purple-500/50 bg-purple-900/10 px-4 py-3 text-sm text-white placeholder:text-slate-500/60 focus:border-purple-400/70 focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  <label className="mt-4 flex cursor-pointer items-center justify-between gap-3">
+                    <span className="text-xs leading-relaxed text-slate-300">
+                      {attachmentMode === "load"
+                        ? "체크 시 AI 해몽 결과도 피드에 함께 공개합니다"
+                        : "AI 해몽 분석 함께 받기 (선택)"}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={shareDreamWithAiReport}
+                      onClick={() => setShareDreamWithAiReport((prev) => !prev)}
+                      className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
+                        shareDreamWithAiReport ? "bg-violet-500" : "bg-white/15"
+                      }`}
+                    >
+                      <span
+                        className={`ml-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
+                          shareDreamWithAiReport ? "translate-x-4" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </label>
+
+                  {shareDreamError && <p className="mt-3 text-xs text-red-300">{shareDreamError}</p>}
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
