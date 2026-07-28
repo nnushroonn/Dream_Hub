@@ -595,7 +595,17 @@ export default function CommunityPage() {
                               <span className="shrink-0 text-sm font-semibold text-violet-400">[{post.comment_count}]</span>
                             )}
                           </span>
-                          {post.content && <p className="mt-0.5 line-clamp-1 text-sm text-slate-400">{post.content}</p>}
+                          {post.content.length >= 20 && (
+                            <div className="relative mt-0.5">
+                              <p className="line-clamp-1 overflow-hidden text-ellipsis text-sm text-slate-400">
+                                {post.content}
+                              </p>
+                              {/* 우측 끝을 리스트 배경색(slate-950)으로 페이드아웃시켜 텍스트가 갑자기
+                                  잘리지 않고 스르륵 사라지는 것처럼 보이게 한다 - 호기심을 자극하는
+                                  의도적인 "제한적 노출" 장치. */}
+                              <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-slate-950 to-transparent" />
+                            </div>
+                          )}
                           <p className="mt-1 text-[11px] text-slate-500">
                             {post.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${post.author_display_name}`} · {formatPostTime(post.created_at)}
                           </p>
