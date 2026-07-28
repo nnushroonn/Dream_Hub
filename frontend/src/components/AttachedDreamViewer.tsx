@@ -51,6 +51,17 @@ function FormattedDreamText({ text }: { text: string }) {
 export default function AttachedDreamViewer({ survey, interpretation }: AttachedDreamViewerProps) {
   const [isOpen, setIsOpen] = useState(false);
 
+  // AI 해몽이 없는 "순수 사담" 게시물은 접었다 펼 만큼 콘텐츠가 많지 않다 - 꿈 원문 하나뿐인데
+  // 아코디언 클릭을 강요하면 오히려 군더더기가 된다. 토글 없이 항상 펼친 상태로 짧게 보여준다.
+  if (!interpretation) {
+    return (
+      <div className="mt-4 rounded-xl border border-purple-500/30 bg-white/5 p-4">
+        <p className="mb-3 text-xs font-medium tracking-wide text-purple-300/80">🌙 첨부된 꿈 기록</p>
+        <DreamOriginalQuote content={buildDreamOriginalContent(survey)} />
+      </div>
+    );
+  }
+
   return (
     <div className="my-6 rounded-xl border border-purple-500/30 bg-white/5 p-4">
       <button
@@ -61,7 +72,7 @@ export default function AttachedDreamViewer({ survey, interpretation }: Attached
       >
         <div className="flex flex-1 flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-xs font-medium tracking-wide text-purple-300/80">🌙 첨부된 꿈 기록</span>
-          {interpretation?.tags.map((tag) => (
+          {interpretation.tags.map((tag) => (
             <span key={tag} className="text-xs text-violet-300/70">
               {tag.startsWith("#") ? tag : `#${tag}`}
             </span>
@@ -86,40 +97,36 @@ export default function AttachedDreamViewer({ survey, interpretation }: Attached
             <div className="mt-4">
               <DreamOriginalQuote content={buildDreamOriginalContent(survey)} />
 
-              {interpretation && (
-                <>
-                  <div className="mt-4">
-                    <FormattedDreamText text={interpretation.description} />
-                  </div>
+              <div className="mt-4">
+                <FormattedDreamText text={interpretation.description} />
+              </div>
 
-                  <div className="mt-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
-                        {interpretation.expert_badge}
-                      </span>
-                      <span className="text-xs text-violet-300/80">{interpretation.selected_expert}의 시선</span>
-                    </div>
-                    <p className="mt-2.5 text-sm leading-relaxed text-slate-300">{interpretation.expert_insight}</p>
-                  </div>
+              <div className="mt-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
+                    {interpretation.expert_badge}
+                  </span>
+                  <span className="text-xs text-violet-300/80">{interpretation.selected_expert}의 시선</span>
+                </div>
+                <p className="mt-2.5 text-sm leading-relaxed text-slate-300">{interpretation.expert_insight}</p>
+              </div>
 
-                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                      <p className="text-center text-xs text-indigo-300/70">행운의 아이템</p>
-                      <p className="mt-1.5 text-center font-medium text-white">{interpretation.lucky_item}</p>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                      <p className="text-center text-xs text-indigo-300/70">행운의 숫자</p>
-                      <p className="mt-1.5 text-center font-medium text-white">{interpretation.lucky_number}</p>
-                    </div>
-                  </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-center text-xs text-indigo-300/70">행운의 아이템</p>
+                  <p className="mt-1.5 text-center font-medium text-white">{interpretation.lucky_item}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-center text-xs text-indigo-300/70">행운의 숫자</p>
+                  <p className="mt-1.5 text-center font-medium text-white">{interpretation.lucky_number}</p>
+                </div>
+              </div>
 
-                  {/* 이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
-                  {interpretation.counseling_report && (
-                    <div className="mt-4">
-                      <CounselingStoryView report={interpretation.counseling_report} tags={interpretation.tags} />
-                    </div>
-                  )}
-                </>
+              {/* 이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
+              {interpretation.counseling_report && (
+                <div className="mt-4">
+                  <CounselingStoryView report={interpretation.counseling_report} tags={interpretation.tags} />
+                </div>
               )}
             </div>
           </motion.div>

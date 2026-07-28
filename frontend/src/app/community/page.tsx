@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Image as ImageIcon, X } from "lucide-react";
 
 import { getAuthErrorMessage } from "@/api/auth";
 import {
@@ -30,6 +31,10 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 
 type Tab = "dream" | "board";
+
+const POST_TITLE_MAX_LENGTH = 200;
+const POST_CONTENT_MAX_LENGTH = 1000;
+const MAX_COMPOSE_IMAGES = 3;
 
 function toHashtagDisplay(tag: string): string {
   return tag.startsWith("#") ? tag : `#${tag}`;
@@ -85,6 +90,9 @@ export default function CommunityPage() {
   const [composeIsAnonymous, setComposeIsAnonymous] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
+  // 짤 첨부 - 실제 업로드 연동 전, 선택/미리보기/삭제 UI만 먼저 구현한다.
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const composeFileInputRef = useRef<HTMLInputElement>(null);
 
   // 🌙 내 꿈 공유하기 모달: 꿈 기록소에 저장은 해뒀지만 아직 비공개인 내 기록 중 하나를 골라
   // 커뮤니티에 공개한다. AI 재분석 없이 setDreamVisibility()로 공개 범위만 바꾼다.
@@ -166,8 +174,54 @@ export default function CommunityPage() {
     setComposeText("");
     setComposeIsAnonymous(false);
     setPostError(null);
+    setSelectedImages([]);
     setIsComposeOpen(true);
   };
+
+  // X 버튼/백드롭 클릭 시 곧바로 닫지 않고, 작성 중인 내용(제목/본문/첨부 이미지)이 있으면
+  // 확인을 한 번 받는다 - 실수로 작성 중이던 글을 날리는 사고를 막는다.
+  const handleCloseCompose = () => {
+    if (isPosting) return;
+    const hasUnsavedChanges =
+      composeTitle.trim().length > 0 || composeText.trim().length > 0 || selectedImages.length > 0;
+    if (hasUnsavedChanges && !window.confirm("작성 중인 글이 있습니다. 작성을 취소하시겠습니까?")) {
+      return;
+    }
+    setIsComposeOpen(false);
+    setComposeTitle("");
+    setComposeText("");
+    setComposeIsAnonymous(false);
+    setPostError(null);
+    setSelectedImages([]);
+  };
+
+  const handleSelectImages = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    // 같은 파일을 다시 골라도 onChange가 다시 발화하도록 input 값 자체를 비운다.
+    event.target.value = "";
+    if (files.length === 0) return;
+    setSelectedImages((prev) => {
+      const remaining = MAX_COMPOSE_IMAGES - prev.length;
+      if (remaining <= 0 || files.length > remaining) {
+        window.alert(`이미지는 최대 ${MAX_COMPOSE_IMAGES}장까지 첨부할 수 있습니다.`);
+      }
+      if (remaining <= 0) return prev;
+      return [...prev, ...files.slice(0, remaining)];
+    });
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // 각 File을 미리보기용 blob URL로 바꾼다 - selectedImages가 바뀔 때마다 새로 만들고,
+  // 이전 URL은 정리(revoke)해 메모리 누수를 막는다.
+  const imagePreviewUrls = useMemo(() => selectedImages.map((file) => URL.createObjectURL(file)), [selectedImages]);
+  useEffect(() => {
+    return () => {
+      imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [imagePreviewUrls]);
 
   const openShareDream = () => {
     if (!isAuthenticated) {
@@ -299,6 +353,7 @@ export default function CommunityPage() {
       const created = await createCommunityPost(title, content, composeIsAnonymous);
       setPosts((prev) => [created, ...prev]);
       setIsComposeOpen(false);
+      setSelectedImages([]);
     } catch {
       setPostError("게시에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
@@ -605,12 +660,12 @@ export default function CommunityPage() {
       {/* 자유 광장 글쓰기 모달: CommunityPostForm - 아이덴티티 선택 시스템 포함 */}
       {isComposeOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !isPosting && setIsComposeOpen(false)} />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleCloseCompose} />
 
           <div className="relative w-full max-w-md rounded-3xl border border-violet-400/30 bg-white/10 p-7 shadow-[0_0_60px_rgba(139,92,246,0.25)] backdrop-blur-2xl">
             <button
               type="button"
-              onClick={() => setIsComposeOpen(false)}
+              onClick={handleCloseCompose}
               aria-label="닫기"
               className="absolute right-5 top-5 text-slate-400 transition-colors hover:text-white"
             >
@@ -631,19 +686,74 @@ export default function CommunityPage() {
               value={composeTitle}
               onChange={(event) => setComposeTitle(event.target.value)}
               placeholder="제목을 입력하세요"
-              maxLength={200}
+              maxLength={POST_TITLE_MAX_LENGTH}
               autoFocus
               className="mt-4 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
             />
+            <div className="mt-1 flex justify-end">
+              <span className={`text-xs ${composeTitle.length >= POST_TITLE_MAX_LENGTH ? "text-red-500" : "text-slate-500"}`}>
+                {composeTitle.length}/{POST_TITLE_MAX_LENGTH}
+              </span>
+            </div>
 
             <textarea
               value={composeText}
               onChange={(event) => setComposeText(event.target.value)}
               placeholder="자유롭게 이야기를 나눠보세요..."
               rows={4}
-              maxLength={1000}
-              className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+              maxLength={POST_CONTENT_MAX_LENGTH}
+              className="w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
             />
+            <div className="mt-1 flex justify-end">
+              <span className={`text-xs ${composeText.length >= POST_CONTENT_MAX_LENGTH ? "text-red-500" : "text-slate-500"}`}>
+                {composeText.length}/{POST_CONTENT_MAX_LENGTH}
+              </span>
+            </div>
+
+            {/* 짤 첨부: textarea 하단 좌측에 아이콘 버튼 + 첨부 매수 표시. 실제 input은 숨기고
+                버튼 클릭 시 ref로 클릭 이벤트를 위임한다. */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => composeFileInputRef.current?.click()}
+                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200"
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+                이미지
+              </button>
+              <span className="text-xs text-slate-500">
+                ({selectedImages.length}/{MAX_COMPOSE_IMAGES})
+              </span>
+              <input
+                ref={composeFileInputRef}
+                type="file"
+                accept="image/jpeg, image/png, image/gif"
+                multiple
+                hidden
+                onChange={handleSelectImages}
+              />
+            </div>
+
+            {selectedImages.length > 0 && (
+              <div className="mt-2 flex flex-row gap-2 overflow-x-auto pb-1">
+                {selectedImages.map((file, index) => (
+                  <div key={index} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10">
+                    {/* blob URL 미리보기라 next/image 로더 대상이 아니다 - 일반 img가 맞다. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={imagePreviewUrls[index]} alt="" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(index)}
+                      aria-label="이미지 삭제"
+                      className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {postError && <p className="mt-2 text-xs text-red-300">{postError}</p>}
 
             <div className="mt-4 flex justify-end">
@@ -651,7 +761,11 @@ export default function CommunityPage() {
                 type="button"
                 onClick={handleCreatePost}
                 disabled={!composeTitle.trim() || !composeText.trim() || isPosting}
-                className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                className={`rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-all ${
+                  !composeTitle.trim() || !composeText.trim() || isPosting
+                    ? "cursor-not-allowed bg-slate-700 text-slate-500"
+                    : "bg-purple-600 hover:-translate-y-0.5 hover:bg-purple-500"
+                }`}
               >
                 {isPosting ? "게시 중..." : "게시하기"}
               </button>
