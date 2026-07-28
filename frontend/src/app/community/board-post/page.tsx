@@ -152,7 +152,7 @@ export default function BoardPostPage() {
     setIsDeleting(true);
     try {
       await deleteCommunityPost(post.id);
-      router.push("/community");
+      router.push("/community?tab=board");
     } catch {
       setIsDeleting(false);
       setConfirmDelete(false);
@@ -164,9 +164,17 @@ export default function BoardPostPage() {
       <NavBar />
 
       <main className="mx-auto max-w-2xl px-6 py-16">
-        <Link href="/community" className="text-xs text-violet-300/70 underline-offset-2 hover:text-violet-200 hover:underline">
-          ← 커뮤니티로 돌아가기
+        <Link
+          href="/community?tab=board"
+          className="text-xs text-violet-300/70 underline-offset-2 hover:text-violet-200 hover:underline"
+        >
+          ← 자유 광장으로 돌아가기
         </Link>
+        <div className="mt-3">
+          <span className="rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-400">
+            자유 광장 이야기
+          </span>
+        </div>
 
         {isLoading ? (
           <div className="mt-6 animate-pulse rounded-3xl border border-white/10 bg-white/5 p-8">
@@ -179,10 +187,10 @@ export default function BoardPostPage() {
             <p className="text-sm text-slate-300">이 게시글을 찾을 수 없어요.</p>
             <p className="mt-1.5 text-xs text-slate-500">삭제되었거나, 잘못된 링크인 것 같아요.</p>
             <Link
-              href="/community"
+              href="/community?tab=board"
               className="mt-5 inline-block rounded-full border border-violet-400/40 bg-violet-500/15 px-5 py-2 text-xs text-violet-200 transition-colors hover:border-violet-300/60 hover:text-white"
             >
-              커뮤니티로 이동
+              자유 광장으로 이동
             </Link>
           </div>
         ) : (
