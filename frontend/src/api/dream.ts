@@ -177,7 +177,8 @@ export interface DreamEntryRecord {
   share_caption: string | null;
   is_lucid: boolean;
   survey: DreamSurvey;
-  interpretation: AiInterpretation;
+  // 무의식 광장 "직접 쓰기" 모드에서 AI 해몽을 건너뛰고 게시했으면 null.
+  interpretation: AiInterpretation | null;
   created_at: string;
   updated_at: string;
   // 익명이면 null(프론트가 "익명의 탐험가"로 표시).
@@ -199,7 +200,7 @@ export interface DreamEntryPayload {
   share_with_ai_analysis: boolean;
   share_caption?: string | null;
   survey: DreamSurvey;
-  interpretation: AiInterpretation;
+  interpretation?: AiInterpretation | null;
 }
 
 export async function listDreams(): Promise<DreamEntryRecord[]> {
@@ -233,11 +234,18 @@ export async function deleteDream(id: number): Promise<void> {
 // 커뮤니티 페이지의 "내 꿈 공유하기" 둘 다 이 함수 하나를 공유한다.
 export async function setDreamVisibility(
   entry: DreamEntryRecord,
-  options: { isPublic: boolean; isAnonymous: boolean; shareWithAiAnalysis: boolean; shareCaption?: string }
+  options: {
+    isPublic: boolean;
+    isAnonymous: boolean;
+    shareWithAiAnalysis: boolean;
+    shareCaption?: string;
+    // 커뮤니티 리스트 뷰에 노출되는 제목을 공유 시점에 바꿀 수 있게 한다 - 생략하면 기존 제목 유지.
+    title?: string;
+  }
 ): Promise<DreamEntryRecord> {
   return updateDream(entry.id, {
     dream_date: entry.dream_date,
-    title: entry.title,
+    title: options.title?.trim() || entry.title,
     emotion: entry.emotion,
     summary: entry.summary,
     is_public: options.isPublic,

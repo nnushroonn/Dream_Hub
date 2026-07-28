@@ -22,7 +22,6 @@ import {
   type Trend,
 } from "@/api/dream";
 import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
-import DreamGuidePanel from "@/components/DreamGuidePanel";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
 import SidebarBestList from "@/components/SidebarBestList";
@@ -96,27 +95,27 @@ export default function CommunityPage() {
     [savedDreamEntries]
   );
   const [isShareDreamOpen, setIsShareDreamOpen] = useState(false);
-  // 모달 안에서 "기존 기록에서 고르기" ↔ "새로 작성하기"를 오갈 수 있다 - 자유 광장처럼
-  // 무의식 피드에서도 곧바로 글을 쓸 수 있게 해달라는 요청으로 추가된 탭.
-  const [shareDreamMode, setShareDreamMode] = useState<"existing" | "new">("existing");
+  // 모달 안에서 "기존 꿈 불러오기" ↔ "직접 쓰기"를 오갈 수 있다 - 자유 광장 글쓰기처럼
+  // 무의식 피드에서도 곧바로 글을 쓸 수 있게 해달라는 요청으로 추가된 투트랙 첨부 방식.
+  const [attachmentMode, setAttachmentMode] = useState<"load" | "write">("load");
   const [shareDreamId, setShareDreamId] = useState<number | null>(null);
+  // 자유 광장과 완전히 동일한 필드 구성(제목+본문) - 두 모드가 함께 쓴다. 제목은 커뮤니티
+  // 리스트 뷰에 노출되는 메인 텍스트가 되고(공유 시점에 다시 지어도 된다), 본문(사담)은
+  // 무의식 피드 상세 페이지 상단에 유저가 직접 쓴 말로 노출된다.
+  const [shareDreamTitle, setShareDreamTitle] = useState("");
+  const [shareDreamCaption, setShareDreamCaption] = useState("");
   // 자유 광장과 마찬가지로 기본값은 닉네임 공개(false) - 하이브리드 익명 뱃지 시스템 도입 이후
-  // 두 탭의 기본 아이덴티티를 통일했다.
+  // 두 모드의 기본 아이덴티티를 통일했다.
   const [shareDreamIsAnonymous, setShareDreamIsAnonymous] = useState(false);
   const [shareDreamWithAiReport, setShareDreamWithAiReport] = useState(false);
-  // 꿈 내용과는 별개로, 공유하면서 덧붙이는 한마디(질문/자랑거리 등) - 무의식 피드 카드 상단에 노출된다.
-  const [shareDreamCaption, setShareDreamCaption] = useState("");
   const [isSharingDream, setIsSharingDream] = useState(false);
   const [shareDreamError, setShareDreamError] = useState<string | null>(null);
 
-  // "새로 작성하기" 탭 전용 상태: ⚡ 10초 미니멀 빠른 기록과 동일하게 제목+분위기+자유 서술만
-  // 받아 AI 해몽을 요청하고, 결과가 오면 곧바로 공개 설정을 골라 커뮤니티에 게시한다.
-  const [newDreamTitle, setNewDreamTitle] = useState("");
+  // attachmentMode === "write" 전용 상태: 감정 이모지 + 직접 쓴 꿈 내용. AI 해몽은
+  // shareDreamWithAiReport 토글이 켜져 있을 때만 제출 시점에 한 번 호출한다(선택적 처리).
   const [newDreamMood, setNewDreamMood] = useState(MOOD_OPTIONS[3].emoji);
-  const [newDreamText, setNewDreamText] = useState("");
-  const [newDreamInterpretation, setNewDreamInterpretation] = useState<AiInterpretation | null>(null);
+  const [newDreamContent, setNewDreamContent] = useState("");
   const [isAnalyzingNewDream, setIsAnalyzingNewDream] = useState(false);
-  const [newDreamError, setNewDreamError] = useState<string | null>(null);
 
   useEffect(() => {
     getDreamFeed()
@@ -175,23 +174,25 @@ export default function CommunityPage() {
       router.push("/login");
       return;
     }
-    setShareDreamMode("existing");
-    setShareDreamId(myPrivateDreams[0]?.id ?? null);
+    setAttachmentMode("load");
+    const firstDream = myPrivateDreams[0];
+    setShareDreamId(firstDream?.id ?? null);
+    setShareDreamTitle(firstDream?.title ?? "");
     setShareDreamIsAnonymous(false);
     setShareDreamWithAiReport(false);
     setShareDreamCaption("");
     setShareDreamError(null);
-    setNewDreamTitle("");
     setNewDreamMood(MOOD_OPTIONS[3].emoji);
-    setNewDreamText("");
-    setNewDreamInterpretation(null);
-    setNewDreamError(null);
+    setNewDreamContent("");
     setIsShareDreamOpen(true);
   };
 
+  // attachmentMode === "load": 이미 저장된 비공개 기록을 골라 공개로 전환한다 (AI 재분석 없음).
+  // 제목은 이 자리에서 다시 지어도 되므로 shareDreamTitle을 함께 실어 보낸다.
   const handleConfirmShareDream = async () => {
     const entry = myPrivateDreams.find((item) => item.id === shareDreamId);
-    if (!entry || isSharingDream) return;
+    const title = shareDreamTitle.trim();
+    if (!entry || !title || isSharingDream) return;
     setIsSharingDream(true);
     setShareDreamError(null);
     try {
@@ -200,6 +201,7 @@ export default function CommunityPage() {
         isAnonymous: shareDreamIsAnonymous,
         shareWithAiAnalysis: shareDreamWithAiReport,
         shareCaption: shareDreamCaption.trim(),
+        title,
       });
       upsertSavedDreamEntry(saved);
       // 방금 공개한 기록이 무의식 피드에 바로 보이도록 다시 불러온다.
@@ -214,33 +216,29 @@ export default function CommunityPage() {
     }
   };
 
-  // "새로 작성하기" 탭: ⚡ 10초 미니멀 빠른 기록과 동일한 방식으로 AI 해몽을 먼저 받는다.
-  const handleAnalyzeNewDream = async () => {
-    const title = newDreamTitle.trim();
-    const text = newDreamText.trim();
-    if (!title || !text || isAnalyzingNewDream) return;
-    setNewDreamError(null);
-    setIsAnalyzingNewDream(true);
-    try {
-      const result = await requestQuickAiInterpretation(title, text);
-      setNewDreamInterpretation(result);
-    } catch (error) {
-      setNewDreamError(getAuthErrorMessage(error));
-    } finally {
+  // attachmentMode === "write": AI 해몽은 shareDreamWithAiReport 토글이 켜져 있을 때만 제출
+  // 시점에 한 번 요청한다 - 꺼져 있으면 AI 호출 자체를 건너뛰고 곧바로 게시해 대기 시간을 없앤다.
+  const handleConfirmShareWrite = async () => {
+    const title = shareDreamTitle.trim();
+    const content = newDreamContent.trim();
+    if (!title || !content || isSharingDream || isAnalyzingNewDream) return;
+
+    setShareDreamError(null);
+
+    let interpretation: AiInterpretation | null = null;
+    if (shareDreamWithAiReport) {
+      setIsAnalyzingNewDream(true);
+      try {
+        interpretation = await requestQuickAiInterpretation(title, content);
+      } catch (error) {
+        setIsAnalyzingNewDream(false);
+        setShareDreamError(getAuthErrorMessage(error));
+        return;
+      }
       setIsAnalyzingNewDream(false);
     }
-  };
-
-  // 해몽 결과가 나온 뒤, 공개 설정을 골라 곧바로 공개 상태로 저장한다 (임시로 비공개 저장 후
-  // 다시 공개 전환하는 두 단계를 거치지 않는다).
-  const handleConfirmShareNewDream = async () => {
-    if (!newDreamInterpretation || isSharingDream) return;
-    const title = newDreamTitle.trim();
-    const text = newDreamText.trim();
-    if (!title || !text) return;
 
     setIsSharingDream(true);
-    setShareDreamError(null);
     try {
       const survey = {
         title,
@@ -250,7 +248,7 @@ export default function CommunityPage() {
         identity_factor: "",
         target_detail: "",
         action_physics: "",
-        action_detail: text,
+        action_detail: content,
         reality_link: "",
         reality_detail: "",
         vividness: 50,
@@ -264,10 +262,12 @@ export default function CommunityPage() {
         summary: buildDreamOneLineSummary(survey),
         is_public: true,
         is_anonymous: shareDreamIsAnonymous,
-        share_with_ai_analysis: shareDreamWithAiReport,
+        // AI 해몽을 건너뛴 경우(interpretation === null) 공개할 해몽 결과 자체가 없으므로
+        // 토글 값과 무관하게 항상 false로 보낸다 - 백엔드도 동일한 불변식을 강제한다.
+        share_with_ai_analysis: interpretation !== null && shareDreamWithAiReport,
         share_caption: shareDreamCaption.trim(),
         survey,
-        interpretation: newDreamInterpretation,
+        interpretation,
       });
       upsertSavedDreamEntry(created);
       getDreamFeed()
@@ -278,6 +278,14 @@ export default function CommunityPage() {
       setShareDreamError(getAuthErrorMessage(error));
     } finally {
       setIsSharingDream(false);
+    }
+  };
+
+  const handleSubmitShareDream = () => {
+    if (attachmentMode === "load") {
+      handleConfirmShareDream();
+    } else {
+      handleConfirmShareWrite();
     }
   };
 
@@ -652,9 +660,8 @@ export default function CommunityPage() {
         </div>
       )}
 
-      {/* 🌙 내 꿈 공유하기 모달: 꿈 기록소에 이미 저장해 둔 비공개 기록 중 하나를 골라 무의식 피드에
-          공개한다. AI는 재분석하지 않고 공개 범위만 바꾼다 - 작성 시점이 아니라 이렇게 나중에,
-          원하는 기록만 골라 공개할 수 있게 하기 위함. */}
+      {/* 🌙 내 꿈 공유하기 모달: 자유 광장 글쓰기와 동일한 필드 구성(익명 토글 → 제목 → 본문)
+          아래에, 꿈 데이터를 "불러오기"(기존 비공개 기록 선택) 또는 "직접 쓰기" 중 골라 첨부한다. */}
       {isShareDreamOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !isSharingDream && setIsShareDreamOpen(false)} />
@@ -671,206 +678,137 @@ export default function CommunityPage() {
 
             <h2 className="text-lg font-semibold text-white">🌙 내 꿈 공유하기</h2>
 
-            {/* 기존 기록에서 고르기 ↔ 새로 작성하기 */}
-            <div className="mt-4 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-white/5 p-1.5">
+            <div className="mt-4">
+              <label className="text-xs text-indigo-300/70">어떤 이름으로 공개할까요?</label>
+              <div className="mt-2">
+                <IdentitySwitch isAnonymous={shareDreamIsAnonymous} onChange={setShareDreamIsAnonymous} nickname={nickname} />
+              </div>
+            </div>
+
+            {/* 자유 광장과 완전히 동일한 제목 입력 - 커뮤니티 리스트 뷰의 메인 텍스트가 된다. */}
+            <input
+              type="text"
+              value={shareDreamTitle}
+              onChange={(event) => setShareDreamTitle(event.target.value)}
+              placeholder="제목을 입력하세요"
+              maxLength={200}
+              className="mt-4 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+            />
+
+            {/* 본문(사담) - 자유 광장과 동일한 넓은 textarea. 라벨 없이 플레이스홀더로 작성을 유도한다. */}
+            <textarea
+              value={shareDreamCaption}
+              onChange={(event) => setShareDreamCaption(event.target.value)}
+              placeholder="꿈에 대한 질문이나 재미있는 썰을 자유롭게 풀어보세요 (예: 어제 이런 꿈 꿨는데 길몽인가요?)"
+              rows={4}
+              maxLength={1000}
+              className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+            />
+
+            {/* 첨부 모드 세그먼트 컨트롤: 불러오기 ↔ 직접 쓰기 */}
+            <div className="mt-4 flex rounded-lg bg-slate-800 p-1">
               <button
                 type="button"
-                onClick={() => setShareDreamMode("existing")}
-                className={`rounded-xl px-3 py-2 text-xs font-medium transition-all duration-200 ${
-                  shareDreamMode === "existing" ? "bg-violet-500/30 text-white" : "text-slate-400 hover:text-slate-200"
+                onClick={() => {
+                  setAttachmentMode("load");
+                  setShareDreamWithAiReport(false);
+                }}
+                className={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${
+                  attachmentMode === "load" ? "bg-violet-500/30 text-white" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
-                기존 기록에서 고르기
+                📂 불러오기
               </button>
               <button
                 type="button"
-                onClick={() => setShareDreamMode("new")}
-                className={`rounded-xl px-3 py-2 text-xs font-medium transition-all duration-200 ${
-                  shareDreamMode === "new" ? "bg-violet-500/30 text-white" : "text-slate-400 hover:text-slate-200"
+                onClick={() => {
+                  setAttachmentMode("write");
+                  setShareDreamWithAiReport(false);
+                }}
+                className={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${
+                  attachmentMode === "write" ? "bg-violet-500/30 text-white" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
-                ✏️ 새로 작성하기
+                ✏️ 직접 쓰기
               </button>
             </div>
 
-            {shareDreamMode === "existing" ? (
-              myPrivateDreams.length === 0 ? (
-                <p className="mt-5 rounded-xl border border-white/10 bg-white/5 px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
-                  아직 공유할 수 있는 비공개 기록이 없어요.
-                  <br />
-                  꿈 기록소에서 먼저 꿈을 기록해 보세요.
-                </p>
-              ) : (
-                <>
-                  <div className="mt-4 max-h-48 space-y-2 overflow-y-auto pr-1">
-                    {myPrivateDreams.map((entry) => (
-                      <button
-                        key={entry.id}
-                        type="button"
-                        onClick={() => setShareDreamId(entry.id)}
-                        className={`w-full rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors ${
-                          shareDreamId === entry.id
-                            ? "border-violet-400/70 bg-violet-500/15 text-white"
-                            : "border-white/10 bg-white/5 text-slate-300 hover:border-violet-400/30"
-                        }`}
-                      >
-                        <span className="flex items-center justify-between gap-2">
-                          <span className="truncate">
-                            {entry.emotion} {entry.title}
-                          </span>
-                          <span className="shrink-0 text-[11px] text-slate-500">{entry.dream_date}</span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="mt-4">
-                    <label className="text-xs text-indigo-300/70">어떤 이름으로 공개할까요?</label>
-                    <div className="mt-2">
-                      <IdentitySwitch isAnonymous={shareDreamIsAnonymous} onChange={setShareDreamIsAnonymous} nickname={nickname} />
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
-                    <label className="text-xs text-indigo-300/70">이 꿈과 함께 남길 말 (질문이나 자랑거리 등, 선택)</label>
-                    <textarea
-                      value={shareDreamCaption}
-                      onChange={(event) => setShareDreamCaption(event.target.value)}
-                      placeholder="예: 이런 꿈 꿔본 사람 있나요? / 오랜만에 좋은 꿈 꿨어요 ✨"
-                      rows={2}
-                      maxLength={300}
-                      className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
-                    />
-                  </div>
-
-                  <label className="mt-4 flex cursor-pointer items-center justify-between gap-3">
-                    <span className="text-xs leading-relaxed text-slate-300">체크 시 AI 해몽 결과도 피드에 함께 공개합니다</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={shareDreamWithAiReport}
-                      onClick={() => setShareDreamWithAiReport((prev) => !prev)}
-                      className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
-                        shareDreamWithAiReport ? "bg-violet-500" : "bg-white/15"
-                      }`}
-                    >
-                      <span
-                        className={`ml-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
-                          shareDreamWithAiReport ? "translate-x-4" : "translate-x-0"
-                        }`}
-                      />
-                    </button>
-                  </label>
-
-                  {shareDreamError && <p className="mt-3 text-xs text-red-300">{shareDreamError}</p>}
-
-                  <div className="mt-5 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleConfirmShareDream}
-                      disabled={!shareDreamId || isSharingDream}
-                      className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isSharingDream ? "공개하는 중..." : "🌐 커뮤니티에 공개하기"}
-                    </button>
-                  </div>
-                </>
-              )
-            ) : isAnalyzingNewDream ? (
+            {attachmentMode === "write" && isAnalyzingNewDream ? (
               <div className="mt-5">
                 <DreamAnalyzerLoading />
+                <p className="mt-3 text-center text-xs text-violet-300/80">AI가 해몽을 분석 중입니다...</p>
               </div>
-            ) : !newDreamInterpretation ? (
-              <>
-                <div className="mt-4">
-                  <label className="text-xs text-indigo-300/70">오늘의 꿈 제목</label>
-                  <input
-                    type="text"
-                    value={newDreamTitle}
-                    onChange={(event) => setNewDreamTitle(event.target.value)}
-                    placeholder="예: 황금 고래와 함께한 하늘 비행"
-                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-2.5 text-sm text-white placeholder:text-slate-500/80 focus:border-violet-400/60 focus:outline-none"
-                  />
-                </div>
-
-                <div className="mt-4">
-                  <label className="text-xs text-indigo-300/70">꿈의 분위기</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {MOOD_OPTIONS.map((option) => (
-                      <button
-                        key={option.emoji}
-                        type="button"
-                        onClick={() => setNewDreamMood(option.emoji)}
-                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs backdrop-blur-md transition-all duration-200 ${
-                          newDreamMood === option.emoji
-                            ? "border-violet-400/70 bg-violet-500/25 text-white"
-                            : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
-                        }`}
-                      >
-                        <span className="text-sm">{option.emoji}</span>
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <label className="text-xs text-indigo-300/70">지난밤 꾼 꿈을 자유롭게 적어주세요</label>
-                  <div className="mt-1.5">
-                    <DreamGuidePanel />
-                  </div>
-                  <textarea
-                    value={newDreamText}
-                    onChange={(event) => setNewDreamText(event.target.value)}
-                    placeholder="위 가이드를 참고하여 자유롭게 적어보세요..."
-                    rows={5}
-                    className="w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-slate-500/60 focus:border-violet-400/60 focus:outline-none"
-                  />
-                </div>
-
-                {newDreamError && <p className="mt-3 text-xs text-red-300">{newDreamError}</p>}
-
-                <div className="mt-5 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleAnalyzeNewDream}
-                    disabled={!newDreamTitle.trim() || !newDreamText.trim() || isAnalyzingNewDream}
-                    className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isAnalyzingNewDream ? "해몽 받는 중..." : "🔮 AI 해몽 받기"}
-                  </button>
-                </div>
-              </>
             ) : (
               <>
-                <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs leading-relaxed text-slate-300">
-                  <p className="font-medium text-white">
-                    {newDreamMood} {newDreamTitle}
-                  </p>
-                  <p className="mt-1 text-slate-400">{newDreamInterpretation.description}</p>
-                </div>
-
-                <div className="mt-4">
-                  <label className="text-xs text-indigo-300/70">어떤 이름으로 공개할까요?</label>
-                  <div className="mt-2">
-                    <IdentitySwitch isAnonymous={shareDreamIsAnonymous} onChange={setShareDreamIsAnonymous} nickname={nickname} />
+                {attachmentMode === "load" ? (
+                  myPrivateDreams.length === 0 ? (
+                    <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
+                      아직 공유할 수 있는 비공개 기록이 없어요.
+                      <br />
+                      꿈 기록소에서 먼저 꿈을 기록하거나, 위에서 "✏️ 직접 쓰기"를 선택해 보세요.
+                    </p>
+                  ) : (
+                    <div className="mt-4 max-h-48 space-y-2 overflow-y-auto pr-1">
+                      {myPrivateDreams.map((entry) => (
+                        <button
+                          key={entry.id}
+                          type="button"
+                          onClick={() => {
+                            setShareDreamId(entry.id);
+                            setShareDreamTitle(entry.title);
+                          }}
+                          className={`w-full rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors ${
+                            shareDreamId === entry.id
+                              ? "border-violet-400/70 bg-violet-500/15 text-white"
+                              : "border-white/10 bg-white/5 text-slate-300 hover:border-violet-400/30"
+                          }`}
+                        >
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="truncate">
+                              {entry.emotion} {entry.title}
+                            </span>
+                            <span className="shrink-0 text-[11px] text-slate-500">{entry.dream_date}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  <div className="mt-4">
+                    <div className="flex flex-wrap gap-2">
+                      {MOOD_OPTIONS.map((option) => (
+                        <button
+                          key={option.emoji}
+                          type="button"
+                          onClick={() => setNewDreamMood(option.emoji)}
+                          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs backdrop-blur-md transition-all duration-200 ${
+                            newDreamMood === option.emoji
+                              ? "border-violet-400/70 bg-violet-500/25 text-white"
+                              : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
+                          }`}
+                        >
+                          <span className="text-sm">{option.emoji}</span>
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* 사담(위 textarea)과 헷갈리지 않도록 보라색 테두리/배경으로 시각적으로 구분한다. */}
+                    <textarea
+                      value={newDreamContent}
+                      onChange={(event) => setNewDreamContent(event.target.value)}
+                      placeholder="어떤 꿈을 꾸셨나요? 꿈 내용을 자세히 적어주세요."
+                      rows={5}
+                      className="mt-2 w-full resize-none rounded-xl border border-purple-500/50 bg-purple-900/10 px-4 py-3 text-sm text-white placeholder:text-slate-500/60 focus:border-purple-400/70 focus:outline-none"
+                    />
                   </div>
-                </div>
-
-                <div className="mt-4">
-                  <label className="text-xs text-indigo-300/70">이 꿈과 함께 남길 말 (질문이나 자랑거리 등, 선택)</label>
-                  <textarea
-                    value={shareDreamCaption}
-                    onChange={(event) => setShareDreamCaption(event.target.value)}
-                    placeholder="예: 이런 꿈 꿔본 사람 있나요? / 오랜만에 좋은 꿈 꿨어요 ✨"
-                    rows={2}
-                    maxLength={300}
-                    className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
-                  />
-                </div>
+                )}
 
                 <label className="mt-4 flex cursor-pointer items-center justify-between gap-3">
-                  <span className="text-xs leading-relaxed text-slate-300">체크 시 AI 해몽 결과도 피드에 함께 공개합니다</span>
+                  <span className="text-xs leading-relaxed text-slate-300">
+                    {attachmentMode === "load"
+                      ? "체크 시 AI 해몽 결과도 피드에 함께 공개합니다"
+                      : "AI 해몽 분석 함께 받기 (선택)"}
+                  </span>
                   <button
                     type="button"
                     role="switch"
@@ -890,19 +828,15 @@ export default function CommunityPage() {
 
                 {shareDreamError && <p className="mt-3 text-xs text-red-300">{shareDreamError}</p>}
 
-                <div className="mt-5 flex justify-end gap-2">
+                <div className="mt-5 flex justify-end">
                   <button
                     type="button"
-                    onClick={() => setNewDreamInterpretation(null)}
-                    disabled={isSharingDream}
-                    className="rounded-full border border-white/10 px-4 py-2.5 text-sm text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    다시 쓰기
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmShareNewDream}
-                    disabled={isSharingDream}
+                    onClick={handleSubmitShareDream}
+                    disabled={
+                      isSharingDream ||
+                      !shareDreamTitle.trim() ||
+                      (attachmentMode === "load" ? !shareDreamId : !newDreamContent.trim())
+                    }
                     className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {isSharingDream ? "공개하는 중..." : "🌐 커뮤니티에 공개하기"}

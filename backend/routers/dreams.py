@@ -51,7 +51,8 @@ class DreamEntryInput(BaseModel):
     # 카드 상단에 노출된다. 300자 제한은 DB 컬럼(String(300))과 맞춘다.
     share_caption: str | None = None
     survey: DreamSurveyInput
-    interpretation: AiInterpretationPayload
+    # 무의식 광장 "직접 쓰기" 모드에서 AI 해몽을 건너뛰고 게시할 수 있어 Optional이다.
+    interpretation: AiInterpretationPayload | None = None
 
 
 def _display_name(user: User, is_anonymous: bool) -> str | None:
@@ -72,7 +73,7 @@ class DreamEntryResponse(BaseModel):
     share_caption: str | None
     is_lucid: bool
     survey: DreamSurveyInput
-    interpretation: AiInterpretationPayload
+    interpretation: AiInterpretationPayload | None = None
     created_at: datetime
     updated_at: datetime
     # 익명이면 None(프론트가 "익명의 탐험가"로 표시) - 실제 user_id/이메일은 담기지 않는다.
@@ -118,10 +119,12 @@ def _apply_input(entry: DreamEntry, payload: DreamEntryInput) -> None:
     entry.emotion = payload.emotion
     entry.summary = payload.summary
     entry.is_anonymous = payload.is_anonymous
-    entry.share_with_ai_analysis = payload.share_with_ai_analysis
+    # AI 해몽이 아예 없으면 "AI 해몽 결과도 공개"라는 선택 자체가 성립하지 않는다 - 프론트가
+    # 실수로 true를 보내도 여기서 강제로 무효화한다.
+    entry.share_with_ai_analysis = payload.share_with_ai_analysis if payload.interpretation is not None else False
     entry.share_caption = (payload.share_caption or "").strip() or None
     entry.survey = payload.survey.model_dump()
-    entry.interpretation = payload.interpretation.model_dump()
+    entry.interpretation = payload.interpretation.model_dump() if payload.interpretation is not None else None
     entry.is_lucid = payload.survey.is_lucid
     entry.status = DreamStatus.PUBLIC if payload.is_public else DreamStatus.PRIVATE
 

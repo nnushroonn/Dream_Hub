@@ -151,8 +151,11 @@ class DreamEntry(Base):
     summary: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
     # 6단계 위저드 응답 원본 (DreamSurveyInput과 동일한 형태) - 수정 모드 프리필에 사용
     survey: Mapped[dict[str, Any]] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=False)
-    # AI 해몽 결과 원본 (tags/description/lucky_* 등) - 상세 보기에 그대로 재사용
-    interpretation: Mapped[dict[str, Any]] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=False)
+    # AI 해몽 결과 원본 (tags/description/lucky_* 등) - 상세 보기에 그대로 재사용.
+    # 무의식 광장 "직접 쓰기" 모드에서 AI 해몽을 건너뛰고 게시한 경우 None일 수 있다.
+    interpretation: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), nullable=True
+    )
     status: Mapped[DreamStatus] = mapped_column(
         SAEnum(DreamStatus, name="dream_status"), nullable=False, default=DreamStatus.PRIVATE
     )

@@ -551,7 +551,7 @@ export default function DiaryPage() {
 
   // 상세 보기 액션 바의 공유하기 - 카드 안이 아니라 수정/삭제와 나란한 위치에서 4개 항목 전체를 공유한다.
   const handleShareDetail = async (entry: DreamEntryRecord) => {
-    if (!entry.interpretation.counseling_report) return;
+    if (!entry.interpretation?.counseling_report) return;
     const result = await shareCounselingReport(entry.interpretation.counseling_report, `${entry.emotion} ${entry.title}`);
     if (result === "copied") {
       setDetailShareCopied(true);
@@ -1122,26 +1122,30 @@ export default function DiaryPage() {
                         />
                       </div>
 
-                      <label className="flex cursor-pointer items-center justify-between gap-3">
-                        <span className="text-xs leading-relaxed text-slate-300">
-                          체크 시 AI 해몽 결과도 피드에 함께 공개합니다
-                        </span>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={publishWithAiReport}
-                          onClick={() => setPublishWithAiReport((prev) => !prev)}
-                          className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
-                            publishWithAiReport ? "bg-violet-500" : "bg-white/15"
-                          }`}
-                        >
-                          <span
-                            className={`ml-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
-                              publishWithAiReport ? "translate-x-4" : "translate-x-0"
+                      {/* AI 해몽이 아예 없는 기록(무의식 광장 "직접 쓰기"로 만든 글)은 공개할
+                          해몽 결과 자체가 없어 이 토글을 보여주지 않는다. */}
+                      {activeDetail.interpretation && (
+                        <label className="flex cursor-pointer items-center justify-between gap-3">
+                          <span className="text-xs leading-relaxed text-slate-300">
+                            체크 시 AI 해몽 결과도 피드에 함께 공개합니다
+                          </span>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={publishWithAiReport}
+                            onClick={() => setPublishWithAiReport((prev) => !prev)}
+                            className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
+                              publishWithAiReport ? "bg-violet-500" : "bg-white/15"
                             }`}
-                          />
-                        </button>
-                      </label>
+                          >
+                            <span
+                              className={`ml-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
+                                publishWithAiReport ? "translate-x-4" : "translate-x-0"
+                              }`}
+                            />
+                          </button>
+                        </label>
+                      )}
                     </>
                   )}
 
@@ -1179,57 +1183,63 @@ export default function DiaryPage() {
                 <DreamOriginalQuote content={buildDreamOriginalContent(activeDetail.survey)} />
               </div>
 
-              <div className="mt-5 flex flex-wrap justify-center gap-2">
-                {activeDetail.interpretation.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border border-violet-400/30 bg-violet-500/15 px-3 py-1 text-xs text-violet-200"
-                  >
-                    {tag.startsWith("#") ? tag : `#${tag}`}
-                  </span>
-                ))}
-              </div>
+              {/* 무의식 광장 "직접 쓰기" 모드에서 AI 해몽 없이 게시한 기록은 interpretation이
+                  null일 수 있다 - 그 경우 원문 아래로 AI 해몽 섹션 자체를 렌더링하지 않는다. */}
+              {activeDetail.interpretation && (
+                <>
+                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    {activeDetail.interpretation.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full border border-violet-400/30 bg-violet-500/15 px-3 py-1 text-xs text-violet-200"
+                      >
+                        {tag.startsWith("#") ? tag : `#${tag}`}
+                      </span>
+                    ))}
+                  </div>
 
-              <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-300">
-                {activeDetail.interpretation.description}
-              </p>
+                  <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-300">
+                    {activeDetail.interpretation.description}
+                  </p>
 
-              {/* 전문가의 시선: 모든 학파를 나열하지 않고, 이 꿈과 가장 찰떡궁합인 전문가 1~2명만 깊이 있게 */}
-              <div className="mt-5 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
-                    {activeDetail.interpretation.expert_badge}
-                  </span>
-                  <span className="text-xs text-violet-300/80">{activeDetail.interpretation.selected_expert}의 시선</span>
-                </div>
-                <p className="mt-2.5 text-sm leading-relaxed text-slate-300">{activeDetail.interpretation.expert_insight}</p>
-              </div>
+                  {/* 전문가의 시선: 모든 학파를 나열하지 않고, 이 꿈과 가장 찰떡궁합인 전문가 1~2명만 깊이 있게 */}
+                  <div className="mt-5 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
+                        {activeDetail.interpretation.expert_badge}
+                      </span>
+                      <span className="text-xs text-violet-300/80">{activeDetail.interpretation.selected_expert}의 시선</span>
+                    </div>
+                    <p className="mt-2.5 text-sm leading-relaxed text-slate-300">{activeDetail.interpretation.expert_insight}</p>
+                  </div>
 
-              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-center text-xs text-indigo-300/70">행운의 아이템</p>
-                  <p className="mt-1.5 text-center font-medium text-white">{activeDetail.interpretation.lucky_item}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-center text-xs text-indigo-300/70">행운의 숫자</p>
-                  <p className="mt-1.5 text-center font-medium text-white">{activeDetail.interpretation.lucky_number}</p>
-                </div>
-              </div>
+                  <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <p className="text-center text-xs text-indigo-300/70">행운의 아이템</p>
+                      <p className="mt-1.5 text-center font-medium text-white">{activeDetail.interpretation.lucky_item}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <p className="text-center text-xs text-indigo-300/70">행운의 숫자</p>
+                      <p className="mt-1.5 text-center font-medium text-white">{activeDetail.interpretation.lucky_number}</p>
+                    </div>
+                  </div>
 
-              {/* 무의식 상담 리포트: 인스타그램 스토리 형태의 4컷 스와이프 카드 (읽기 전용 - 저장 액션 없음).
-                  이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
-              {activeDetail.interpretation.counseling_report && (
-                <div className="mt-6">
-                  <CounselingStoryView
-                    report={activeDetail.interpretation.counseling_report}
-                    tags={activeDetail.interpretation.tags}
-                  />
-                </div>
+                  {/* 무의식 상담 리포트: 인스타그램 스토리 형태의 4컷 스와이프 카드 (읽기 전용 - 저장 액션 없음).
+                      이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
+                  {activeDetail.interpretation.counseling_report && (
+                    <div className="mt-6">
+                      <CounselingStoryView
+                        report={activeDetail.interpretation.counseling_report}
+                        tags={activeDetail.interpretation.tags}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
             <div className="mt-7 flex flex-row gap-2">
-              {activeDetail.interpretation.counseling_report && (
+              {activeDetail.interpretation?.counseling_report && (
                 <button
                   type="button"
                   onClick={() => handleShareDetail(activeDetail)}
