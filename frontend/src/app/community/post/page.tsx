@@ -115,7 +115,9 @@ export default function CommunityPostPage() {
             </h1>
             <p className="mt-1 text-xs text-slate-500">{entry.dream_date}</p>
 
-            {entry.share_caption && (
+            {/* 공백만 있는 사담(예: 엔터만 몇 번 친 경우)까지 걸러내야 빈 여백만 남는 걸 막을 수
+                있어, 단순 truthy 체크가 아니라 trim() 결과로 존재 여부를 판단한다. */}
+            {entry.share_caption?.trim() && (
               <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{entry.share_caption}</p>
             )}
 

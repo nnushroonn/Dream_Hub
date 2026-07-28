@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { getAuthErrorMessage } from "@/api/auth";
 import {
   buildDreamOneLineSummary,
+  buildDreamOriginalContent,
   createCommunityPost,
   createDream,
   deleteCommunityPost,
@@ -43,6 +44,17 @@ function formatPostTime(iso: string): string {
 // 일부러 엔터를 여러 번 눌러 감춰둔 반전 텍스트가 리스트에서 미리 새어나가지 않는다.
 function firstLine(content: string): string {
   return content.split(/\r\n|\n/)[0];
+}
+
+// 사담(share_caption)이 비어 있거나 공백뿐이면 리스트 행이 텅 비어 보이지 않도록, 첨부된 꿈
+// 원문 첫 줄로 대체하고 🌙를 붙여 "유저의 말이 아니라 꿈 데이터"임을 시각적으로 구분한다.
+function dreamListPreview(dream: DreamFeedEntry): string | null {
+  const caption = firstLine(dream.share_caption ?? "").trim();
+  if (caption.length >= 20) return caption;
+  if (caption.length > 0) return null; // 사담은 있지만 너무 짧음 - 스포일러 방지로 제목만 노출
+
+  const fallback = firstLine(buildDreamOriginalContent(dream.survey)).trim();
+  return fallback.length > 0 ? `🌙 ${fallback}` : null;
 }
 
 export default function CommunityPage() {
@@ -368,51 +380,54 @@ export default function CommunityPage() {
                       <div key={index} className="h-14 animate-pulse border-b border-white/10 bg-white/[0.02]" />
                     ))
                   ) : filteredDreams.length > 0 ? (
-                    filteredDreams.map((dream) => (
-                      <div
-                        key={dream.id}
-                        role="link"
-                        tabIndex={0}
-                        onClick={() => router.push(`/community/post?id=${dream.id}`)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") router.push(`/community/post?id=${dream.id}`);
-                        }}
-                        className="flex cursor-pointer items-center justify-between gap-4 border-b border-white/10 px-2 py-3 transition-colors hover:bg-white/5"
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          {/* 자유 광장 리스트의 "글 번호" 자리를 대신해, 좌측에 이 꿈의 메인 감정
-                              이모지를 배치한다 - 무의식 피드 행임을 한눈에 구분해 준다. */}
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-lg">
-                            {dream.emotion}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <span className="inline-flex min-w-0 flex-wrap items-baseline gap-1.5">
-                              <span className="truncate text-lg font-bold text-slate-100 hover:underline">{dream.title}</span>
-                              <span className="shrink-0 rounded bg-purple-900 px-2 text-xs text-purple-200">🌙 꿈 기록</span>
-                              {dream.comment_count > 0 && (
-                                <span className="shrink-0 text-sm font-semibold text-violet-400">[{dream.comment_count}]</span>
-                              )}
+                    filteredDreams.map((dream) => {
+                      const preview = dreamListPreview(dream);
+                      return (
+                        <div
+                          key={dream.id}
+                          role="link"
+                          tabIndex={0}
+                          onClick={() => router.push(`/community/post?id=${dream.id}`)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") router.push(`/community/post?id=${dream.id}`);
+                          }}
+                          className="flex cursor-pointer items-center justify-between gap-4 border-b border-white/10 px-2 py-3 transition-colors hover:bg-white/5"
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-3">
+                            {/* 자유 광장 리스트의 "글 번호" 자리를 대신해, 좌측에 이 꿈의 메인 감정
+                                이모지를 배치한다 - 무의식 피드 행임을 한눈에 구분해 준다. */}
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-lg">
+                              {dream.emotion}
                             </span>
-                            {firstLine(dream.share_caption ?? "").length >= 20 && (
-                              <div className="relative mt-0.5">
-                                <p className="line-clamp-1 overflow-hidden text-ellipsis text-sm text-slate-400">
-                                  {firstLine(dream.share_caption ?? "")}
-                                </p>
-                                {/* 자유 광장과 동일한 페이드아웃 + 낚시글 스포일러 방지 로직 -
-                                    첫 줄만 잘라 보여주고 우측 끝을 리스트 배경색으로 흐려지게 한다. */}
-                                <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-slate-950 to-transparent" />
-                              </div>
-                            )}
-                            <p className="mt-1 text-[11px] text-slate-500">
-                              {dream.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${dream.author_display_name}`} · {dream.dream_date}
-                            </p>
+                            <div className="min-w-0 flex-1">
+                              <span className="inline-flex min-w-0 flex-wrap items-baseline gap-1.5">
+                                <span className="truncate text-lg font-bold text-slate-100 hover:underline">{dream.title}</span>
+                                <span className="shrink-0 rounded bg-purple-900 px-2 text-xs text-purple-200">🌙 꿈 기록</span>
+                                {dream.comment_count > 0 && (
+                                  <span className="shrink-0 text-sm font-semibold text-violet-400">[{dream.comment_count}]</span>
+                                )}
+                              </span>
+                              {preview && (
+                                <div className="relative mt-0.5">
+                                  <p className="line-clamp-1 overflow-hidden text-ellipsis text-sm text-slate-400">
+                                    {preview}
+                                  </p>
+                                  {/* 자유 광장과 동일한 페이드아웃 + 낚시글 스포일러 방지 로직 -
+                                      첫 줄만 잘라 보여주고 우측 끝을 리스트 배경색으로 흐려지게 한다. */}
+                                  <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-slate-950 to-transparent" />
+                                </div>
+                              )}
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                {dream.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${dream.author_display_name}`} · {dream.dream_date}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-3">
+                            <span className="text-xs text-slate-400">👍 {dream.upvote_count}</span>
                           </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-3">
-                          <span className="text-xs text-slate-400">👍 {dream.upvote_count}</span>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <p className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-8 text-center text-xs text-slate-500">
                       {activeTag
