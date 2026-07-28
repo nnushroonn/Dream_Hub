@@ -570,6 +570,17 @@ export default function CommunityWritePage() {
                 </label>
 
                 {shareDreamError && <p className="mt-3 text-xs text-red-300">{shareDreamError}</p>}
+
+                <button
+                  type="button"
+                  onClick={handleSubmitShareDream}
+                  disabled={isDreamSubmitDisabled}
+                  className={`mt-5 w-full rounded-xl py-3 text-sm font-semibold text-white transition-colors ${
+                    isDreamSubmitDisabled ? "cursor-not-allowed bg-slate-700 text-slate-500" : "bg-purple-600 hover:bg-purple-500"
+                  }`}
+                >
+                  {isSharingDream ? "공개하는 중..." : "🌐 공개하기"}
+                </button>
               </>
             )}
           </>
