@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
-  buildDreamOriginalContent,
   createDreamComment,
   deleteDreamComment,
   getDreamComments,
@@ -14,9 +13,8 @@ import {
   voteOnDream,
   type DreamEntryRecord,
 } from "@/api/dream";
+import AttachedDreamViewer from "@/components/AttachedDreamViewer";
 import CommentSection from "@/components/CommentSection";
-import CounselingStoryView from "@/components/CounselingStoryView";
-import DreamOriginalQuote from "@/components/DreamOriginalQuote";
 import NavBar from "@/components/NavBar";
 import VoteButtons from "@/components/VoteButtons";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -25,8 +23,9 @@ import { useAuthStore } from "@/store/useAuthStore";
 // 이 프로젝트는 Cloudflare Pages 정적 export(next.config.mjs output: "export")라 [id] 같은
 // 동적 경로 세그먼트를 쓸 수 없다 (빌드 시점에 미래에 생길 id를 알 수 없어 generateStaticParams가
 // 불가능) - 그래서 사전 검색(/dictionary?search=)과 동일하게 쿼리 파라미터(?id=)로 넘긴다.
-// 로그인 여부와 무관하게 누구나 볼 수 있고, 작성자 정보는 응답에 아예 담겨 있지 않다
-// (백엔드 GET /api/dreams/public/{id}가 PUBLIC 상태의 실제 DreamEntry만 내려준다).
+// 로그인 여부와 무관하게 누구나 볼 수 있다. 레이아웃은 위에서부터 (1) 유저가 직접 쓴 사담
+// (share_caption) (2) AttachedDreamViewer로 감싼 첨부 꿈 데이터 (3) 투표+댓글 순으로 시선을
+// 유도한다 - 사담을 먼저 읽게 해 "무슨 얘기지?" 호기심이 생긴 뒤에 꿈 데이터를 만나게 한다.
 export default function CommunityPostPage() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -106,71 +105,26 @@ export default function CommunityPostPage() {
           </div>
         ) : (
           <div className="relative mt-6 rounded-3xl border border-violet-400/30 bg-white/10 p-8 shadow-[0_0_60px_rgba(139,92,246,0.2)] backdrop-blur-2xl">
-            <p className="text-xs tracking-widest text-indigo-300/70 uppercase">Anonymous Dreamer</p>
-            {entry.share_caption && (
-              <p className="mt-3 rounded-lg border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-sm leading-relaxed text-violet-100">
-                💭 {entry.share_caption}
-              </p>
-            )}
+            {/* Top: 작성자/작성일 + 유저가 직접 쓴 본문(사담). whitespace-pre-wrap으로 줄바꿈·공백을
+                원본 그대로 보존해, 자유 광장 글쓰기와 동일한 "낚시글" 표현도 여기서 그대로 동작한다. */}
+            <p className="text-xs tracking-widest text-indigo-300/70">
+              {entry.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${entry.author_display_name}`}
+            </p>
             <h1 className="mt-1 text-2xl font-semibold text-white">
               {entry.emotion} {entry.title}
             </h1>
             <p className="mt-1 text-xs text-slate-500">{entry.dream_date}</p>
 
-            <div className="mt-4">
-              <DreamOriginalQuote content={buildDreamOriginalContent(entry.survey)} />
-            </div>
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              {entry.interpretation.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full border border-violet-400/30 bg-violet-500/15 px-3 py-1 text-xs text-violet-200"
-                >
-                  {tag.startsWith("#") ? tag : `#${tag}`}
-                </span>
-              ))}
-            </div>
-
-            <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-300">
-              {entry.interpretation.description}
-            </p>
-
-            <div className="mt-5 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
-                  {entry.interpretation.expert_badge}
-                </span>
-                <span className="text-xs text-violet-300/80">{entry.interpretation.selected_expert}의 시선</span>
-              </div>
-              <p className="mt-2.5 text-sm leading-relaxed text-slate-300">{entry.interpretation.expert_insight}</p>
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-center text-xs text-indigo-300/70">행운의 아이템</p>
-                <p className="mt-1.5 text-center font-medium text-white">{entry.interpretation.lucky_item}</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-center text-xs text-indigo-300/70">행운의 숫자</p>
-                <p className="mt-1.5 text-center font-medium text-white">{entry.interpretation.lucky_number}</p>
-              </div>
-            </div>
-
-            {/* 무의식 상담 리포트: 인스타그램 스토리 형태의 4컷 스와이프 카드 (읽기 전용 - 저장 액션 없음).
-                이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
-            {entry.interpretation.counseling_report && (
-              <div className="mt-6">
-                <CounselingStoryView
-                  report={entry.interpretation.counseling_report}
-                  tags={entry.interpretation.tags}
-                />
-              </div>
+            {entry.share_caption && (
+              <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{entry.share_caption}</p>
             )}
 
-            {/* 👍/👎 좋아요·싫어요: 무의식 피드가 리스트형으로 바뀌면서 투표는 이제 이 상세
-                페이지에서만 이뤄진다 (리스트에는 집계된 upvote_count만 노출). */}
-            <div className="mt-6 border-t border-white/[0.06] pt-5">
+            {/* Middle: 첨부된 꿈 데이터(원문/태그/AI 해몽/행운/상담 리포트) - 위 본문과 뚜렷이
+                구분되는 카드 안에 담아 "첨부 파일"처럼 보이게 한다. */}
+            <AttachedDreamViewer survey={entry.survey} interpretation={entry.interpretation} />
+
+            {/* Bottom: 👍/👎 투표(중앙 정렬) + 하이브리드 익명 댓글. */}
+            <div className="border-t border-white/[0.06] pt-5">
               <VoteButtons
                 myVote={entry.my_vote}
                 upvoteCount={entry.upvote_count}
@@ -186,7 +140,7 @@ export default function CommunityPostPage() {
               <CommentSection
                 targetId={entry.id}
                 isOpen
-                defaultAnonymous
+                defaultAnonymous={entry.is_anonymous}
                 nickname={nickname}
                 isAuthenticated={isAuthenticated}
                 onRequireLogin={() => router.push("/login")}

@@ -54,6 +54,12 @@ class DreamEntryInput(BaseModel):
     interpretation: AiInterpretationPayload
 
 
+def _display_name(user: User, is_anonymous: bool) -> str | None:
+    """is_anonymous면 None(프론트가 '익명의 탐험가'로 표시). 아니면 회원가입 때 정한
+    꿈 페르소나 닉네임을 그대로 쓴다. community.py의 동명 헬퍼와 동일한 규칙."""
+    return None if is_anonymous else user.nickname
+
+
 class DreamEntryResponse(BaseModel):
     id: int
     dream_date: PyDate
@@ -69,6 +75,8 @@ class DreamEntryResponse(BaseModel):
     interpretation: AiInterpretationPayload
     created_at: datetime
     updated_at: datetime
+    # 익명이면 None(프론트가 "익명의 탐험가"로 표시) - 실제 user_id/이메일은 담기지 않는다.
+    author_display_name: str | None = None
     # 공개 상세 조회(get_public_dream)에서만 실제 값이 채워진다 - 소유자 전용 CRUD 응답(목록/생성/
     # 수정)에서는 굳이 계산하지 않고 기본값(0/None)을 그대로 둔다.
     upvote_count: int = 0
@@ -97,6 +105,7 @@ def _to_response(
         interpretation=entry.interpretation,
         created_at=entry.created_at,
         updated_at=entry.updated_at,
+        author_display_name=_display_name(entry.user, entry.is_anonymous),
         upvote_count=upvote_count,
         downvote_count=downvote_count,
         my_vote=my_vote,
