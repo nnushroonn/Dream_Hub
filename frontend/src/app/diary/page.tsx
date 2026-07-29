@@ -11,7 +11,6 @@ import {
   createDream,
   deleteDream,
   requestAiInterpretation,
-  requestPostInterpretation,
   requestQuickAiInterpretation,
   setDreamVisibility,
   updateDream,
@@ -20,7 +19,6 @@ import {
   type DreamMood,
   type DreamSurvey,
 } from "@/api/dream";
-import AttachedJournalBook from "@/components/AttachedJournalBook";
 import CounselingStoryView, { shareCounselingReport } from "@/components/CounselingStoryView";
 import DiaryCalendarPanel from "@/components/DiaryCalendarPanel";
 import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
@@ -107,37 +105,10 @@ function isMinimalEntry(survey: DreamSurvey): boolean {
   return !hasStructuredAnswers && Boolean(survey.action_detail);
 }
 
-// ✍️ 나만의 일기장 전용 감정 스티커 - 꿈의 분위기(MOOD_OPTIONS, 악몽/길몽 버킷 포함)가 아니라
-// 일상 회고에 어울리는 톤으로 별도 구성한다. DreamEntry.emotion 컬럼을 그대로 재사용하므로
-// 백엔드 변경은 필요 없다.
-const DIARY_MOOD_OPTIONS = [
-  { emoji: "😊", label: "행복" },
-  { emoji: "🥰", label: "설렘" },
-  { emoji: "😐", label: "평온" },
-  { emoji: "🥱", label: "지침" },
-  { emoji: "😢", label: "슬픔" },
-  { emoji: "😡", label: "짜증" },
-  { emoji: "🤔", label: "혼란" },
-  { emoji: "🥳", label: "신남" },
-];
-
-// 북 플립 좌측 페이지의 감정 스티커 칩에 이모지 옆 라벨을 붙이기 위한 조회 - 꿈 분위기
-// (MOOD_OPTIONS)와 일기 감정(DIARY_MOOD_OPTIONS) 두 세트를 모두 뒤진다.
-function moodLabelFor(emoji: string): string {
-  return (
-    MOOD_OPTIONS.find((option) => option.emoji === emoji)?.label ??
-    DIARY_MOOD_OPTIONS.find((option) => option.emoji === emoji)?.label ??
-    ""
-  );
-}
-
 export default function DiaryPage() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const authUser = useAuthStore((state) => state.user);
-  // 북 플립(AttachedJournalBook)에 넘겨줄 전체 일기 목록 - DiaryCalendarPanel과 동일한
-  // 캐시를 그대로 재사용한다(별도 fetch 불필요).
-  const savedDreamEntries = useSavedDreamsStore((state) => state.entries);
   const upsertEntry = useSavedDreamsStore((state) => state.upsertEntry);
   const removeEntry = useSavedDreamsStore((state) => state.removeEntry);
   const nickname = authUser?.nickname ?? "탐험가";
@@ -162,10 +133,10 @@ export default function DiaryPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // 상세 보기: 캘린더에서 클릭한 날의 기록으로 시작하되, 북 플립으로 전체 일기를 넘나든다
-  // (AttachedJournalBook이 자체 애니메이션으로 페이지 전환을 담당해 별도 페이드 상태가 필요 없다).
+  // 상세 보기 모달: 하루에 여러 꿈이 있으면 탭으로 전환해서 본다.
   const [detailEntries, setDetailEntries] = useState<DreamEntryRecord[] | null>(null);
   const [activeDetailIndex, setActiveDetailIndex] = useState(0);
+  const [detailVisible, setDetailVisible] = useState(true);
   const [detailShareCopied, setDetailShareCopied] = useState(false);
   // 커뮤니티 공개 여부는 더 이상 작성 시점이 아니라, 저장된 기록의 상세 보기에서 나중에 정한다.
   const [publishSettingsOpen, setPublishSettingsOpen] = useState(false);
@@ -175,9 +146,6 @@ export default function DiaryPage() {
   const [publishCaption, setPublishCaption] = useState("");
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
-  // 해몽 없이 저장된 기록(직접 쓰기/나만의 일기장) 상세 보기의 "사후 AI 해몽 받기" 진행 상태.
-  const [isAnalyzingExisting, setIsAnalyzingExisting] = useState(false);
-  const [analyzeExistingError, setAnalyzeExistingError] = useState<string | null>(null);
   const activeDetail = detailEntries?.[activeDetailIndex] ?? null;
 
   // 삭제 확인 모달
@@ -197,10 +165,6 @@ export default function DiaryPage() {
   // 저장 완료 후 홈으로 리다이렉트할지 여부를 함께 추적한다.
   const [dictionaryBridge, setDictionaryBridge] = useState<{ badge: string; expert: string } | null>(null);
   const [cameFromDictionary, setCameFromDictionary] = useState(false);
-
-  // 최상위 섹션: 🔮 AI 해몽까지 받는 "꿈 해몽 기록"과, AI 없이 제목+본문만 저장하는
-  // "나만의 일기장". 기존 quick/precise 서브 탭은 DREAM 섹션 안에서만 의미가 있다.
-  const [topSection, setTopSection] = useState<"DREAM" | "DIARY">("DREAM");
 
   // 투트랙 기록 모드: 기본값은 진입 장벽이 낮은 ⚡ 10초 미니멀 빠른 기록.
   const [recordMode, setRecordMode] = useState<"quick" | "precise">("quick");
@@ -437,71 +401,6 @@ export default function DiaryPage() {
     }
   };
 
-  // ✍️ 나만의 일기장: AI 해몽을 아예 호출하지 않고 제목+본문만 그대로 저장한다. AI 결과
-  // 모달을 거치지 않으므로, handleSave가 모달 종료 후 하던 후처리(캘린더 갱신/초안 정리/
-  // 사전 유입 시 홈으로 리다이렉트)를 여기서 곧장 수행한다.
-  const handleDiarySave = async () => {
-    if (isSaving) return;
-    const title = quickTitle.trim();
-    const text = quickText.trim();
-    if (!title || !text) {
-      setErrorMessage("제목과 오늘 하루 이야기를 모두 적어주세요.");
-      return;
-    }
-    if (!selectedDate) return;
-
-    setErrorMessage(null);
-    setSaveError(null);
-    setIsSaving(true);
-    try {
-      const survey: DreamSurvey = {
-        title,
-        brightness: "",
-        space_depth: "",
-        space_detail: "",
-        identity_factor: "",
-        target_detail: "",
-        action_physics: "",
-        action_detail: text,
-        reality_link: "",
-        reality_detail: "",
-        vividness: 50,
-        is_lucid: false,
-        final_memo: "",
-      };
-      const payload = {
-        dream_date: selectedDate,
-        title,
-        emotion: mood,
-        summary: buildDreamOneLineSummary(survey),
-        // 나만의 일기장은 항상 비공개로 시작한다 - 공개는 자유 광장과 동일하게 저장 후
-        // 상세 보기에서 나중에 정한다.
-        is_public: false,
-        is_anonymous: isAnonymous,
-        share_with_ai_analysis: false,
-        survey,
-        interpretation: null,
-      };
-      const saved = editingEntry ? await updateDream(editingEntry.id, payload) : await createDream(payload);
-      upsertEntry(saved);
-      setWizardDraft(null);
-      setRestoredWizardDraft(undefined);
-      localStorage.removeItem(DRAFT_STORAGE_KEY);
-      setHasSavedDraft(false);
-      if (cameFromDictionary) {
-        router.push("/");
-        return;
-      }
-      resetWizard();
-    } catch (error) {
-      // 일기장 저장은 AI 결과 모달을 거치지 않아 saveError가 표시될 자리가 없다 -
-      // 페이지에 이미 렌더링 중인 errorMessage 배너로 대신 보여준다.
-      setErrorMessage(getAuthErrorMessage(error));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   // 미니멀 모드에 적어둔 내용을 그대로 들고 정밀 위저드로 전환한다: 제목은 Step 1로,
   // 서술은 Step 4(행동 묘사)로 프리필된다.
   const upgradeToPreciseMode = () => {
@@ -582,9 +481,6 @@ export default function DiaryPage() {
     setErrorMessage(null);
     setSaveError(null);
     setWizardKey((key) => key + 1);
-    // 해몽(interpretation)이 없는 기록은 "나만의 일기장"에서 쓴 것으로 보고 그 섹션으로 연다 -
-    // AI 해몽이 있으면 무조건 꿈 해몽 기록 섹션이다.
-    setTopSection(entry.interpretation ? "DREAM" : "DIARY");
     // ⚡ 10초 미니멀로 쓴 기록은 구조화된 7단계 데이터가 애초에 없으므로, 수정할 때도
     // 원래 작성했던 미니멀 자유 서술 UI 그대로 열어준다. 그 외에는 정밀 위저드로 연다.
     const minimal = isMinimalEntry(entry.survey);
@@ -610,7 +506,6 @@ export default function DiaryPage() {
     setErrorMessage(null);
     setSaveError(null);
     setWizardKey((key) => key + 1);
-    setTopSection("DREAM");
     setRecordMode("quick");
     setQuickTitle("");
     setQuickText("");
@@ -627,14 +522,11 @@ export default function DiaryPage() {
     setHasSavedDraft(false);
   };
 
-  // 클릭한 날의 기록으로 책을 펼치되, 페이지는 그 날 하루가 아니라 전체 일기(savedDreamEntries)를
-  // 최신순으로 넘나든다 - 클릭한 날의 첫 기록이 몇 번째 페이지인지 찾아 그 자리부터 연다.
   const handleSelectDay = (dayEntries: DreamEntryRecord[]) => {
     if (dayEntries.length === 0) return;
-    const allByRecency = [...savedDreamEntries].sort((a, b) => b.created_at.localeCompare(a.created_at));
-    const targetIndex = allByRecency.findIndex((entry) => entry.id === dayEntries[0].id);
-    setDetailEntries(allByRecency);
-    setActiveDetailIndex(targetIndex >= 0 ? targetIndex : 0);
+    setDetailEntries([...dayEntries].sort((a, b) => a.created_at.localeCompare(b.created_at)));
+    setActiveDetailIndex(0);
+    setDetailVisible(true);
     setPublishSettingsOpen(false);
     setPublishError(null);
   };
@@ -645,31 +537,16 @@ export default function DiaryPage() {
     document.getElementById("dream-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  // 책장을 넘길 때(AttachedJournalBook 내부 화살표) 호출된다 - 페이드는 이제 책 컴포넌트
-  // 자신의 rotateY 애니메이션이 맡으므로, 여기서는 인덱스만 바꾸면 된다.
+  // 탭/화살표로 다른 꿈을 볼 때 짧게 페이드 아웃-인 시켜 전환이 부드럽게 느껴지게 한다.
   const switchDetailTab = (index: number) => {
     if (!detailEntries || index === activeDetailIndex || index < 0 || index >= detailEntries.length) return;
+    setDetailVisible(false);
     setPublishSettingsOpen(false);
     setPublishError(null);
-    setActiveDetailIndex(index);
-  };
-
-  // 해몽 없이 저장된 기록(직접 쓰기/나만의 일기장)에 사후적으로 AI 해몽을 붙인다. 결과가
-  // 도착하면 우측 페이지에 해몽 리포트 블록이 새로 마운트되며 자체적으로 페이드인된다.
-  const handleAnalyzeExisting = async (entry: DreamEntryRecord) => {
-    if (isAnalyzingExisting) return;
-    if (!window.confirm("AI 해몽 분석을 진행하시겠습니까?")) return;
-    setAnalyzeExistingError(null);
-    setIsAnalyzingExisting(true);
-    try {
-      const updated = await requestPostInterpretation(entry.id);
-      upsertEntry(updated);
-      setDetailEntries((prev) => (prev ? prev.map((item) => (item.id === updated.id ? updated : item)) : prev));
-    } catch (error) {
-      setAnalyzeExistingError(getAuthErrorMessage(error));
-    } finally {
-      setIsAnalyzingExisting(false);
-    }
+    window.setTimeout(() => {
+      setActiveDetailIndex(index);
+      setDetailVisible(true);
+    }, 150);
   };
 
   // 상세 보기 액션 바의 공유하기 - 카드 안이 아니라 수정/삭제와 나란한 위치에서 4개 항목 전체를 공유한다.
@@ -743,11 +620,7 @@ export default function DiaryPage() {
 
       <main className="relative mx-auto max-w-5xl px-6 py-12">
         <h1 className="text-2xl font-semibold text-white">꿈 기록소</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          {topSection === "DIARY"
-            ? "오늘 하루의 일상과 감정을 정돈해 보세요."
-            : "지난밤의 꿈을 기록하고, AI에게 해몽을 받아보세요."}
-        </p>
+        <p className="mt-1 text-sm text-slate-400">지난밤의 꿈을 기록하고, AI에게 해몽을 받아보세요.</p>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,360px)_1fr] lg:items-start">
           {/* 좌측: 꿈 별자리 캘린더 & 출석 체크 */}
@@ -758,47 +631,6 @@ export default function DiaryPage() {
             id="dream-editor"
             className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md sm:p-8"
           >
-            {/* 최상위 섹션 탭: AI 해몽까지 받는 꿈 해몽 기록과, AI 없이 저장만 하는 나만의
-                일기장을 분리한다. 수정 모드에서는 원래 작성했던 섹션(startEdit이 판단)으로 고정된다. */}
-            {!editingEntry && (
-              <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur-md">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTopSection("DREAM");
-                    // 일기장 전용 스티커를 고른 채로 넘어오면 꿈 분위기 세트엔 없는 이모지라
-                    // 아무 것도 선택되지 않은 것처럼 보인다 - 기본값(평온)으로 되돌린다.
-                    if (!MOOD_OPTIONS.some((option) => option.emoji === mood)) {
-                      setMood(MOOD_OPTIONS[3].emoji);
-                    }
-                  }}
-                  className={`rounded-xl px-3 py-3 text-sm font-semibold transition-all duration-200 ${
-                    topSection === "DREAM"
-                      ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  🔮 꿈 해몽 기록
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTopSection("DIARY");
-                    if (!DIARY_MOOD_OPTIONS.some((option) => option.emoji === mood)) {
-                      setMood(DIARY_MOOD_OPTIONS[0].emoji);
-                    }
-                  }}
-                  className={`rounded-xl px-3 py-3 text-sm font-semibold transition-all duration-200 ${
-                    topSection === "DIARY"
-                      ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  ✍️ 나만의 일기장
-                </button>
-              </div>
-            )}
-
             <div className="mb-5 flex items-center justify-between gap-3">
               {editingEntry ? (
                 <div className="flex flex-1 items-center justify-between rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-2.5 text-xs text-violet-200">
@@ -820,9 +652,7 @@ export default function DiaryPage() {
               <button
                 type="button"
                 onClick={startNewToday}
-                className={`shrink-0 rounded-full border border-violet-400/30 bg-violet-500/10 px-3.5 py-2 text-xs font-medium text-violet-200 transition-colors hover:border-violet-400/60 hover:bg-violet-500/20 ${
-                  topSection === "DIARY" ? "hidden" : ""
-                }`}
+                className="shrink-0 rounded-full border border-violet-400/30 bg-violet-500/10 px-3.5 py-2 text-xs font-medium text-violet-200 transition-colors hover:border-violet-400/60 hover:bg-violet-500/20"
               >
                 ➕ 오늘 다른 꿈 추가 기록
               </button>
@@ -845,8 +675,6 @@ export default function DiaryPage() {
 
             <div className="my-7 h-px bg-white/10" />
 
-            {topSection === "DREAM" && (
-              <>
             {/* 투트랙 기록 모드 탭: 기존 기록을 다듬는 수정 모드에서는 원래 작성했던 모드(quick/precise)로 고정된다 */}
             {!editingEntry && (
               <div className="mb-6 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-white/5 p-1.5 backdrop-blur-md">
@@ -963,63 +791,6 @@ export default function DiaryPage() {
                 onDraftChange={editingEntry ? undefined : setWizardDraft}
                 submitLabel={editingEntry ? "💾 수정 완료 및 재분석" : "🔮 내 꿈 분석결과 확인하기"}
               />
-            )}
-              </>
-            )}
-
-            {topSection === "DIARY" && (
-              /* ✍️ 나만의 일기장: AI 없이 제목+본문만 남기는 슬림 레이아웃. 서브 탭(10초/7단계)은
-                  이 섹션에는 아예 없다 - AI 해몽이라는 개념 자체가 없는 순수 기록이기 때문이다. */
-              <div>
-                <label className="text-xs text-indigo-300/70">오늘 하루의 제목</label>
-                <input
-                  type="text"
-                  value={quickTitle}
-                  onChange={(event) => setQuickTitle(event.target.value)}
-                  placeholder="예: 오랜만에 여유로웠던 하루"
-                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-2.5 text-sm text-white placeholder:text-slate-500/80 focus:border-violet-400/60 focus:outline-none"
-                />
-
-                <div className="mt-5">
-                  <label className="text-xs text-indigo-300/70">오늘 나의 감정 스티커</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {DIARY_MOOD_OPTIONS.map((option) => (
-                      <button
-                        key={option.emoji}
-                        type="button"
-                        onClick={() => setMood(option.emoji)}
-                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs backdrop-blur-md transition-all duration-200 ${
-                          mood === option.emoji
-                            ? "border-violet-400/70 bg-violet-500/25 text-white shadow-[0_0_16px_rgba(167,139,250,0.35)]"
-                            : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
-                        }`}
-                      >
-                        <span className="text-sm">{option.emoji}</span>
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-5">
-                  <textarea
-                    value={quickText}
-                    onChange={(event) => setQuickText(event.target.value)}
-                    placeholder="오늘 하루 있었던 일이나 느낀 감정을 자유롭게 적어보세요. (작성 후 언제든 AI 해몽을 요청할 수 있습니다)"
-                    rows={7}
-                    className="w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-slate-500/60 focus:border-violet-400/60 focus:outline-none"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleDiarySave}
-                  disabled={isSaving || !quickTitle.trim() || !quickText.trim()}
-                  className="mt-6 w-full rounded-full bg-slate-700 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isSaving ? "저장 중..." : editingEntry ? "💾 수정 완료" : "💾 오늘 하루 저장하기"}
-                </button>
-              </div>
             )}
 
             {errorMessage && (
@@ -1237,13 +1008,12 @@ export default function DiaryPage() {
         </div>
       )}
 
-      {/* 상세 보기 모달: 캘린더의 불 켜진 노드를 클릭하면 열린다. 북 플립(AttachedJournalBook)이
-          전체 일기를 페이지로 넘나들 수 있도록, 좌우 두 페이지가 나란히 보이는 폭으로 넓혔다. */}
+      {/* 상세 보기 모달: 캘린더의 불 켜진 노드를 클릭하면 열린다. 하루에 꿈이 여러 개면 탭으로 넘나든다 */}
       {detailEntries && activeDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setDetailEntries(null)} />
 
-          <div className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-violet-400/30 bg-white/10 p-6 shadow-[0_0_60px_rgba(139,92,246,0.35)] backdrop-blur-2xl sm:p-8">
+          <div className="relative max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-violet-400/30 bg-white/10 p-8 shadow-[0_0_60px_rgba(139,92,246,0.35)] backdrop-blur-2xl">
             <button
               type="button"
               onClick={() => setDetailEntries(null)}
@@ -1253,13 +1023,58 @@ export default function DiaryPage() {
               ✕
             </button>
 
-            {/* 페이지 넘기기(◀▶/N of M)는 이제 AttachedJournalBook 자신이 담당한다 - 더 이상
-                같은 날짜로 범위가 좁혀지지 않고 전체 일기를 넘나들기 때문에, 날짜별 탭 UI는
-                의미가 없어져 제거했다. */}
+            <p className="text-center text-xs tracking-widest text-indigo-300/70 uppercase">
+              {activeDetail.dream_date}
+              {detailEntries.length > 1 && ` · ${activeDetailIndex + 1} / ${detailEntries.length}`}
+            </p>
 
-            {/* 커뮤니티 공개 여부: 작성 시점이 아니라, 저장이 끝난 이 상세 보기에서 나중에 정한다. */}
-            <div className="mt-2">
-              <div className="flex justify-center">
+            {/* 탭 + 좌우 화살표: 같은 날짜에 기록된 여러 꿈 사이를 오간다 */}
+            {detailEntries.length > 1 && (
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => switchDetailTab(activeDetailIndex - 1)}
+                  disabled={activeDetailIndex === 0}
+                  aria-label="이전 꿈"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  ◀
+                </button>
+                <div className="flex flex-wrap justify-center gap-1.5">
+                  {detailEntries.map((entry, index) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      onClick={() => switchDetailTab(index)}
+                      className={`max-w-[9rem] truncate rounded-full border px-3 py-1 text-xs transition-all duration-200 ${
+                        index === activeDetailIndex
+                          ? "border-violet-400/70 bg-violet-500/25 text-white shadow-[0_0_12px_rgba(167,139,250,0.35)]"
+                          : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
+                      }`}
+                    >
+                      {entry.emotion} {entry.title}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => switchDetailTab(activeDetailIndex + 1)}
+                  disabled={activeDetailIndex === detailEntries.length - 1}
+                  aria-label="다음 꿈"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  ▶
+                </button>
+              </div>
+            )}
+
+            <div className={`transition-opacity duration-300 ${detailVisible ? "opacity-100" : "opacity-0"}`}>
+              <h3 className="mt-4 text-center text-2xl font-semibold text-white">
+                {activeDetail.emotion} {activeDetail.title}
+              </h3>
+
+              {/* 커뮤니티 공개 여부: 작성 시점이 아니라, 저장이 끝난 이 상세 보기에서 나중에 정한다. */}
+              <div className="mt-3 flex justify-center">
                 {activeDetail.is_public ? (
                   <button
                     type="button"
@@ -1364,21 +1179,63 @@ export default function DiaryPage() {
                 </div>
               )}
 
-            </div>
+              <div className="mt-4">
+                <DreamOriginalQuote content={buildDreamOriginalContent(activeDetail.survey)} />
+              </div>
 
-            {/* 미스틱한 양장본 노트를 넘겨보는 북 플립 뷰 - 좌측 페이지(날짜/감정/사후 AI 해몽
-                CTA)와 우측 페이지(제목/본문/+해몽 결과)를 갖추고, 페이지 전환·해몽 리포트로의
-                전환 애니메이션을 컴포넌트 자신이 담당한다. */}
-            <div className="mt-6">
-              <AttachedJournalBook
-                entries={detailEntries}
-                activeIndex={activeDetailIndex}
-                onNavigate={switchDetailTab}
-                moodLabel={moodLabelFor(activeDetail.emotion)}
-                isAnalyzing={isAnalyzingExisting}
-                analyzeError={analyzeExistingError}
-                onAnalyze={handleAnalyzeExisting}
-              />
+              {/* 무의식 광장 "직접 쓰기" 모드에서 AI 해몽 없이 게시한 기록은 interpretation이
+                  null일 수 있다 - 그 경우 원문 아래로 AI 해몽 섹션 자체를 렌더링하지 않는다. */}
+              {activeDetail.interpretation && (
+                <>
+                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    {activeDetail.interpretation.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full border border-violet-400/30 bg-violet-500/15 px-3 py-1 text-xs text-violet-200"
+                      >
+                        {tag.startsWith("#") ? tag : `#${tag}`}
+                      </span>
+                    ))}
+                  </div>
+
+                  <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-300">
+                    {activeDetail.interpretation.description}
+                  </p>
+
+                  {/* 전문가의 시선: 모든 학파를 나열하지 않고, 이 꿈과 가장 찰떡궁합인 전문가 1~2명만 깊이 있게 */}
+                  <div className="mt-5 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
+                        {activeDetail.interpretation.expert_badge}
+                      </span>
+                      <span className="text-xs text-violet-300/80">{activeDetail.interpretation.selected_expert}의 시선</span>
+                    </div>
+                    <p className="mt-2.5 text-sm leading-relaxed text-slate-300">{activeDetail.interpretation.expert_insight}</p>
+                  </div>
+
+                  <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <p className="text-center text-xs text-indigo-300/70">행운의 아이템</p>
+                      <p className="mt-1.5 text-center font-medium text-white">{activeDetail.interpretation.lucky_item}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <p className="text-center text-xs text-indigo-300/70">행운의 숫자</p>
+                      <p className="mt-1.5 text-center font-medium text-white">{activeDetail.interpretation.lucky_number}</p>
+                    </div>
+                  </div>
+
+                  {/* 무의식 상담 리포트: 인스타그램 스토리 형태의 4컷 스와이프 카드 (읽기 전용 - 저장 액션 없음).
+                      이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
+                  {activeDetail.interpretation.counseling_report && (
+                    <div className="mt-6">
+                      <CounselingStoryView
+                        report={activeDetail.interpretation.counseling_report}
+                        tags={activeDetail.interpretation.tags}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             <div className="mt-7 flex flex-row gap-2">
