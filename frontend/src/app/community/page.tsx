@@ -16,6 +16,7 @@ import {
 } from "@/api/dream";
 import NavBar from "@/components/NavBar";
 import SidebarBestList from "@/components/SidebarBestList";
+import { markCameFromCommunityList } from "@/lib/communityBackNav";
 import { useAuthStore } from "@/store/useAuthStore";
 
 type Tab = "dream" | "board";
@@ -208,9 +209,14 @@ export default function CommunityPage() {
                           key={dream.id}
                           role="link"
                           tabIndex={0}
-                          onClick={() => router.push(`/community/post?id=${dream.id}`)}
+                          onClick={() => {
+                            markCameFromCommunityList();
+                            router.push(`/community/post?id=${dream.id}`);
+                          }}
                           onKeyDown={(event) => {
-                            if (event.key === "Enter") router.push(`/community/post?id=${dream.id}`);
+                            if (event.key !== "Enter") return;
+                            markCameFromCommunityList();
+                            router.push(`/community/post?id=${dream.id}`);
                           }}
                           className="flex cursor-pointer items-center justify-between gap-4 border-b border-white/10 px-2 py-3 transition-colors hover:bg-white/5"
                         >
@@ -298,9 +304,14 @@ export default function CommunityPage() {
                         key={post.id}
                         role="link"
                         tabIndex={0}
-                        onClick={() => router.push(`/community/board-post?id=${post.id}`)}
+                        onClick={() => {
+                          markCameFromCommunityList();
+                          router.push(`/community/board-post?id=${post.id}`);
+                        }}
                         onKeyDown={(event) => {
-                          if (event.key === "Enter") router.push(`/community/board-post?id=${post.id}`);
+                          if (event.key !== "Enter") return;
+                          markCameFromCommunityList();
+                          router.push(`/community/board-post?id=${post.id}`);
                         }}
                         className="flex cursor-pointer items-center justify-between gap-4 border-b border-white/10 px-2 py-3 transition-colors hover:bg-white/5"
                       >
@@ -333,7 +344,10 @@ export default function CommunityPage() {
                             <div className="flex items-center gap-2 text-[11px] text-slate-500">
                               <Link
                                 href={`/community/board-post?id=${post.id}&edit=1`}
-                                onClick={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  markCameFromCommunityList();
+                                }}
                                 className="underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
                               >
                                 ✏️ 수정

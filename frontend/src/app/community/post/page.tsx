@@ -17,6 +17,7 @@ import AttachedDreamViewer from "@/components/AttachedDreamViewer";
 import CommentSection from "@/components/CommentSection";
 import NavBar from "@/components/NavBar";
 import VoteButtons from "@/components/VoteButtons";
+import { consumeCameFromCommunityList } from "@/lib/communityBackNav";
 import { useAuthStore } from "@/store/useAuthStore";
 
 // 홈 화면 우측 하단 실시간 토스트(LiveTicker)를 클릭했을 때 도착하는 익명 공개 상세 페이지.
@@ -58,6 +59,17 @@ export default function CommunityPostPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 목록에서 태그 필터를 걸어두고 들어온 경우, 고정 경로로 다시 이동하면 필터/스크롤 위치가
+  // 초기화된다. 실제로 리스트에서 넘어온 경우에만 history.back()으로 같은 목록 인스턴스에
+  // 되돌아가고, 알림/공유 링크로 곧장 들어와 되돌아갈 목록 히스토리가 없으면 고정 경로로 보낸다.
+  const handleBack = () => {
+    if (consumeCameFromCommunityList()) {
+      router.back();
+    } else {
+      router.push("/community?tab=dream");
+    }
+  };
+
   const handleVote = async (voteType: "up" | "down") => {
     if (!entry) return;
     if (!isAuthenticated) {
@@ -89,15 +101,16 @@ export default function CommunityPostPage() {
       <NavBar />
 
       <main className="mx-auto max-w-2xl px-6 py-16">
-        <Link
-          href="/community?tab=dream"
+        <button
+          type="button"
+          onClick={handleBack}
           className="text-xs text-violet-300/70 underline-offset-2 hover:text-violet-200 hover:underline"
         >
           ← 무의식 광장으로 돌아가기
-        </Link>
+        </button>
         <div className="mt-3">
-          <span className="rounded-full bg-purple-500/10 px-2.5 py-1 text-xs font-medium text-purple-400">
-            무의식 광장 이야기
+          <span className="rounded-full border border-purple-800/50 bg-purple-950/40 px-2.5 py-1 text-xs font-medium text-purple-300">
+            🔮 무의식 광장
           </span>
         </div>
 
