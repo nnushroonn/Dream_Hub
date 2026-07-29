@@ -68,6 +68,22 @@ export async function getBestFeed(limit: number): Promise<BestFeedEntry[]> {
   return data.dreams;
 }
 
+// 커뮤니티 사이드바 "🏆 실시간 인기 글" - 꿈 게시판/자유 게시판 인기글을 하나로 묶은 랭킹.
+// getBestFeed와 동일한 최근 기간·최소 좋아요 기준을 쓰지만, DreamEntry만이 아니라
+// CommunityPost도 함께 랭킹에 올린다.
+export interface BestPostEntry {
+  id: number;
+  title: string;
+  category: "DREAM" | "FREE";
+  upvote_count: number;
+  view_count: number;
+}
+
+export async function getBestPosts(limit: number): Promise<BestPostEntry[]> {
+  const { data } = await api.get<{ posts: BestPostEntry[] }>("/api/home/best-posts", { params: { limit } });
+  return data.posts;
+}
+
 export interface DreamSurvey {
   title: string;
   brightness: string;

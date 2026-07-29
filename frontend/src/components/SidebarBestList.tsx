@@ -3,38 +3,45 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { getBestFeed, type BestFeedEntry } from "@/api/dream";
+import { getBestPosts, type BestPostEntry } from "@/api/dream";
 
-const SIDEBAR_BEST_FEED_LIMIT = 5;
+const SIDEBAR_BEST_POSTS_LIMIT = 5;
 
-// 컴팩트한 우측 사이드바용 베스트 피드 Top 5 - 순위 1~3위는 보라색으로 강조하고 4~5위는
-// 톤을 낮춰 시각적 위계를 준다. 랭킹에 오를 글이 없으면(콜드 스타트) 렌더링하지 않는다.
+// 꿈 게시판/자유 게시판을 통틀어 좋아요→조회수→최신순으로 뽑은 실시간 인기 글 Top 5.
+// 순위 1~3위는 보라색으로 강조하고 4~5위는 톤을 낮춰 시각적 위계를 준다. 랭킹에 오를 글이
+// 없으면(콜드 스타트) 렌더링하지 않는다.
 export default function SidebarBestList() {
-  const [entries, setEntries] = useState<BestFeedEntry[]>([]);
+  const [entries, setEntries] = useState<BestPostEntry[]>([]);
 
   useEffect(() => {
-    getBestFeed(SIDEBAR_BEST_FEED_LIMIT).then(setEntries).catch(() => {});
+    getBestPosts(SIDEBAR_BEST_POSTS_LIMIT).then(setEntries).catch(() => {});
   }, []);
 
   if (entries.length === 0) return null;
 
   return (
     <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-      <p className="mb-4 text-lg font-bold text-white">🏆 베스트 꿈 랭킹</p>
-      <div className="flex flex-col gap-3">
+      <p className="text-base font-bold text-white">🏆 실시간 인기 글</p>
+      <div className="mt-2 flex flex-col">
         {entries.map((entry, index) => {
           const rank = index + 1;
+          const href = entry.category === "DREAM" ? `/community/post?id=${entry.id}` : `/community/board-post?id=${entry.id}`;
           return (
-            <Link
-              key={entry.id}
-              href={`/community/post?id=${entry.id}`}
-              className="flex items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-white/5"
-            >
-              <span className={`w-4 shrink-0 text-sm ${rank <= 3 ? "font-bold text-purple-400" : "text-slate-500"}`}>
+            <Link key={entry.id} href={href} className="flex items-start gap-3 py-2 border-b border-slate-800/50 last:border-b-0">
+              <span className={`shrink-0 text-sm ${rank <= 3 ? "text-purple-400 font-extrabold" : "text-slate-500 font-bold"}`}>
                 {rank}
               </span>
-              <span className="line-clamp-1 min-w-0 flex-1 text-xs text-slate-300">{entry.title}</span>
-              <span className="shrink-0 text-[11px] text-violet-300/60">👍{entry.upvote_count}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1">
+                  <span className="shrink-0 text-xs">{entry.category === "DREAM" ? "🔮" : "💬"}</span>
+                  <span className="truncate text-sm text-slate-200 hover:text-purple-300 transition-colors cursor-pointer line-clamp-1">
+                    {entry.title}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  👍 {entry.upvote_count} · 👁️ {entry.view_count}
+                </p>
+              </div>
             </Link>
           );
         })}

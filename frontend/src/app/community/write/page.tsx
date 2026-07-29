@@ -318,7 +318,7 @@ export default function CommunityWritePage() {
           <ChevronLeft className="h-6 w-6" />
         </button>
         <h1 className="flex-1 truncate text-center text-sm font-semibold text-white">
-          {writeType === "dream" ? "🌙 무의식 광장 글쓰기" : "💬 자유 광장 글쓰기"}
+          {writeType === "dream" ? "🌙 꿈 게시판 글쓰기" : "💬 자유 게시판 글쓰기"}
         </h1>
         {/* 게시 액션은 본문 하단의 큰 버튼 하나로 단일화했다 - 헤더의 작은 버튼과 중복되어
             있던 것을 자유 광장/무의식 광장 두 흐름 모두에서 정리. 뒤로가기 아이콘과 같은

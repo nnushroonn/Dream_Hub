@@ -119,7 +119,7 @@ export default function MyActivityTabs() {
                   </div>
                 ))
               ) : (
-                <EmptyState text="아직 자유 광장에 쓴 글이 없어요." />
+                <EmptyState text="아직 자유 게시판에 쓴 글이 없어요." />
               )
             ) : likedDreams.length > 0 ? (
               likedDreams.map((dream) => (

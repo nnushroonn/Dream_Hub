@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import DreamEntry, DreamStatus, Interaction, InteractionType
+from models import CommunityPost, CommunityPostReaction, DreamEntry, DreamStatus, Interaction, InteractionType
 
 router = APIRouter(prefix="/api/home", tags=["home"])
 
@@ -362,6 +362,66 @@ def get_best_dreams(limit: int = 3, db: Session = Depends(get_db)):
             for entry, count in rows
         ]
     }
+
+
+@router.get("/best-posts")
+def get_best_posts(limit: int = 5, db: Session = Depends(get_db)):
+    """커뮤니티 사이드바 '🏆 실시간 인기 글' - 꿈 게시판(DreamEntry)과 자유 게시판(CommunityPost)
+    인기글을 하나로 묶어 좋아요 수 → 조회수 → 최신순으로 상대 랭킹을 매긴다. get_best_dreams와
+    동일한 최근 기간(BEST_FEED_WINDOW_HOURS)·최소 좋아요(BEST_FEED_MIN_UPVOTES) 기준을 쓴다."""
+    limit = max(1, min(limit, 20))
+    window_start = datetime.now(timezone.utc) - timedelta(hours=BEST_FEED_WINDOW_HOURS)
+
+    dream_upvote_count = func.count(Interaction.id)
+    dream_rows = (
+        db.query(DreamEntry, dream_upvote_count.label("upvote_count"))
+        .join(
+            Interaction,
+            (Interaction.dream_entry_id == DreamEntry.id) & (Interaction.type == InteractionType.LIKE),
+        )
+        .filter(DreamEntry.status == DreamStatus.PUBLIC, DreamEntry.created_at >= window_start)
+        .group_by(DreamEntry.id)
+        .having(dream_upvote_count >= BEST_FEED_MIN_UPVOTES)
+        .all()
+    )
+
+    post_upvote_count = func.count(CommunityPostReaction.id)
+    post_rows = (
+        db.query(CommunityPost, post_upvote_count.label("upvote_count"))
+        .join(
+            CommunityPostReaction,
+            (CommunityPostReaction.post_id == CommunityPost.id) & (CommunityPostReaction.is_upvote.is_(True)),
+        )
+        .filter(CommunityPost.created_at >= window_start)
+        .group_by(CommunityPost.id)
+        .having(post_upvote_count >= BEST_FEED_MIN_UPVOTES)
+        .all()
+    )
+
+    combined = [
+        {
+            "id": entry.id,
+            "title": entry.title,
+            "category": "DREAM",
+            "upvote_count": count,
+            "view_count": entry.view_count,
+            "_created_at": entry.created_at,
+        }
+        for entry, count in dream_rows
+    ] + [
+        {
+            "id": post.id,
+            "title": post.title,
+            "category": "FREE",
+            "upvote_count": count,
+            "view_count": post.view_count,
+            "_created_at": post.created_at,
+        }
+        for post, count in post_rows
+    ]
+    combined.sort(key=lambda item: (item["upvote_count"], item["view_count"], item["_created_at"]), reverse=True)
+
+    return {"posts": [{k: v for k, v in item.items() if k != "_created_at"} for item in combined[:limit]]}
 
 
 @router.get("/live-ticker")

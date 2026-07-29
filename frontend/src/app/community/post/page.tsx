@@ -187,11 +187,11 @@ export default function CommunityPostPage() {
           onClick={handleBack}
           className="text-xs text-violet-300/70 underline-offset-2 hover:text-violet-200 hover:underline"
         >
-          ← 무의식 광장으로 돌아가기
+          ← 꿈 게시판으로 돌아가기
         </button>
         <div className="mt-3">
           <span className="rounded-full border border-purple-800/50 bg-purple-950/40 px-2.5 py-1 text-xs font-medium text-purple-300">
-            🔮 무의식 광장
+            🔮 꿈 게시판
           </span>
         </div>
 
@@ -209,7 +209,7 @@ export default function CommunityPostPage() {
               href="/community?tab=dream"
               className="mt-5 inline-block rounded-full border border-violet-400/40 bg-violet-500/15 px-5 py-2 text-xs text-violet-200 transition-colors hover:border-violet-300/60 hover:text-white"
             >
-              무의식 광장으로 이동
+              꿈 게시판으로 이동
             </Link>
           </div>
         ) : (
@@ -294,7 +294,7 @@ export default function CommunityPostPage() {
                 {confirmDelete && (
                   <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-red-400/30 bg-red-500/10 px-3.5 py-2.5">
                     <span className="text-xs text-red-200">
-                      공개를 취소할까요? 꿈 기록소의 원본은 그대로 남고, 무의식 광장에서만 사라져요.
+                      공개를 취소할까요? 꿈 기록소의 원본은 그대로 남고, 꿈 게시판에서만 사라져요.
                     </span>
                     <div className="flex shrink-0 gap-2">
                       <button

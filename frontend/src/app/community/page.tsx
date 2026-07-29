@@ -10,12 +10,10 @@ import {
   getCommunityPosts,
   getDreamFeed,
   getPublicDream,
-  getTrends,
   POST_EDIT_WINDOW_MS,
   setDreamVisibility,
   type CommunityPost,
   type DreamFeedEntry,
-  type Trend,
 } from "@/api/dream";
 import NavBar from "@/components/NavBar";
 import SidebarBestList from "@/components/SidebarBestList";
@@ -68,9 +66,6 @@ export default function CommunityPage() {
   const [confirmDeletePostId, setConfirmDeletePostId] = useState<number | null>(null);
   const [isDeletingPost, setIsDeletingPost] = useState(false);
 
-  // 사이드바의 "지금 뜨는 꿈 상징" 위젯 - 홈 화면과 같은 실제 집계(trends.py)를 그대로 재사용한다.
-  const [trends, setTrends] = useState<Trend[]>([]);
-
   useEffect(() => {
     // 글쓰기 페이지에서 게시 후 돌아올 때 ?tab=board|dream으로 어느 탭에 있었는지 알려준다 -
     // 없으면(첫 진입) 기존처럼 무의식 피드가 기본 탭이다.
@@ -85,7 +80,6 @@ export default function CommunityPage() {
       .then(setPosts)
       .catch(() => {})
       .finally(() => setIsLoadingPosts(false));
-    getTrends().then(setTrends).catch(() => {});
   }, []);
 
   // 무의식 피드에 실제로 등장한 상징 태그만 필터 칩으로 보여준다 - 등장 빈도순.
@@ -169,7 +163,7 @@ export default function CommunityPage() {
                 tab === "dream" ? "text-white" : "text-slate-500 hover:text-slate-300"
               }`}
             >
-              🔮 무의식 피드
+              🔮 꿈 게시판
             </button>
             <button
               type="button"
@@ -178,7 +172,7 @@ export default function CommunityPage() {
                 tab === "board" ? "text-white" : "text-slate-500 hover:text-slate-300"
               }`}
             >
-              💬 자유 광장
+              💬 자유 게시판
             </button>
           </div>
           <div className="h-px w-full bg-white/10" />
@@ -241,7 +235,7 @@ export default function CommunityPage() {
                           className="flex items-center justify-between gap-3 border-b border-white/10 bg-red-500/10 px-2 py-3"
                         >
                           <span className="text-xs text-red-200">
-                            "{dream.title}" 공개를 취소할까요? 꿈 기록소의 원본은 그대로 남고, 무의식 광장에서만 사라져요.
+                            "{dream.title}" 공개를 취소할까요? 꿈 기록소의 원본은 그대로 남고, 꿈 게시판에서만 사라져요.
                           </span>
                           <div className="flex shrink-0 gap-3">
                             <button
@@ -486,32 +480,6 @@ export default function CommunityPage() {
                   🖊️ 글쓰기
                 </button>
               )}
-
-              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                <p className="mb-4 text-lg font-bold text-white">🔥 지금 뜨는 꿈 상징</p>
-                <div className="flex flex-col gap-2">
-                  {trends.length > 0 ? (
-                    trends.slice(0, 6).map((trend, index) => (
-                      <button
-                        key={trend.keyword}
-                        type="button"
-                        onClick={() => router.push(`/dictionary?search=${encodeURIComponent(trend.keyword)}`)}
-                        className="group flex items-center justify-between gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-white/5"
-                      >
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="w-4 shrink-0 text-[11px] font-semibold text-violet-400/70">{index + 1}</span>
-                          <span className="truncate text-xs text-slate-300 group-hover:text-white">
-                            {toHashtagDisplay(trend.keyword)}
-                          </span>
-                        </span>
-                        <span className="shrink-0 text-[11px] text-violet-300/60">{trend.count}회</span>
-                      </button>
-                    ))
-                  ) : (
-                    <p className="px-1.5 py-1 text-[11px] text-slate-500">아직 집계된 트렌드가 없어요.</p>
-                  )}
-                </div>
-              </div>
 
               <SidebarBestList />
             </div>

@@ -41,7 +41,7 @@ function formatRelativeTime(iso: string): string {
 // LIKE는 투표에 익명 선택지가 없어 actor_display_name이 항상 null로 온다 - 절대 이름을
 // 밝히지 않고 렌더링한다. COMMENT는 그 댓글의 익명 선택을 그대로 따른다(null이면 "익명의 탐험가").
 function notificationMessage(notification: AppNotification): string {
-  const targetLabel = notification.target_type === "POST" ? "자유 광장 글" : "무의식 피드 꿈";
+  const targetLabel = notification.target_type === "POST" ? "자유 게시판 글" : "꿈 게시판 글";
   if (notification.type === "LIKE") {
     return `내 ${targetLabel} "${notification.preview_text}"에 좋아요가 달렸어요`;
   }

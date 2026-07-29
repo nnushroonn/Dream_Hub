@@ -181,11 +181,11 @@ export default function BoardPostPage() {
           onClick={handleBack}
           className="text-xs text-violet-300/70 underline-offset-2 hover:text-violet-200 hover:underline"
         >
-          ← 자유 광장으로 돌아가기
+          ← 자유 게시판으로 돌아가기
         </button>
         <div className="mt-3">
           <span className="rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300">
-            💬 자유 광장
+            💬 자유 게시판
           </span>
         </div>
 
@@ -203,7 +203,7 @@ export default function BoardPostPage() {
               href="/community?tab=board"
               className="mt-5 inline-block rounded-full border border-violet-400/40 bg-violet-500/15 px-5 py-2 text-xs text-violet-200 transition-colors hover:border-violet-300/60 hover:text-white"
             >
-              자유 광장으로 이동
+              자유 게시판으로 이동
             </Link>
           </div>
         ) : (
