@@ -16,7 +16,7 @@ import {
 } from "@/api/dream";
 import NavBar from "@/components/NavBar";
 import SidebarBestList from "@/components/SidebarBestList";
-import { markCameFromCommunityList } from "@/lib/communityBackNav";
+import { markBackNavOrigin } from "@/lib/communityBackNav";
 import { useAuthStore } from "@/store/useAuthStore";
 
 type Tab = "dream" | "board";
@@ -210,12 +210,12 @@ export default function CommunityPage() {
                           role="link"
                           tabIndex={0}
                           onClick={() => {
-                            markCameFromCommunityList();
+                            markBackNavOrigin("list");
                             router.push(`/community/post?id=${dream.id}`);
                           }}
                           onKeyDown={(event) => {
                             if (event.key !== "Enter") return;
-                            markCameFromCommunityList();
+                            markBackNavOrigin("list");
                             router.push(`/community/post?id=${dream.id}`);
                           }}
                           className="flex cursor-pointer items-center justify-between gap-4 border-b border-white/10 px-2 py-3 transition-colors hover:bg-white/5"
@@ -305,12 +305,12 @@ export default function CommunityPage() {
                         role="link"
                         tabIndex={0}
                         onClick={() => {
-                          markCameFromCommunityList();
+                          markBackNavOrigin("list");
                           router.push(`/community/board-post?id=${post.id}`);
                         }}
                         onKeyDown={(event) => {
                           if (event.key !== "Enter") return;
-                          markCameFromCommunityList();
+                          markBackNavOrigin("list");
                           router.push(`/community/board-post?id=${post.id}`);
                         }}
                         className="flex cursor-pointer items-center justify-between gap-4 border-b border-white/10 px-2 py-3 transition-colors hover:bg-white/5"
@@ -346,7 +346,7 @@ export default function CommunityPage() {
                                 href={`/community/board-post?id=${post.id}&edit=1`}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  markCameFromCommunityList();
+                                  markBackNavOrigin("list");
                                 }}
                                 className="underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
                               >

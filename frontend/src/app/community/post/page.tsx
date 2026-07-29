@@ -17,7 +17,7 @@ import AttachedDreamViewer from "@/components/AttachedDreamViewer";
 import CommentSection from "@/components/CommentSection";
 import NavBar from "@/components/NavBar";
 import VoteButtons from "@/components/VoteButtons";
-import { consumeCameFromCommunityList } from "@/lib/communityBackNav";
+import { consumeBackNavOrigin } from "@/lib/communityBackNav";
 import { useAuthStore } from "@/store/useAuthStore";
 
 // 홈 화면 우측 하단 실시간 토스트(LiveTicker)를 클릭했을 때 도착하는 익명 공개 상세 페이지.
@@ -63,7 +63,7 @@ export default function CommunityPostPage() {
   // 초기화된다. 실제로 리스트에서 넘어온 경우에만 history.back()으로 같은 목록 인스턴스에
   // 되돌아가고, 알림/공유 링크로 곧장 들어와 되돌아갈 목록 히스토리가 없으면 고정 경로로 보낸다.
   const handleBack = () => {
-    if (consumeCameFromCommunityList()) {
+    if (consumeBackNavOrigin("list")) {
       router.back();
     } else {
       router.push("/community?tab=dream");

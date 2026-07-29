@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { buildDreamOriginalContent, getPublicDream, type DreamEntryRecord } from "@/api/dream";
 import CounselingStoryView from "@/components/CounselingStoryView";
 import DreamOriginalQuote from "@/components/DreamOriginalQuote";
 import NavBar from "@/components/NavBar";
+import { consumeBackNavOrigin } from "@/lib/communityBackNav";
 
 // AI 해몽 본문(description)은 빈 줄(\n\n)로 문단이 구분된 산문이다 - 문단마다 mb-4 여백을 줘
 // 통글로 뭉쳐 보이지 않게 하고, 혹시 문단이 "**소제목**"처럼 마크다운 굵게 표시된 짧은 줄이면
@@ -43,9 +45,21 @@ function FormattedDreamText({ text }: { text: string }) {
 // 이 프로젝트는 정적 export라 동적 세그먼트를 못 쓰므로 다른 상세 페이지들과 동일하게
 // ?id= 쿼리 파라미터로 대상 꿈을 넘긴다.
 export default function DreamArchivePage() {
+  const router = useRouter();
   const [entry, setEntry] = useState<DreamEntryRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+
+  // AttachedDreamViewer의 "전체 해몽 결과 확인하기"를 통해 들어온 경우에만 router.back()으로
+  // 되돌아간다 - 고정 경로로 새로 push하면 상세 페이지의 자체 back() 판단이 실제 history 깊이와
+  // 어긋나 엉뚱한 단계에 멈추는 문제가 생긴다([community/back-nav 참고]).
+  const handleBack = () => {
+    if (consumeBackNavOrigin("post-detail")) {
+      router.back();
+    } else {
+      router.push(entry ? `/community/post?id=${entry.id}` : "/community");
+    }
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -66,12 +80,13 @@ export default function DreamArchivePage() {
       <NavBar />
 
       <main className="mx-auto max-w-2xl px-6 py-16">
-        <Link
-          href={entry ? `/community/post?id=${entry.id}` : "/community"}
+        <button
+          type="button"
+          onClick={handleBack}
           className="text-xs text-violet-300/70 underline-offset-2 hover:text-violet-200 hover:underline"
         >
           ← 돌아가기
-        </Link>
+        </button>
 
         {isLoading ? (
           <div className="mt-6 animate-pulse rounded-3xl border border-white/10 bg-white/5 p-8">

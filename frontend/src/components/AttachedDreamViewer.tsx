@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 
 import { buildDreamOriginalContent, type DreamSurvey } from "@/api/dream";
 import DreamOriginalQuote from "@/components/DreamOriginalQuote";
+import { markBackNavOrigin } from "@/lib/communityBackNav";
 
 interface AttachedDreamViewerProps {
   id: number;
@@ -38,7 +39,10 @@ export default function AttachedDreamViewer({ id, survey, summary, tags }: Attac
 
       <button
         type="button"
-        onClick={() => router.push(`/dream-archive?id=${id}`)}
+        onClick={() => {
+          markBackNavOrigin("post-detail");
+          router.push(`/dream-archive?id=${id}`);
+        }}
         className="w-full py-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 rounded-lg text-sm font-semibold transition-colors"
       >
         🔮 전체 해몽 결과 확인하기

@@ -21,7 +21,7 @@ import CommentSection from "@/components/CommentSection";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
 import VoteButtons from "@/components/VoteButtons";
-import { consumeCameFromCommunityList } from "@/lib/communityBackNav";
+import { consumeBackNavOrigin } from "@/lib/communityBackNav";
 import { useAuthStore } from "@/store/useAuthStore";
 
 function formatPostTime(iso: string): string {
@@ -97,7 +97,7 @@ export default function BoardPostPage() {
   // 초기화된다. 실제로 리스트에서 넘어온 경우에만 history.back()으로 같은 목록 인스턴스에
   // 되돌아가고, 알림/공유 링크로 곧장 들어와 되돌아갈 목록 히스토리가 없으면 고정 경로로 보낸다.
   const handleBack = () => {
-    if (consumeCameFromCommunityList()) {
+    if (consumeBackNavOrigin("list")) {
       router.back();
     } else {
       router.push("/community?tab=board");
