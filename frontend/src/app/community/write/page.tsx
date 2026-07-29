@@ -30,6 +30,27 @@ const POST_CONTENT_MAX_LENGTH = 1000;
 const MAX_COMPOSE_IMAGES = 3;
 const UNSAVED_CHANGES_MESSAGE = "작성 중인 내용이 저장되지 않을 수 있습니다. 나가시겠습니까?";
 
+// 마이페이지 "🌌 내 무의식 은하 공유하기" 버튼이 ?template=galaxy&data=...로 넘기는 스냅샷.
+interface GalaxyTemplateData {
+  streak: number;
+  totalDiary: number;
+  luckyPercent: number | null;
+  topSeed: string | null;
+  topKeywords: string[];
+}
+
+function buildGalaxyText(data: GalaxyTemplateData): string {
+  const lines = [
+    `연속 일기 ${data.streak}일째, 지금까지 ${data.totalDiary}개의 하루를 기록했어요.`,
+  ];
+  if (data.luckyPercent !== null) lines.push(`제 꿈의 길몽 비율은 ${data.luckyPercent}%예요.`);
+  if (data.topSeed) lines.push(`요즘 가장 많이 심은 씨앗은 "${data.topSeed}"예요.`);
+  if (data.topKeywords.length > 0) {
+    lines.push(`자주 등장하는 무의식의 키워드: ${data.topKeywords.map((keyword) => `#${keyword}`).join(" ")}`);
+  }
+  return lines.join("\n");
+}
+
 // 기존 "글쓰기"/"내 꿈 공유하기" 모달을 독립된 라우트로 옮긴 페이지 - 자유 광장(board)과
 // 무의식 광장(dream) 두 흐름을 ?type= 쿼리 파라미터로 한 페이지에서 함께 다룬다. 정적
 // export라 동적 세그먼트를 못 쓰는 이 프로젝트의 관례대로 쿼리 파라미터 방식을 그대로 따른다.
@@ -52,6 +73,9 @@ export default function CommunityWritePage() {
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const composeFileInputRef = useRef<HTMLInputElement>(null);
   const composeTextareaRef = useAutoResizeTextarea(composeText);
+  // 마이페이지에서 "🌌 내 무의식 은하 공유하기"로 넘어온 경우에만 채워진다 - 에디터 안에
+  // 보라색 테두리 미리보기 카드로 렌더링하고, 실제 게시되는 본문은 별도의 서술형 텍스트다.
+  const [galaxyTemplate, setGalaxyTemplate] = useState<GalaxyTemplateData | null>(null);
 
   // --- 🌙 무의식 광장 글쓰기 상태 ---
   // NavBar가 이 페이지에는 없어(집중 모드) NavBar의 listDreams() 동기화를 기대할 수 없다 -
@@ -94,6 +118,20 @@ export default function CommunityWritePage() {
     listDreams()
       .then(setSavedDreamEntries)
       .catch(() => {});
+
+    if (params.get("template") === "galaxy") {
+      const raw = params.get("data");
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as GalaxyTemplateData;
+          setGalaxyTemplate(parsed);
+          setComposeTitle("🌌 나의 무의식 은하를 공개합니다");
+          setComposeText(buildGalaxyText(parsed));
+        } catch {
+          // 파싱 실패하면 그냥 빈 글쓰기로 둔다 - 잘못된 URL을 직접 조작해 들어온 경우 정도.
+        }
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
@@ -336,6 +374,32 @@ export default function CommunityWritePage() {
                 <IdentitySwitch isAnonymous={composeIsAnonymous} onChange={setComposeIsAnonymous} nickname={nickname} />
               </div>
             </div>
+
+            {/* 🌌 무의식 은하 스냅샷 임베드 - 실제로 게시되는 본문은 아래 textarea의 서술형
+                텍스트고, 이 카드는 에디터 안에서만 보이는 미리보기다. */}
+            {galaxyTemplate && (
+              <div className="mt-4 rounded-2xl border border-purple-400/40 bg-gradient-to-br from-purple-950/60 to-indigo-950/40 p-4 shadow-[0_0_24px_rgba(168,85,247,0.25)]">
+                <p className="text-xs font-semibold text-purple-300">🌌 나의 무의식 은하 스냅샷</p>
+                <p className="mt-2 text-sm text-white">
+                  연속 일기 {galaxyTemplate.streak}일 · 누적 {galaxyTemplate.totalDiary}개
+                </p>
+                {galaxyTemplate.luckyPercent !== null && (
+                  <p className="mt-1 text-xs text-purple-200">🌟 길몽 비율 {galaxyTemplate.luckyPercent}%</p>
+                )}
+                {galaxyTemplate.topSeed && (
+                  <p className="mt-1 text-xs text-purple-200">가장 많이 심은 씨앗: {galaxyTemplate.topSeed}</p>
+                )}
+                {galaxyTemplate.topKeywords.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {galaxyTemplate.topKeywords.map((keyword) => (
+                      <span key={keyword} className="rounded-full bg-purple-500/15 px-2 py-0.5 text-[11px] text-purple-200">
+                        #{keyword}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <input
               type="text"

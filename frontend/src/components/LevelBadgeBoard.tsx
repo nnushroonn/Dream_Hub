@@ -40,19 +40,19 @@ export default function LevelBadgeBoard() {
         ))}
       </div>
 
-      <div className="mt-4 grid grid-cols-4 gap-2">
+      <div className="mt-4 flex flex-wrap gap-3">
         {stats.badges.map((badge) => (
           <div
             key={badge.code}
             title={badge.label}
-            className={`flex flex-col items-center gap-1 rounded-xl border p-2.5 text-center transition-all duration-200 ${
+            className={`flex min-w-[92px] flex-1 flex-col items-center gap-1.5 rounded-2xl border p-3.5 text-center backdrop-blur-sm transition-all duration-300 ${
               badge.earned
-                ? "border-violet-400/40 bg-violet-500/10 shadow-[0_0_14px_rgba(167,139,250,0.25)]"
+                ? "border-violet-400/40 bg-violet-500/10 shadow-[0_0_14px_rgba(167,139,250,0.25)] hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(168,85,247,0.4)]"
                 : "border-white/[0.06] bg-white/[0.02] opacity-40 grayscale"
             }`}
           >
-            <span className="text-xl">{badge.emoji}</span>
-            <span className="text-[10px] leading-tight text-slate-300">{badge.label}</span>
+            <span className="text-2xl">{badge.emoji}</span>
+            <span className="text-xs leading-tight text-slate-300">{badge.label}</span>
           </div>
         ))}
       </div>
