@@ -25,19 +25,6 @@ const MOOD_GLOW_RGBA: Record<DreamMood, string> = {
   nightmare: "rgba(168,85,247,0.9)",
 };
 
-const MOOD_DOT_BG: Record<DreamMood, string> = {
-  good: "bg-amber-400",
-  neutral: "bg-white/90",
-  nightmare: "bg-purple-500",
-};
-
-// 서브 도트(2번째 이후 기록)를 노드 테두리 세 지점에 붙여 '별의 무리'처럼 보이게 한다.
-const SUB_DOT_POSITIONS: CSSProperties[] = [
-  { top: -2, right: -2 },
-  { bottom: -2, right: -2 },
-  { bottom: -2, left: -2 },
-];
-
 export interface ConstellationEntry {
   id: number;
   mood: DreamMood;
@@ -155,15 +142,16 @@ export function ConstellationDots({ daysInMonth, startWeekday, entries, onSelect
                   </span>
                 </button>
 
-                {/* 서브 도트: 하루에 기록이 2개 이상이면 별의 무리처럼 작은 점을 최대 3개까지 덧붙인다 */}
-                {extraCount > 0 &&
-                  dayEntries!.slice(1, 4).map((extra, idx) => (
-                    <span
-                      key={extra.id}
-                      className={`pointer-events-none absolute h-1.5 w-1.5 rounded-full ${MOOD_DOT_BG[extra.mood]} shadow-[0_0_4px_rgba(255,255,255,0.7)]`}
-                      style={SUB_DOT_POSITIONS[idx]}
-                    />
-                  ))}
+                {/* 이중 궤도 링: 하루에 기록이 2개 이상이면 노드를 감싸는 궤도 하나를 더 그려
+                    '여러 기록이 공전하는 성단'처럼 보이게 한다. 노드와 같은 wrapper(-translate-x/y-1/2로
+                    이미 (x,y)에 중심이 맞춰진 absolute 컨테이너) 안에서 inset만으로 확장하므로,
+                    별자리 선(polyline)의 중심 좌표 계산에는 전혀 영향을 주지 않는다. */}
+                {extraCount > 0 && (
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-[-4px] rotate-12 rounded-full border-2 border-dashed border-violet-300/70 opacity-40"
+                  />
+                )}
 
                 {entry && (
                   <div
