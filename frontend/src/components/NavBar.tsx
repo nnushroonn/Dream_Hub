@@ -14,6 +14,7 @@ import UnsavedChangesGuardModal from "./UnsavedChangesGuardModal";
 const NAV_ITEMS = [
   { href: "/", label: "홈" },
   { href: "/diary", label: "꿈 기록소" },
+  { href: "/journal", label: "나만의 일기장" },
   { href: "/dictionary", label: "꿈해몽 사전" },
   { href: "/community", label: "커뮤니티" },
   { href: "/mypage", label: "마이페이지" },
