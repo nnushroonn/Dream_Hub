@@ -266,9 +266,9 @@ export default function DailyJournalPage() {
           </div>
         </aside>
 
-        {/* 우측(70%): 반투명 글래스 대시보드 - 조회(스플릿) 또는 작성(단일) */}
+        {/* 우측(70%): 단 한 장의 글래스 속지 - 조회(스플릿) 또는 작성(단일) 모두 이 한 패널 안에서 전환된다 */}
         <main className="flex-1">
-          <div className="relative min-h-[calc(100vh-3rem)] overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/40 p-8 shadow-2xl backdrop-blur-lg">
+          <div className="relative min-h-[calc(100vh-3rem)] overflow-hidden rounded-[32px] border border-white/5 bg-slate-950/40 p-8 shadow-[0_0_50px_rgba(0,0,0,0.5)] backdrop-blur-xl">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={contentKey}
@@ -369,15 +369,15 @@ export default function DailyJournalPage() {
                   <div>
                     <p className="text-sm text-slate-400">{formatJournalDate(selectedGroup.date)}</p>
 
-                    <div className="relative mt-4 grid grid-cols-2 gap-8">
-                      {/* 현실 영역 - h-full + justify-between: 우측 무의식 카드가 더 길어도 그리드 스트레치로
-                          맞춰진 전체 높이를 그대로 채우고, Null State의 CTA 버튼은 항상 맨 아래에 붙는다. */}
-                      <div className="flex h-full flex-col justify-between rounded-3xl border border-slate-200/10 bg-white/[0.03] p-5">
+                    <div className="relative mt-6 grid grid-cols-2 gap-10">
+                      {/* 현실 영역 - 카드 테두리 없이 속지 그 자체로. justify-between으로 Null State의
+                          CTA 버튼만 맨 아래에 붙인다. */}
+                      <div className="flex h-full flex-col justify-between pr-2">
                         <div>
-                          <h3 className="text-xs font-semibold tracking-wide text-slate-300">📝 내가 딛은 오늘의 현실</h3>
+                          <h3 className="text-xs font-semibold tracking-wide text-slate-400">📝 내가 딛은 오늘의 현실</h3>
 
                           {selectedGroup.diaryEntry ? (
-                            <div className="mt-4">
+                            <div className="mt-6">
                               <div className="flex items-center justify-between gap-2">
                                 <h4 className="text-base font-semibold text-slate-100">{selectedGroup.diaryEntry.title}</h4>
                                 <button
@@ -392,12 +392,12 @@ export default function DailyJournalPage() {
                                 <span>{selectedGroup.diaryEntry.emotion}</span>
                                 {moodLabelFor(selectedGroup.diaryEntry.emotion)}
                               </span>
-                              <p className="mt-3 whitespace-pre-line font-serif text-sm tracking-wide leading-loose text-slate-300">
+                              <p className="mt-6 whitespace-pre-line font-serif text-base tracking-wide leading-[1.8] text-slate-200/90">
                                 {buildDreamOriginalContent(selectedGroup.diaryEntry.survey)}
                               </p>
                             </div>
                           ) : (
-                            <p className="mt-4 text-xs text-slate-600">이 날의 일상 일기는 없어요.</p>
+                            <p className="mt-6 text-xs text-slate-600">이 날의 일상 일기는 없어요.</p>
                           )}
                         </div>
 
@@ -412,31 +412,28 @@ export default function DailyJournalPage() {
                         )}
                       </div>
 
-                      {/* 노트 바인딩 - 중앙 접힘선 양옆의 음영으로 종이 두 장이 맞닿은 두께감을 주고,
-                          가운데엔 점선 스티치로 실제 다이어리 제본처럼 보이게 한다. */}
-                      <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-6 -translate-x-1/2 sm:block">
-                        <div className="absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-transparent to-black/20" />
-                        <div className="absolute inset-y-0 right-0 w-3 bg-gradient-to-l from-transparent to-black/20" />
-                        <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 border-l border-dashed border-slate-500/50" />
-                      </div>
+                      {/* 노트 바인딩 - 물리적인 박스 대신, 은은한 퍼플 톤의 점선 스티치 한 줄로만
+                          양면 속지가 맞닿은 중앙 마감을 표현한다. */}
+                      <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-1/2 border-l border-dashed border-purple-500/20 sm:block" />
 
-                      {/* 무의식 영역 */}
-                      <div className="rounded-3xl border border-purple-500/20 bg-purple-950/10 p-5">
-                        <h3 className="text-xs font-semibold tracking-wide text-purple-300">🔮 그날 밤 무의식의 우주</h3>
+                      {/* 무의식 영역 - 역시 카드 테두리 없이 속지 위에 바로 얹는다. */}
+                      <div className="pl-2">
+                        <h3 className="text-xs font-semibold tracking-wide text-purple-300/80">🔮 그날 밤 무의식의 우주</h3>
 
                         {selectedGroup.dreamEntry ? (
-                          <div className="mt-4">
+                          <div className="mt-6">
                             <h4 className="text-base font-semibold text-purple-100">{selectedGroup.dreamEntry.title}</h4>
                             {selectedGroup.dreamEntry.interpretation && (
                               <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-purple-400/30 bg-purple-500/10 px-3 py-1 text-xs text-purple-200">
                                 {BUCKET_CHIP[moodBucketForEmoji(selectedGroup.dreamEntry.emotion)]}
                               </span>
                             )}
-                            <p className="mt-3 whitespace-pre-line font-serif text-sm tracking-wide leading-loose text-purple-100/80">
+                            <p className="mt-6 whitespace-pre-line font-serif text-base tracking-wide leading-[1.8] text-purple-100/80">
                               {buildDreamOriginalContent(selectedGroup.dreamEntry.survey)}
                             </p>
                             {selectedGroup.dreamEntry.interpretation && (
-                              <div className="mt-4 space-y-3 border-t border-purple-500/20 pt-4">
+                              <div className="mt-6 space-y-3 border-t border-purple-500/20 pt-4">
+                                <p className="text-[11px] uppercase tracking-wider text-purple-400/60">AI 해몽 리포트</p>
                                 <div className="flex flex-wrap gap-1.5">
                                   {selectedGroup.dreamEntry.interpretation.tags.map((tag) => (
                                     <span
@@ -447,14 +444,14 @@ export default function DailyJournalPage() {
                                     </span>
                                   ))}
                                 </div>
-                                <p className="text-sm leading-relaxed text-slate-200">
+                                <p className="text-sm leading-relaxed text-slate-300/90">
                                   {selectedGroup.dreamEntry.interpretation.description}
                                 </p>
-                                <p className="text-xs text-purple-300/80">
+                                <p className="text-xs text-purple-300/70">
                                   {selectedGroup.dreamEntry.interpretation.expert_badge} ·{" "}
                                   {selectedGroup.dreamEntry.interpretation.expert_insight}
                                 </p>
-                                <div className="flex gap-2 text-[11px] text-purple-200/80">
+                                <div className="flex gap-2 text-[11px] text-purple-200/70">
                                   <span className="rounded-lg bg-purple-500/10 px-2.5 py-1.5">
                                     🍀 {selectedGroup.dreamEntry.interpretation.lucky_item}
                                   </span>
@@ -466,7 +463,7 @@ export default function DailyJournalPage() {
                             )}
                           </div>
                         ) : selectedGroup.diaryEntry ? (
-                          <div className="mt-4">
+                          <div className="mt-6">
                             <p className="text-xs leading-relaxed text-slate-500">
                               이 날의 일기는 아직 꿈으로 해석되지 않았어요.
                             </p>
@@ -481,7 +478,7 @@ export default function DailyJournalPage() {
                             {analyzeError && <p className="mt-2 text-xs text-red-300">{analyzeError}</p>}
                           </div>
                         ) : (
-                          <p className="mt-4 text-xs text-slate-600">이 날의 꿈 기록은 없어요.</p>
+                          <p className="mt-6 text-xs text-slate-600">이 날의 꿈 기록은 없어요.</p>
                         )}
                       </div>
                     </div>
