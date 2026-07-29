@@ -247,10 +247,10 @@ export default function DailyJournalPage() {
                       key={group.date}
                       type="button"
                       onClick={() => selectDate(group.date)}
-                      className={`rounded-xl px-3 py-2.5 text-left transition-colors ${
+                      className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
                         viewMode === "view" && selectedDate === group.date
-                          ? "bg-purple-500/15 text-white"
-                          : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                          ? "border-purple-500/40 bg-purple-900/30 text-white shadow-[0_0_12px_rgba(168,85,247,0.35)]"
+                          : "border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200"
                       }`}
                     >
                       <span className="flex items-center gap-2 text-sm">
@@ -437,41 +437,45 @@ export default function DailyJournalPage() {
 
                       <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-purple-500/30 to-transparent sm:block" />
 
-                      {/* 현실 영역 */}
-                      <div className="rounded-2xl border border-slate-200/10 bg-white/[0.03] p-5">
-                        <h3 className="text-xs font-semibold tracking-wide text-slate-300">📝 현실 영역</h3>
+                      {/* 현실 영역 - h-full + justify-between: 좌측 무의식 카드가 더 길어도 그리드 스트레치로
+                          맞춰진 전체 높이를 그대로 채우고, Null State의 CTA 버튼은 항상 맨 아래에 붙는다. */}
+                      <div className="flex h-full flex-col justify-between rounded-2xl border border-slate-200/10 bg-white/[0.03] p-5">
+                        <div>
+                          <h3 className="text-xs font-semibold tracking-wide text-slate-300">📝 현실 영역</h3>
 
-                        {selectedGroup.diaryEntry ? (
-                          <div className="mt-4">
-                            <div className="flex items-center justify-between gap-2">
-                              <h4 className="text-base font-semibold text-slate-100">{selectedGroup.diaryEntry.title}</h4>
-                              <button
-                                type="button"
-                                onClick={() => startEditEntry(selectedGroup.diaryEntry!)}
-                                className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-[11px] text-slate-400 transition-colors hover:border-slate-300/40 hover:text-slate-100"
-                              >
-                                수정하기
-                              </button>
+                          {selectedGroup.diaryEntry ? (
+                            <div className="mt-4">
+                              <div className="flex items-center justify-between gap-2">
+                                <h4 className="text-base font-semibold text-slate-100">{selectedGroup.diaryEntry.title}</h4>
+                                <button
+                                  type="button"
+                                  onClick={() => startEditEntry(selectedGroup.diaryEntry!)}
+                                  className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-[11px] text-slate-400 transition-colors hover:border-slate-300/40 hover:text-slate-100"
+                                >
+                                  수정하기
+                                </button>
+                              </div>
+                              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                                <span>{selectedGroup.diaryEntry.emotion}</span>
+                                {moodLabelFor(selectedGroup.diaryEntry.emotion)}
+                              </span>
+                              <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-200">
+                                {buildDreamOriginalContent(selectedGroup.diaryEntry.survey)}
+                              </p>
                             </div>
-                            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-                              <span>{selectedGroup.diaryEntry.emotion}</span>
-                              {moodLabelFor(selectedGroup.diaryEntry.emotion)}
-                            </span>
-                            <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-200">
-                              {buildDreamOriginalContent(selectedGroup.diaryEntry.survey)}
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="mt-4">
-                            <p className="text-xs text-slate-600">이 날의 일상 일기는 없어요.</p>
-                            <button
-                              type="button"
-                              onClick={() => startNewEntry(selectedGroup.date)}
-                              className="mt-4 w-full rounded-xl border border-white/10 py-2.5 text-xs text-slate-300 transition-colors hover:border-purple-400/40 hover:text-purple-200"
-                            >
-                              이 날짜로 일기 쓰기
-                            </button>
-                          </div>
+                          ) : (
+                            <p className="mt-4 text-xs text-slate-600">이 날의 일상 일기는 없어요.</p>
+                          )}
+                        </div>
+
+                        {!selectedGroup.diaryEntry && (
+                          <button
+                            type="button"
+                            onClick={() => startNewEntry(selectedGroup.date)}
+                            className="mx-auto mt-4 block w-full max-w-xs rounded-xl border border-slate-700 bg-transparent py-2.5 text-xs text-slate-300 transition-all hover:border-purple-500 hover:text-purple-300"
+                          >
+                            + 이 날짜로 일기 쓰기
+                          </button>
                         )}
                       </div>
                     </div>
