@@ -1,0 +1,100 @@
+"use client";
+
+import { DREAM_SEED_COLOR, type DreamSeed } from "@/lib/dreamSeeds";
+
+interface SeedStat {
+  seed: DreamSeed;
+  count: number;
+}
+
+// 마이페이지 "무의식 은하계" 상단 성운 - 도넛 링을 그대로 한 번 더 blur(-xl)로 겹쳐 깔아,
+// 차트 라이브러리 없이도 은은하게 빛나는 성운처럼 보이게 한다.
+export default function DreamClusterChart({ seedStats }: { seedStats: SeedStat[] }) {
+  const total = seedStats.reduce((sum, stat) => sum + stat.count, 0);
+  const radius = 70;
+  const strokeWidth = 22;
+  const circumference = 2 * Math.PI * radius;
+
+  let cumulative = 0;
+  const segments = seedStats.map((stat) => {
+    const ratio = total > 0 ? stat.count / total : 0;
+    const dash = ratio * circumference;
+    const offset = -cumulative;
+    cumulative += dash;
+    return { ...stat, dash, offset, ratio };
+  });
+
+  return (
+    <div className="flex flex-col items-center gap-8 sm:flex-row sm:justify-center">
+      <div className="relative h-48 w-48 shrink-0">
+        {/* 글로우 레이어 */}
+        <svg viewBox="0 0 200 200" className="absolute inset-0 -rotate-90 opacity-60 blur-xl" aria-hidden>
+          {total === 0 ? (
+            <circle cx="100" cy="100" r={radius} fill="none" stroke="rgba(168,85,247,0.35)" strokeWidth={strokeWidth} />
+          ) : (
+            segments.map(
+              (seg) =>
+                seg.dash > 0 && (
+                  <circle
+                    key={seg.seed}
+                    cx="100"
+                    cy="100"
+                    r={radius}
+                    fill="none"
+                    stroke={DREAM_SEED_COLOR[seg.seed]}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={`${seg.dash} ${circumference - seg.dash}`}
+                    strokeDashoffset={seg.offset}
+                  />
+                )
+            )
+          )}
+        </svg>
+
+        {/* 실제 도넛 링 */}
+        <svg viewBox="0 0 200 200" className="relative -rotate-90">
+          <circle cx="100" cy="100" r={radius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={strokeWidth} />
+          {segments.map(
+            (seg) =>
+              seg.dash > 0 && (
+                <circle
+                  key={seg.seed}
+                  cx="100"
+                  cy="100"
+                  r={radius}
+                  fill="none"
+                  stroke={DREAM_SEED_COLOR[seg.seed]}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                  strokeDasharray={`${Math.max(seg.dash - 3, 0)} ${circumference - seg.dash + 3}`}
+                  strokeDashoffset={seg.offset}
+                  className="transition-all duration-700 ease-out"
+                />
+              )
+          )}
+        </svg>
+
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-2xl font-semibold text-white">{total}</span>
+          <span className="text-[11px] text-purple-300/70">심어진 씨앗</span>
+        </div>
+      </div>
+
+      <ul className="flex w-full max-w-xs flex-col gap-2.5 sm:w-auto">
+        {segments.map((seg) => (
+          <li key={seg.seed} className="flex items-center gap-2.5 text-xs text-slate-300">
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: DREAM_SEED_COLOR[seg.seed], boxShadow: `0 0 8px ${DREAM_SEED_COLOR[seg.seed]}` }}
+            />
+            <span className="flex-1">{seg.seed}</span>
+            <span className="shrink-0 text-slate-500">
+              {seg.count}회{total > 0 ? ` · ${Math.round(seg.ratio * 100)}%` : ""}
+            </span>
+          </li>
+        ))}
+        {total === 0 && <li className="text-xs text-slate-600">아직 심어둔 꿈 씨앗이 없어요. 일기장에서 하나 골라보세요 🌙</li>}
+      </ul>
+    </div>
+  );
+}

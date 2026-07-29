@@ -15,6 +15,7 @@ import {
   type DreamSurvey,
 } from "@/api/dream";
 import NavBar from "@/components/NavBar";
+import { DREAM_SEEDS, isDreamSeed } from "@/lib/dreamSeeds";
 import { moodBucketForEmoji } from "@/lib/moodBucket";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
@@ -54,15 +55,6 @@ const BUCKET_CHIP: Record<string, string> = {
   neutral: "🌀 보통",
   nightmare: "😨 악몽",
 };
-
-// 꿈 씨앗 - 오늘의 일기가 오늘 밤 무의식에 심어줄 기운을 고르는, 저장과 무관한 리추얼용
-// 단일 선택 칩. 별도 DB 컬럼이 없어 서버에는 저장하지 않고, 글쓰기 세션 동안만 유지된다.
-const DREAM_SEEDS = [
-  "🌿 비워내기 (차분한 휴식)",
-  "🔥 성장하기 (자신감과 용기)",
-  "💜 치유하기 (위로와 평온)",
-  "✨ 모험하기 (새로운 영감)",
-];
 
 // 본문 길이(최대 60%)와 꿈 씨앗 선택 여부(40%)로 계산하는 "무의식 준비도" - 저장 가능 여부와는
 // 무관한 리추얼 지표라, 100%가 안 돼도 저장 버튼은 그대로 눌린다.
@@ -187,7 +179,7 @@ export default function DailyJournalPage() {
     setTitle(entry.title);
     setMood(entry.emotion);
     setBody(entry.survey.action_detail);
-    setDreamSeed(null);
+    setDreamSeed(entry.tags.find(isDreamSeed) ?? null);
     setSaveError(null);
   };
 
@@ -222,6 +214,10 @@ export default function DailyJournalPage() {
         is_lucid: false,
         final_memo: "",
       };
+      // 씨앗 태그만 갈아끼운다 - /diary에서 붙인 실제 해시태그가 있는 기록을 여기서 수정해도
+      // 그 태그는 지우지 않고, 이번에 고른 씨앗만 맨 앞에 얹는다(최대 5개).
+      const preservedTags = (editingEntry?.tags ?? []).filter((tag) => !isDreamSeed(tag));
+      const tags = dreamSeed ? [dreamSeed, ...preservedTags].slice(0, 5) : preservedTags;
       const payload = {
         dream_date: formDate,
         title: trimmedTitle,
@@ -233,6 +229,7 @@ export default function DailyJournalPage() {
         share_with_ai_analysis: false,
         survey,
         interpretation: editingEntry?.interpretation ?? null,
+        tags,
       };
       const saved = editingEntry ? await updateDream(editingEntry.id, payload) : await createDream(payload);
       upsertEntry(saved);
