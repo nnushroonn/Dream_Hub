@@ -365,11 +365,61 @@ export default function DailyJournalPage() {
                     왼쪽에서 날짜를 골라보세요.
                   </div>
                 ) : (
-                  // 🔀 스플릿 뷰 - 좌: 무의식(꿈/해몽), 우: 현실(일기)
+                  // 🔀 스플릿 뷰 - 좌: 현실(일기), 우: 무의식(꿈/해몽)
                   <div>
                     <p className="text-sm text-slate-400">{formatJournalDate(selectedGroup.date)}</p>
 
                     <div className="relative mt-4 grid grid-cols-2 gap-8">
+                      {/* 현실 영역 - h-full + justify-between: 우측 무의식 카드가 더 길어도 그리드 스트레치로
+                          맞춰진 전체 높이를 그대로 채우고, Null State의 CTA 버튼은 항상 맨 아래에 붙는다. */}
+                      <div className="flex h-full flex-col justify-between rounded-3xl border border-slate-200/10 bg-white/[0.03] p-5">
+                        <div>
+                          <h3 className="text-xs font-semibold tracking-wide text-slate-300">📝 내가 딛은 오늘의 현실</h3>
+
+                          {selectedGroup.diaryEntry ? (
+                            <div className="mt-4">
+                              <div className="flex items-center justify-between gap-2">
+                                <h4 className="text-base font-semibold text-slate-100">{selectedGroup.diaryEntry.title}</h4>
+                                <button
+                                  type="button"
+                                  onClick={() => startEditEntry(selectedGroup.diaryEntry!)}
+                                  className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-[11px] text-slate-400 transition-colors hover:border-slate-300/40 hover:text-slate-100"
+                                >
+                                  수정하기
+                                </button>
+                              </div>
+                              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                                <span>{selectedGroup.diaryEntry.emotion}</span>
+                                {moodLabelFor(selectedGroup.diaryEntry.emotion)}
+                              </span>
+                              <p className="mt-3 whitespace-pre-line font-serif text-sm tracking-wide leading-loose text-slate-300">
+                                {buildDreamOriginalContent(selectedGroup.diaryEntry.survey)}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="mt-4 text-xs text-slate-600">이 날의 일상 일기는 없어요.</p>
+                          )}
+                        </div>
+
+                        {!selectedGroup.diaryEntry && (
+                          <button
+                            type="button"
+                            onClick={() => startNewEntry(selectedGroup.date)}
+                            className="mx-auto mt-4 block w-full max-w-xs rounded-xl border border-slate-700 bg-transparent py-2.5 text-xs text-slate-300 transition-all hover:border-purple-500 hover:text-purple-300"
+                          >
+                            + 이 날짜로 일기 쓰기
+                          </button>
+                        )}
+                      </div>
+
+                      {/* 노트 바인딩 - 중앙 접힘선 양옆의 음영으로 종이 두 장이 맞닿은 두께감을 주고,
+                          가운데엔 점선 스티치로 실제 다이어리 제본처럼 보이게 한다. */}
+                      <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-6 -translate-x-1/2 sm:block">
+                        <div className="absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-transparent to-black/20" />
+                        <div className="absolute inset-y-0 right-0 w-3 bg-gradient-to-l from-transparent to-black/20" />
+                        <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 border-l border-dashed border-slate-500/50" />
+                      </div>
+
                       {/* 무의식 영역 */}
                       <div className="rounded-3xl border border-purple-500/20 bg-purple-950/10 p-5">
                         <h3 className="text-xs font-semibold tracking-wide text-purple-300">🔮 그날 밤 무의식의 우주</h3>
@@ -432,56 +482,6 @@ export default function DailyJournalPage() {
                           </div>
                         ) : (
                           <p className="mt-4 text-xs text-slate-600">이 날의 꿈 기록은 없어요.</p>
-                        )}
-                      </div>
-
-                      {/* 노트 바인딩 - 중앙 접힘선 양옆의 음영으로 종이 두 장이 맞닿은 두께감을 주고,
-                          가운데엔 점선 스티치로 실제 다이어리 제본처럼 보이게 한다. */}
-                      <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-6 -translate-x-1/2 sm:block">
-                        <div className="absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-transparent to-black/20" />
-                        <div className="absolute inset-y-0 right-0 w-3 bg-gradient-to-l from-transparent to-black/20" />
-                        <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 border-l border-dashed border-slate-500/50" />
-                      </div>
-
-                      {/* 현실 영역 - h-full + justify-between: 좌측 무의식 카드가 더 길어도 그리드 스트레치로
-                          맞춰진 전체 높이를 그대로 채우고, Null State의 CTA 버튼은 항상 맨 아래에 붙는다. */}
-                      <div className="flex h-full flex-col justify-between rounded-3xl border border-slate-200/10 bg-white/[0.03] p-5">
-                        <div>
-                          <h3 className="text-xs font-semibold tracking-wide text-slate-300">📝 내가 딛은 오늘의 현실</h3>
-
-                          {selectedGroup.diaryEntry ? (
-                            <div className="mt-4">
-                              <div className="flex items-center justify-between gap-2">
-                                <h4 className="text-base font-semibold text-slate-100">{selectedGroup.diaryEntry.title}</h4>
-                                <button
-                                  type="button"
-                                  onClick={() => startEditEntry(selectedGroup.diaryEntry!)}
-                                  className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-[11px] text-slate-400 transition-colors hover:border-slate-300/40 hover:text-slate-100"
-                                >
-                                  수정하기
-                                </button>
-                              </div>
-                              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-                                <span>{selectedGroup.diaryEntry.emotion}</span>
-                                {moodLabelFor(selectedGroup.diaryEntry.emotion)}
-                              </span>
-                              <p className="mt-3 whitespace-pre-line font-serif text-sm tracking-wide leading-loose text-slate-300">
-                                {buildDreamOriginalContent(selectedGroup.diaryEntry.survey)}
-                              </p>
-                            </div>
-                          ) : (
-                            <p className="mt-4 text-xs text-slate-600">이 날의 일상 일기는 없어요.</p>
-                          )}
-                        </div>
-
-                        {!selectedGroup.diaryEntry && (
-                          <button
-                            type="button"
-                            onClick={() => startNewEntry(selectedGroup.date)}
-                            className="mx-auto mt-4 block w-full max-w-xs rounded-xl border border-slate-700 bg-transparent py-2.5 text-xs text-slate-300 transition-all hover:border-purple-500 hover:text-purple-300"
-                          >
-                            + 이 날짜로 일기 쓰기
-                          </button>
                         )}
                       </div>
                     </div>
