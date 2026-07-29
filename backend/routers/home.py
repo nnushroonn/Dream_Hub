@@ -25,6 +25,15 @@ BEST_FEED_WINDOW_HOURS = 168
 # 좋아요가 0개인 글은 "인기글"이라 부를 수 없으니 랭킹에서 제외한다.
 BEST_FEED_MIN_UPVOTES = 1
 
+# "🏆 실시간 인기 글"(get_best_posts) 전용 기준 - get_best_dreams와는 별개다. 초기 서비스라
+# 게시글 볼륨 자체가 적어, 최근 30일(한 달)까지 넓게 잡아야 랭킹이 비어 보이지 않는다.
+# 트래픽이 늘어나면 이 값을 좁혀 "지금 뜨는 글" 체감을 올릴 수 있다.
+BEST_POSTS_WINDOW_DAYS = 30
+# 인기 점수 = 조회수 × POPULARITY_VIEW_WEIGHT + 좋아요 수 × POPULARITY_LIKE_WEIGHT.
+# 조회수는 view_tracking.should_count_view로 이미 중복 카운트가 방지된 순수 조회수다.
+POPULARITY_VIEW_WEIGHT = 1
+POPULARITY_LIKE_WEIGHT = 10
+
 # 8가지 위상별 무드/설명 (phase_name으로 조회). 실제 달의 위상은 며칠씩 이어지므로,
 # 이 자리에는 "그 며칠 동안 계속 같아도 자연스러운" 무드 텍스트만 남긴다 - 매일 달라져야 하는
 # 행운의 아이템/색상은 아래 LUCKY_ITEM_POOL/LUCKY_COLOR_POOL에서 날짜를 시드로 별도로 뽑는다.
@@ -367,36 +376,39 @@ def get_best_dreams(limit: int = 3, db: Session = Depends(get_db)):
 @router.get("/best-posts")
 def get_best_posts(limit: int = 5, db: Session = Depends(get_db)):
     """커뮤니티 사이드바 '🏆 실시간 인기 글' - 꿈 게시판(DreamEntry)과 자유 게시판(CommunityPost)
-    인기글을 하나로 묶어 좋아요 수 → 조회수 → 최신순으로 상대 랭킹을 매긴다. get_best_dreams와
-    동일한 최근 기간(BEST_FEED_WINDOW_HOURS)·최소 좋아요(BEST_FEED_MIN_UPVOTES) 기준을 쓴다."""
+    인기글을 하나로 묶어, 최근 BEST_POSTS_WINDOW_DAYS일 이내 글만 대상으로
+    인기 점수(조회수×POPULARITY_VIEW_WEIGHT + 좋아요×POPULARITY_LIKE_WEIGHT) 내림차순으로
+    상대 랭킹을 매긴다. 좋아요가 0개라도(조회수만 있어도) 랭킹에 들 수 있어야 하므로,
+    outerjoin으로 집계해 좋아요 0개인 글이 통째로 빠지지 않게 한다."""
     limit = max(1, min(limit, 20))
-    window_start = datetime.now(timezone.utc) - timedelta(hours=BEST_FEED_WINDOW_HOURS)
+    window_start = datetime.now(timezone.utc) - timedelta(days=BEST_POSTS_WINDOW_DAYS)
 
     dream_upvote_count = func.count(Interaction.id)
     dream_rows = (
         db.query(DreamEntry, dream_upvote_count.label("upvote_count"))
-        .join(
+        .outerjoin(
             Interaction,
             (Interaction.dream_entry_id == DreamEntry.id) & (Interaction.type == InteractionType.LIKE),
         )
         .filter(DreamEntry.status == DreamStatus.PUBLIC, DreamEntry.created_at >= window_start)
         .group_by(DreamEntry.id)
-        .having(dream_upvote_count >= BEST_FEED_MIN_UPVOTES)
         .all()
     )
 
     post_upvote_count = func.count(CommunityPostReaction.id)
     post_rows = (
         db.query(CommunityPost, post_upvote_count.label("upvote_count"))
-        .join(
+        .outerjoin(
             CommunityPostReaction,
             (CommunityPostReaction.post_id == CommunityPost.id) & (CommunityPostReaction.is_upvote.is_(True)),
         )
         .filter(CommunityPost.created_at >= window_start)
         .group_by(CommunityPost.id)
-        .having(post_upvote_count >= BEST_FEED_MIN_UPVOTES)
         .all()
     )
+
+    def score(view_count: int, upvote_count: int) -> int:
+        return view_count * POPULARITY_VIEW_WEIGHT + upvote_count * POPULARITY_LIKE_WEIGHT
 
     combined = [
         {
@@ -405,7 +417,7 @@ def get_best_posts(limit: int = 5, db: Session = Depends(get_db)):
             "category": "DREAM",
             "upvote_count": count,
             "view_count": entry.view_count,
-            "_created_at": entry.created_at,
+            "_score": score(entry.view_count, count),
         }
         for entry, count in dream_rows
     ] + [
@@ -415,13 +427,13 @@ def get_best_posts(limit: int = 5, db: Session = Depends(get_db)):
             "category": "FREE",
             "upvote_count": count,
             "view_count": post.view_count,
-            "_created_at": post.created_at,
+            "_score": score(post.view_count, count),
         }
         for post, count in post_rows
     ]
-    combined.sort(key=lambda item: (item["upvote_count"], item["view_count"], item["_created_at"]), reverse=True)
+    combined.sort(key=lambda item: item["_score"], reverse=True)
 
-    return {"posts": [{k: v for k, v in item.items() if k != "_created_at"} for item in combined[:limit]]}
+    return {"posts": [{k: v for k, v in item.items() if k != "_score"} for item in combined[:limit]]}
 
 
 @router.get("/live-ticker")

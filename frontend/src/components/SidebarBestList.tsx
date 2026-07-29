@@ -6,15 +6,23 @@ import Link from "next/link";
 import { getBestPosts, type BestPostEntry } from "@/api/dream";
 
 const SIDEBAR_BEST_POSTS_LIMIT = 5;
+// 이 프로젝트는 React Query 없이 axios를 직접 쓰는 구조라, "1분마다 백그라운드 동기화"는
+// react-query의 refetchInterval 대신 동일한 효과를 내는 setInterval로 구현한다.
+const REFETCH_INTERVAL_MS = 60_000;
 
-// 꿈 게시판/자유 게시판을 통틀어 좋아요→조회수→최신순으로 뽑은 실시간 인기 글 Top 5.
-// 순위 1~3위는 보라색으로 강조하고 4~5위는 톤을 낮춰 시각적 위계를 준다. 랭킹에 오를 글이
-// 없으면(콜드 스타트) 렌더링하지 않는다.
+// 꿈 게시판/자유 게시판을 통틀어 인기 점수(조회수×1 + 좋아요×10) 내림차순으로 뽑은 실시간
+// 인기 글 Top 5. 순위 1~3위는 보라색으로 강조하고 4~5위는 톤을 낮춰 시각적 위계를 준다.
+// 랭킹에 오를 글이 없으면(콜드 스타트) 렌더링하지 않는다.
 export default function SidebarBestList() {
   const [entries, setEntries] = useState<BestPostEntry[]>([]);
 
   useEffect(() => {
-    getBestPosts(SIDEBAR_BEST_POSTS_LIMIT).then(setEntries).catch(() => {});
+    const fetchBestPosts = () => {
+      getBestPosts(SIDEBAR_BEST_POSTS_LIMIT).then(setEntries).catch(() => {});
+    };
+    fetchBestPosts();
+    const intervalId = window.setInterval(fetchBestPosts, REFETCH_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
   }, []);
 
   if (entries.length === 0) return null;
