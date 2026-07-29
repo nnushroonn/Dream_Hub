@@ -371,8 +371,8 @@ export default function DailyJournalPage() {
 
                     <div className="relative mt-4 grid grid-cols-2 gap-8">
                       {/* 무의식 영역 */}
-                      <div className="rounded-2xl border border-purple-500/20 bg-purple-950/10 p-5">
-                        <h3 className="text-xs font-semibold tracking-wide text-purple-300">🔮 무의식 영역</h3>
+                      <div className="rounded-3xl border border-purple-500/20 bg-purple-950/10 p-5">
+                        <h3 className="text-xs font-semibold tracking-wide text-purple-300">🔮 그날 밤 무의식의 우주</h3>
 
                         {selectedGroup.dreamEntry ? (
                           <div className="mt-4">
@@ -382,7 +382,7 @@ export default function DailyJournalPage() {
                                 {BUCKET_CHIP[moodBucketForEmoji(selectedGroup.dreamEntry.emotion)]}
                               </span>
                             )}
-                            <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-purple-100/80">
+                            <p className="mt-3 whitespace-pre-line font-serif text-sm tracking-wide leading-loose text-purple-100/80">
                               {buildDreamOriginalContent(selectedGroup.dreamEntry.survey)}
                             </p>
                             {selectedGroup.dreamEntry.interpretation && (
@@ -435,13 +435,19 @@ export default function DailyJournalPage() {
                         )}
                       </div>
 
-                      <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-purple-500/30 to-transparent sm:block" />
+                      {/* 노트 바인딩 - 중앙 접힘선 양옆의 음영으로 종이 두 장이 맞닿은 두께감을 주고,
+                          가운데엔 점선 스티치로 실제 다이어리 제본처럼 보이게 한다. */}
+                      <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-6 -translate-x-1/2 sm:block">
+                        <div className="absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-transparent to-black/20" />
+                        <div className="absolute inset-y-0 right-0 w-3 bg-gradient-to-l from-transparent to-black/20" />
+                        <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 border-l border-dashed border-slate-500/50" />
+                      </div>
 
                       {/* 현실 영역 - h-full + justify-between: 좌측 무의식 카드가 더 길어도 그리드 스트레치로
                           맞춰진 전체 높이를 그대로 채우고, Null State의 CTA 버튼은 항상 맨 아래에 붙는다. */}
-                      <div className="flex h-full flex-col justify-between rounded-2xl border border-slate-200/10 bg-white/[0.03] p-5">
+                      <div className="flex h-full flex-col justify-between rounded-3xl border border-slate-200/10 bg-white/[0.03] p-5">
                         <div>
-                          <h3 className="text-xs font-semibold tracking-wide text-slate-300">📝 현실 영역</h3>
+                          <h3 className="text-xs font-semibold tracking-wide text-slate-300">📝 내가 딛은 오늘의 현실</h3>
 
                           {selectedGroup.diaryEntry ? (
                             <div className="mt-4">
@@ -459,7 +465,7 @@ export default function DailyJournalPage() {
                                 <span>{selectedGroup.diaryEntry.emotion}</span>
                                 {moodLabelFor(selectedGroup.diaryEntry.emotion)}
                               </span>
-                              <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-200">
+                              <p className="mt-3 whitespace-pre-line font-serif text-sm tracking-wide leading-loose text-slate-300">
                                 {buildDreamOriginalContent(selectedGroup.diaryEntry.survey)}
                               </p>
                             </div>

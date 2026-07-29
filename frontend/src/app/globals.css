@@ -10,6 +10,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* 나만의 일기장(/journal) 본문 전용 명조체 - font-serif 유틸리티가 이 값을 쓴다. */
+  --font-serif: var(--font-nanum-myeongjo);
   --animate-twinkle: twinkle 3.5s ease-in-out infinite;
   --animate-aurora: aurora-float 14s ease-in-out infinite;
   --animate-shine: shine 3s linear infinite;
