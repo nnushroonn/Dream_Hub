@@ -4,17 +4,20 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { getAuthErrorMessage } from "@/api/auth";
 import {
   createDreamComment,
   deleteDreamComment,
   getDreamComments,
   getPublicDream,
+  setDreamVisibility,
   updateDreamComment,
   voteOnDream,
   type DreamEntryRecord,
 } from "@/api/dream";
 import AttachedDreamViewer from "@/components/AttachedDreamViewer";
 import CommentSection from "@/components/CommentSection";
+import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
 import VoteButtons from "@/components/VoteButtons";
 import { consumeBackNavOrigin } from "@/lib/communityBackNav";
@@ -37,12 +40,27 @@ export default function CommunityPostPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editCaption, setEditCaption] = useState("");
+  const [editIsAnonymous, setEditIsAnonymous] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // 무의식 광장의 "삭제"는 꿈 기록소(/diary) 원본까지 지우지 않는다 - 공개를 취소해
+  // 커뮤니티에서만 사라지게 한다(is_public=false).
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // 알림 드롭다운에서 댓글 항목을 눌러 들어오면 ?highlightComment=로 대상 댓글 id가 붙는다.
   const [highlightCommentId, setHighlightCommentId] = useState<number | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = Number(params.get("id"));
+    // 리스트의 "✏️ 수정" 링크가 ?edit=1을 붙여 보내면, 상세를 읽기 모드로 먼저 보여주지 않고
+    // 곧바로 편집 폼을 연다.
+    const wantsEdit = params.get("edit") === "1";
     const highlightComment = Number(params.get("highlightComment"));
     if (Number.isFinite(highlightComment) && highlightComment > 0) {
       setHighlightCommentId(highlightComment);
@@ -53,7 +71,15 @@ export default function CommunityPostPage() {
       return;
     }
     getPublicDream(id)
-      .then(setEntry)
+      .then((data) => {
+        setEntry(data);
+        if (wantsEdit && data.is_mine) {
+          setEditTitle(data.title);
+          setEditCaption(data.share_caption ?? "");
+          setEditIsAnonymous(data.is_anonymous);
+          setIsEditing(true);
+        }
+      })
       .catch(() => setNotFound(true))
       .finally(() => setIsLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,6 +122,61 @@ export default function CommunityPostPage() {
     }
   };
 
+  const startEdit = () => {
+    if (!entry) return;
+    setEditTitle(entry.title);
+    setEditCaption(entry.share_caption ?? "");
+    setEditIsAnonymous(entry.is_anonymous);
+    setEditError(null);
+    setIsEditing(true);
+  };
+
+  // 제목/사담/공개 아이덴티티만 고쳐 쓴다 - 꿈의 구조화된 원문(survey)과 AI 해몽(interpretation)은
+  // 이 편집 폼의 대상이 아니라 손대지 않고 그대로 보존한다(setDreamVisibility가 내부적으로 함께
+  // 처리해 준다).
+  const saveEdit = async () => {
+    if (!entry || isSaving) return;
+    const title = editTitle.trim();
+    if (!title) return;
+    setIsSaving(true);
+    setEditError(null);
+    try {
+      const updated = await setDreamVisibility(entry, {
+        isPublic: true,
+        isAnonymous: editIsAnonymous,
+        shareWithAiAnalysis: entry.share_with_ai_analysis,
+        shareCaption: editCaption.trim(),
+        title,
+      });
+      setEntry(updated);
+      setIsEditing(false);
+    } catch (error) {
+      setEditError(getAuthErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 자유 광장의 "삭제"와 달리 꿈 기록소(/diary) 원본은 지우지 않는다 - 공개만 취소해
+  // 무의식 광장에서 사라지게 한다. 성공하면 더 이상 공개 상세로 조회되지 않으므로 목록으로 보낸다.
+  const handleDelete = async () => {
+    if (!entry || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await setDreamVisibility(entry, {
+        isPublic: false,
+        isAnonymous: entry.is_anonymous,
+        shareWithAiAnalysis: entry.share_with_ai_analysis,
+        shareCaption: entry.share_caption ?? undefined,
+        title: entry.title,
+      });
+      router.push("/community?tab=dream");
+    } catch {
+      setIsDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
   return (
     <div className="relative min-h-screen bg-slate-950 text-slate-100">
       <NavBar />
@@ -133,62 +214,159 @@ export default function CommunityPostPage() {
           </div>
         ) : (
           <div className="relative mt-6 rounded-3xl border border-violet-400/30 bg-white/10 p-8 shadow-[0_0_60px_rgba(139,92,246,0.2)] backdrop-blur-2xl">
-            {/* Top: 작성자/작성일 + 유저가 직접 쓴 본문(사담). whitespace-pre-wrap으로 줄바꿈·공백을
-                원본 그대로 보존해, 자유 광장 글쓰기와 동일한 "낚시글" 표현도 여기서 그대로 동작한다. */}
-            <p className="text-xs tracking-widest text-indigo-300/70">
-              {entry.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${entry.author_display_name}`}
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold text-white">
-              {entry.emotion} {entry.title}
-            </h1>
-            <p className="mt-1 text-xs text-slate-500">
-              {entry.dream_date} · 조회 {entry.view_count.toLocaleString()}
-            </p>
+            {isEditing ? (
+              <div>
+                <label className="text-xs text-indigo-300/70">어떤 이름으로 공개할까요?</label>
+                <div className="mt-2">
+                  <IdentitySwitch isAnonymous={editIsAnonymous} onChange={setEditIsAnonymous} nickname={nickname} />
+                </div>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(event) => setEditTitle(event.target.value)}
+                  maxLength={200}
+                  className="mt-4 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-lg font-bold text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+                />
+                <textarea
+                  value={editCaption}
+                  onChange={(event) => setEditCaption(event.target.value)}
+                  rows={6}
+                  maxLength={1000}
+                  placeholder="꿈에 대한 질문이나 재미있는 썰을 자유롭게 풀어보세요"
+                  className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
+                />
+                {editError && <p className="mt-2 text-xs text-red-300">{editError}</p>}
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
+                    disabled={isSaving}
+                    className="rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveEdit}
+                    disabled={!editTitle.trim() || isSaving}
+                    className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-4 py-2 text-xs font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSaving ? "저장 중..." : "저장하기"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Top: 작성자/작성일 + 유저가 직접 쓴 본문(사담). whitespace-pre-wrap으로 줄바꿈·공백을
+                    원본 그대로 보존해, 자유 광장 글쓰기와 동일한 "낚시글" 표현도 여기서 그대로 동작한다. */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs tracking-widest text-indigo-300/70">
+                      {entry.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${entry.author_display_name}`}
+                    </p>
+                    <h1 className="mt-1 text-2xl font-semibold text-white">
+                      {entry.emotion} {entry.title}
+                    </h1>
+                  </div>
+                  {entry.is_mine && !confirmDelete && (
+                    <div className="flex shrink-0 items-center gap-2 pt-1 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={startEdit}
+                        className="text-slate-500 underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
+                      >
+                        ✏️ 수정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(true)}
+                        className="text-slate-500 underline-offset-2 transition-colors hover:text-red-300 hover:underline"
+                      >
+                        🗑️ 삭제
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  {entry.dream_date} · 조회 {entry.view_count.toLocaleString()}
+                </p>
 
-            {/* 공백만 있는 사담(예: 엔터만 몇 번 친 경우)까지 걸러내야 빈 여백만 남는 걸 막을 수
-                있어, 단순 truthy 체크가 아니라 trim() 결과로 존재 여부를 판단한다. */}
-            {entry.share_caption?.trim() && (
-              <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{entry.share_caption}</p>
+                {confirmDelete && (
+                  <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-red-400/30 bg-red-500/10 px-3.5 py-2.5">
+                    <span className="text-xs text-red-200">
+                      공개를 취소할까요? 꿈 기록소의 원본은 그대로 남고, 무의식 광장에서만 사라져요.
+                    </span>
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(false)}
+                        disabled={isDeleting}
+                        className="text-xs text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline disabled:opacity-50"
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDelete}
+                        disabled={isDeleting}
+                        className="text-xs font-semibold text-red-300 underline-offset-2 hover:text-red-200 hover:underline disabled:opacity-50"
+                      >
+                        {isDeleting ? "전환 중..." : "네, 비공개로 전환할게요"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 공백만 있는 사담(예: 엔터만 몇 번 친 경우)까지 걸러내야 빈 여백만 남는 걸 막을 수
+                    있어, 단순 truthy 체크가 아니라 trim() 결과로 존재 여부를 판단한다. */}
+                {entry.share_caption?.trim() && (
+                  <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{entry.share_caption}</p>
+                )}
+
+                {/* Middle: 첨부된 꿈 데이터(원문/태그/AI 해몽/행운/상담 리포트) - 위 본문과 뚜렷이
+                    구분되는 카드 안에 담아 "첨부 파일"처럼 보이게 한다. */}
+                <AttachedDreamViewer
+                  id={entry.id}
+                  survey={entry.survey}
+                  summary={entry.summary}
+                  tags={entry.interpretation?.tags ?? []}
+                />
+              </>
             )}
 
-            {/* Middle: 첨부된 꿈 데이터(원문/태그/AI 해몽/행운/상담 리포트) - 위 본문과 뚜렷이
-                구분되는 카드 안에 담아 "첨부 파일"처럼 보이게 한다. */}
-            <AttachedDreamViewer
-              id={entry.id}
-              survey={entry.survey}
-              summary={entry.summary}
-              tags={entry.interpretation?.tags ?? []}
-            />
+            {!isEditing && (
+              <>
+                {/* Bottom: 👍/👎 투표(중앙 정렬) + 하이브리드 익명 댓글. */}
+                <div className="border-t border-white/[0.06] pt-5">
+                  <VoteButtons
+                    myVote={entry.my_vote}
+                    upvoteCount={entry.upvote_count}
+                    downvoteCount={entry.downvote_count}
+                    onVote={handleVote}
+                  />
+                </div>
 
-            {/* Bottom: 👍/👎 투표(중앙 정렬) + 하이브리드 익명 댓글. */}
-            <div className="border-t border-white/[0.06] pt-5">
-              <VoteButtons
-                myVote={entry.my_vote}
-                upvoteCount={entry.upvote_count}
-                downvoteCount={entry.downvote_count}
-                onVote={handleVote}
-              />
-            </div>
-
-            {/* 💬 댓글: 이 꿈에 대해 다른 탐험가들과 이야기를 나눌 수 있는 자리 - 페이지 성격상
-                토글 없이 항상 펼쳐 둔다. CommentSection 자체가 위쪽 구분선을 이미 그려준다. */}
-            <div className="mt-6">
-              <p className="text-sm font-semibold text-white">💬 댓글</p>
-              <CommentSection
-                targetId={entry.id}
-                isOpen
-                defaultAnonymous={entry.is_anonymous}
-                nickname={nickname}
-                isAuthenticated={isAuthenticated}
-                onRequireLogin={() => router.push("/login")}
-                fetchComments={getDreamComments}
-                submitComment={createDreamComment}
-                updateComment={updateDreamComment}
-                deleteComment={deleteDreamComment}
-                stickyInput
-                highlightCommentId={highlightCommentId}
-              />
-            </div>
+                {/* 💬 댓글: 이 꿈에 대해 다른 탐험가들과 이야기를 나눌 수 있는 자리 - 페이지 성격상
+                    토글 없이 항상 펼쳐 둔다. CommentSection 자체가 위쪽 구분선을 이미 그려준다. */}
+                <div className="mt-6">
+                  <p className="text-sm font-semibold text-white">💬 댓글</p>
+                  <CommentSection
+                    targetId={entry.id}
+                    isOpen
+                    defaultAnonymous={entry.is_anonymous}
+                    nickname={nickname}
+                    isAuthenticated={isAuthenticated}
+                    onRequireLogin={() => router.push("/login")}
+                    fetchComments={getDreamComments}
+                    submitComment={createDreamComment}
+                    updateComment={updateDreamComment}
+                    deleteComment={deleteDreamComment}
+                    stickyInput
+                    highlightCommentId={highlightCommentId}
+                  />
+                </div>
+              </>
+            )}
           </div>
         )}
       </main>

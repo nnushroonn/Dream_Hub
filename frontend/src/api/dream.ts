@@ -183,6 +183,9 @@ export interface DreamEntryRecord {
   updated_at: string;
   // 익명이면 null(프론트가 "익명의 탐험가"로 표시).
   author_display_name: string | null;
+  // 내가 쓴 꿈인지 - 자유 광장과 동일하게 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는
+  // 서버(PUT/DELETE /api/dreams/{id})가 다시 한다. 소유자 전용 CRUD 응답은 항상 true.
+  is_mine: boolean;
   // 공개 상세 조회(getPublicDream)에서만 실제 값이 채워진다. 그 외(listDreams 등 내 소유 CRUD
   // 응답)에서는 서버가 기본값(0/null)을 그대로 내려준다.
   upvote_count: number;
@@ -286,6 +289,9 @@ export interface DreamFeedEntry {
   survey: DreamSurvey;
   comment_count: number;
   view_count: number;
+  // 내가 쓴 꿈인지 - 자유 광장과 동일하게 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는
+  // 서버(PUT/DELETE /api/dreams/{id})가 다시 한다.
+  is_mine: boolean;
   ai_report: DreamFeedAiReport | null;
 }
 

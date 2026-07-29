@@ -9,7 +9,10 @@ import {
   deleteCommunityPost,
   getCommunityPosts,
   getDreamFeed,
+  getPublicDream,
   getTrends,
+  POST_EDIT_WINDOW_MS,
+  setDreamVisibility,
   type CommunityPost,
   type DreamFeedEntry,
   type Trend,
@@ -55,6 +58,9 @@ export default function CommunityPage() {
   const [dreams, setDreams] = useState<DreamFeedEntry[]>([]);
   const [isLoadingDreams, setIsLoadingDreams] = useState(true);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  // 리스트에서 바로 삭제할 수 있는 빠른 액션 - 수정은 자유 광장과 동일하게 상세 페이지(edit=1)로 보낸다.
+  const [confirmDeleteDreamId, setConfirmDeleteDreamId] = useState<number | null>(null);
+  const [isDeletingDream, setIsDeletingDream] = useState(false);
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
@@ -107,6 +113,31 @@ export default function CommunityPage() {
     } finally {
       setConfirmDeletePostId(null);
       setIsDeletingPost(false);
+    }
+  };
+
+  // 무의식 광장의 "삭제"는 자유 광장과 달리 꿈 기록소(/diary) 원본까지 지우지 않는다 - 공개를
+  // 취소해 커뮤니티에서만 사라지게 한다(is_public=false). 목록 카드(DreamFeedEntry)에는 완전한
+  // interpretation이 없어 setDreamVisibility에 그대로 넘길 수 없으므로, 먼저 전체 레코드를
+  // 한 번 더 불러와(getPublicDream) 기존 해몽 데이터가 유실되지 않게 한다.
+  const handleDeleteDream = async (dreamId: number) => {
+    if (isDeletingDream) return;
+    setIsDeletingDream(true);
+    try {
+      const fullEntry = await getPublicDream(dreamId);
+      await setDreamVisibility(fullEntry, {
+        isPublic: false,
+        isAnonymous: fullEntry.is_anonymous,
+        shareWithAiAnalysis: fullEntry.share_with_ai_analysis,
+        shareCaption: fullEntry.share_caption ?? undefined,
+        title: fullEntry.title,
+      });
+      setDreams((prev) => prev.filter((dream) => dream.id !== dreamId));
+    } catch {
+      // 간단한 액션이라 별도 에러 배너 없이, 확인 상태만 닫고 목록은 그대로 둔다.
+    } finally {
+      setConfirmDeleteDreamId(null);
+      setIsDeletingDream(false);
     }
   };
 
@@ -204,7 +235,34 @@ export default function CommunityPage() {
                   ) : filteredDreams.length > 0 ? (
                     filteredDreams.map((dream) => {
                       const preview = dreamListPreview(dream);
-                      return (
+                      return confirmDeleteDreamId === dream.id ? (
+                        <div
+                          key={dream.id}
+                          className="flex items-center justify-between gap-3 border-b border-white/10 bg-red-500/10 px-2 py-3"
+                        >
+                          <span className="text-xs text-red-200">
+                            "{dream.title}" 공개를 취소할까요? 꿈 기록소의 원본은 그대로 남고, 무의식 광장에서만 사라져요.
+                          </span>
+                          <div className="flex shrink-0 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteDreamId(null)}
+                              disabled={isDeletingDream}
+                              className="text-xs text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline disabled:opacity-50"
+                            >
+                              취소
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDream(dream.id)}
+                              disabled={isDeletingDream}
+                              className="text-xs font-semibold text-red-300 underline-offset-2 hover:text-red-200 hover:underline disabled:opacity-50"
+                            >
+                              {isDeletingDream ? "전환 중..." : "네, 비공개로 전환할게요"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
                         <div
                           key={dream.id}
                           role="link"
@@ -252,6 +310,30 @@ export default function CommunityPage() {
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-3">
+                            {dream.is_mine && (
+                              <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                                <Link
+                                  href={`/community/post?id=${dream.id}&edit=1`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    markBackNavOrigin("list");
+                                  }}
+                                  className="underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
+                                >
+                                  ✏️ 수정
+                                </Link>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setConfirmDeleteDreamId(dream.id);
+                                  }}
+                                  className="underline-offset-2 transition-colors hover:text-red-300 hover:underline"
+                                >
+                                  🗑️ 삭제
+                                </button>
+                              </div>
+                            )}
                             <span className="text-xs text-slate-400">👍 {dream.upvote_count}</span>
                           </div>
                         </div>
@@ -342,16 +424,20 @@ export default function CommunityPage() {
                         <div className="flex shrink-0 items-center gap-3">
                           {post.is_mine && (
                             <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                              <Link
-                                href={`/community/board-post?id=${post.id}&edit=1`}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  markBackNavOrigin("list");
-                                }}
-                                className="underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
-                              >
-                                ✏️ 수정
-                              </Link>
+                              {/* 서버(update_community_post)가 게시 10분 후 수정을 403으로 거절하므로,
+                                  프론트도 같은 기준(POST_EDIT_WINDOW_MS)으로 링크 자체를 미리 숨긴다. */}
+                              {Date.now() - new Date(post.created_at).getTime() < POST_EDIT_WINDOW_MS && (
+                                <Link
+                                  href={`/community/board-post?id=${post.id}&edit=1`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    markBackNavOrigin("list");
+                                  }}
+                                  className="underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
+                                >
+                                  ✏️ 수정
+                                </Link>
+                              )}
                               <button
                                 type="button"
                                 onClick={(event) => {

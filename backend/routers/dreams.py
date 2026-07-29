@@ -87,6 +87,9 @@ class DreamEntryResponse(BaseModel):
     my_vote: Literal["up", "down"] | None = None
     # 공개 상세 조회(get_public_dream)에서만 실제 값이 채워진다 - 목록/생성/수정 응답은 0.
     view_count: int = 0
+    # 내가 쓴 꿈인지 - 공개 상세 조회(get_public_dream)에서만 실제로 계산한다. 소유자 전용
+    # CRUD 응답(목록/생성/수정)은 애초에 항상 내 것이므로 True를 그대로 둔다.
+    is_mine: bool = True
 
 
 def _to_response(
@@ -94,6 +97,7 @@ def _to_response(
     upvote_count: int = 0,
     downvote_count: int = 0,
     my_vote: Literal["up", "down"] | None = None,
+    is_mine: bool = True,
 ) -> DreamEntryResponse:
     return DreamEntryResponse(
         id=entry.id,
@@ -115,6 +119,7 @@ def _to_response(
         downvote_count=downvote_count,
         my_vote=my_vote,
         view_count=entry.view_count,
+        is_mine=is_mine,
     )
 
 
@@ -210,7 +215,8 @@ def get_public_dream(
         if my_interaction is not None:
             my_vote = "up" if my_interaction.type == InteractionType.LIKE else "down"
 
-    return _to_response(entry, upvote_count, downvote_count, my_vote)
+    is_mine = current_user is not None and entry.user_id == current_user.id
+    return _to_response(entry, upvote_count, downvote_count, my_vote, is_mine)
 
 
 @router.post("", response_model=DreamEntryResponse, status_code=status.HTTP_201_CREATED)

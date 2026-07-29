@@ -102,6 +102,9 @@ class DreamFeedEntry(BaseModel):
     ai_report: DreamFeedAiReport | None = None
     comment_count: int
     view_count: int
+    # 내가 쓴 꿈인지 - 자유 광장과 동일하게 수정/삭제 버튼 노출 여부를 프론트가 이걸로 판단한다.
+    # 실제 권한 체크는 PUT/DELETE /api/dreams/{id}가 서버에서 다시 하므로, 이 값은 UI 표시용이다.
+    is_mine: bool = False
 
 
 class VoteInput(BaseModel):
@@ -147,7 +150,9 @@ def _my_dream_votes(db: Session, user: User, entries: list[DreamEntry]) -> dict[
     return {dream_id: ("up" if vote_type == InteractionType.LIKE else "down") for dream_id, vote_type in rows}
 
 
-def _build_dream_feed_entries(db: Session, entries: list[DreamEntry], my_votes: dict[int, str]) -> list[dict]:
+def _build_dream_feed_entries(
+    db: Session, entries: list[DreamEntry], my_votes: dict[int, str], current_user_id: int | None = None
+) -> list[dict]:
     result = []
     for entry in entries:
         interpretation = entry.interpretation if isinstance(entry.interpretation, dict) else {}
@@ -170,6 +175,7 @@ def _build_dream_feed_entries(db: Session, entries: list[DreamEntry], my_votes: 
                 "survey": entry.survey,
                 "comment_count": _dream_comment_count(db, entry.id),
                 "view_count": entry.view_count,
+                "is_mine": current_user_id is not None and entry.user_id == current_user_id,
                 "ai_report": (
                     {
                         "description": interpretation.get("description", ""),
@@ -198,7 +204,7 @@ def get_dream_feed(
         .all()
     )
     my_votes = _my_dream_votes(db, current_user, entries) if current_user else {}
-    return _build_dream_feed_entries(db, entries, my_votes)
+    return _build_dream_feed_entries(db, entries, my_votes, current_user.id if current_user else None)
 
 
 @router.get("/my-liked-dreams", response_model=list[DreamFeedEntry])
@@ -220,7 +226,7 @@ def list_my_liked_dreams(current_user: User = Depends(get_current_user), db: Ses
         .all()
     )
     my_votes = _my_dream_votes(db, current_user, entries)
-    return _build_dream_feed_entries(db, entries, my_votes)
+    return _build_dream_feed_entries(db, entries, my_votes, current_user.id)
 
 
 @router.post("/dream-feed/{dream_id}/vote", response_model=VoteResponse)
