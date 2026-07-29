@@ -11,7 +11,7 @@ from typing import Literal
 
 import redis
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from database import get_db, get_redis
@@ -21,6 +21,9 @@ from routers.auth import get_current_user, get_current_user_optional
 from view_tracking import should_count_view
 
 router = APIRouter(prefix="/api/dreams", tags=["dreams"])
+
+# 글쓰기 화면에서 유저가 직접 입력할 수 있는 꿈 상징 해시태그 최대 개수.
+MAX_DREAM_TAGS = 5
 
 
 class AiInterpretationPayload(BaseModel):
@@ -55,6 +58,16 @@ class DreamEntryInput(BaseModel):
     survey: DreamSurveyInput
     # 무의식 광장 "직접 쓰기" 모드에서 AI 해몽을 건너뛰고 게시할 수 있어 Optional이다.
     interpretation: AiInterpretationPayload | None = None
+    # 유저가 글쓰기 화면에서 직접 입력한 태그 - AI가 interpretation 안에 자동으로 붙여주던
+    # 태그를 대신해, 커뮤니티 노출/필터링은 이제 이 필드만 쓴다.
+    tags: list[str] = Field(default_factory=list)
+
+    @field_validator("tags")
+    @classmethod
+    def _limit_tag_count(cls, value: list[str]) -> list[str]:
+        if len(value) > MAX_DREAM_TAGS:
+            raise ValueError(f"태그는 최대 {MAX_DREAM_TAGS}개까지 등록할 수 있습니다.")
+        return value
 
 
 def _display_name(user: User, is_anonymous: bool) -> str | None:
@@ -76,6 +89,7 @@ class DreamEntryResponse(BaseModel):
     is_lucid: bool
     survey: DreamSurveyInput
     interpretation: AiInterpretationPayload | None = None
+    tags: list[str] = []
     created_at: datetime
     updated_at: datetime
     # 익명이면 None(프론트가 "익명의 탐험가"로 표시) - 실제 user_id/이메일은 담기지 않는다.
@@ -112,6 +126,7 @@ def _to_response(
         is_lucid=entry.is_lucid,
         survey=entry.survey,
         interpretation=entry.interpretation,
+        tags=entry.tags,
         created_at=entry.created_at,
         updated_at=entry.updated_at,
         author_display_name=_display_name(entry.user, entry.is_anonymous),
@@ -135,6 +150,7 @@ def _apply_input(entry: DreamEntry, payload: DreamEntryInput) -> None:
     entry.share_caption = (payload.share_caption or "").strip() or None
     entry.survey = payload.survey.model_dump()
     entry.interpretation = payload.interpretation.model_dump() if payload.interpretation is not None else None
+    entry.tags = payload.tags
     entry.is_lucid = payload.survey.is_lucid
     entry.status = DreamStatus.PUBLIC if payload.is_public else DreamStatus.PRIVATE
 

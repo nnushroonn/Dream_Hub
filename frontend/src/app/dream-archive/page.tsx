@@ -117,18 +117,21 @@ export default function DreamArchivePage() {
               <DreamOriginalQuote content={buildDreamOriginalContent(entry.survey)} />
             </div>
 
+            {/* 예전엔 AI 해몽(interpretation.tags)에만 있었지만, 이제는 글쓰기에서 유저가 직접
+                입력한 태그(entry.tags)를 쓴다 - AI 해몽 없이 "직접 쓰기"로 게시한 꿈도 태그를
+                달 수 있으므로 interpretation 유무와 무관하게 보여준다. */}
+            {entry.tags.length > 0 && (
+              <div className="mb-4 flex flex-wrap gap-x-2 gap-y-1">
+                {entry.tags.map((tag) => (
+                  <span key={tag} className="text-xs text-violet-300/70">
+                    {tag.startsWith("#") ? tag : `#${tag}`}
+                  </span>
+                ))}
+              </div>
+            )}
+
             {entry.interpretation ? (
               <>
-                {entry.interpretation.tags.length > 0 && (
-                  <div className="mb-4 flex flex-wrap gap-x-2 gap-y-1">
-                    {entry.interpretation.tags.map((tag) => (
-                      <span key={tag} className="text-xs text-violet-300/70">
-                        {tag.startsWith("#") ? tag : `#${tag}`}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
                 <FormattedDreamText text={entry.interpretation.description} />
 
                 <div className="mt-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4">

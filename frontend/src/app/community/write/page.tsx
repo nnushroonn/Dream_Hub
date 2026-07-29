@@ -17,6 +17,7 @@ import {
 } from "@/api/dream";
 import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
 import IdentitySwitch from "@/components/IdentitySwitch";
+import TagInput from "@/components/TagInput";
 import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
 import { MOOD_OPTIONS } from "@/lib/moodBucket";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -69,6 +70,9 @@ export default function CommunityWritePage() {
   const [shareDreamCaption, setShareDreamCaption] = useState("");
   const shareDreamCaptionRef = useAutoResizeTextarea(shareDreamCaption);
   const [shareDreamIsAnonymous, setShareDreamIsAnonymous] = useState(false);
+  // AI가 자동으로 붙여주던 해시태그를 대신해, 유저가 직접 입력한 태그(최대 5개) - 불러오기/직접
+  // 쓰기 두 모드가 함께 쓴다.
+  const [dreamTags, setDreamTags] = useState<string[]>([]);
   const [shareDreamWithAiReport, setShareDreamWithAiReport] = useState(false);
   const [isSharingDream, setIsSharingDream] = useState(false);
   const [shareDreamError, setShareDreamError] = useState<string | null>(null);
@@ -99,6 +103,7 @@ export default function CommunityWritePage() {
     const firstDream = myPrivateDreams[0];
     setShareDreamId(firstDream.id);
     setShareDreamTitle(firstDream.title);
+    setDreamTags(firstDream.tags);
   }, [myPrivateDreams]);
 
   const hasUnsavedChanges =
@@ -207,6 +212,7 @@ export default function CommunityWritePage() {
         shareWithAiAnalysis: shareDreamWithAiReport,
         shareCaption: shareDreamCaption.trim(),
         title,
+        tags: dreamTags,
       });
       upsertSavedDreamEntry(saved);
       router.push("/community?tab=dream");
@@ -269,6 +275,7 @@ export default function CommunityWritePage() {
         share_caption: shareDreamCaption.trim(),
         survey,
         interpretation,
+        tags: dreamTags,
       });
       router.push("/community?tab=dream");
     } catch (error) {
@@ -446,6 +453,9 @@ export default function CommunityWritePage() {
               className="mt-3 min-h-[120px] w-full resize-none overflow-hidden rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
             />
 
+            {/* 꿈 상징 태그 - AI가 자동으로 붙여주던 해시태그를 대신해 유저가 직접 입력한다. */}
+            <TagInput tags={dreamTags} onChange={setDreamTags} />
+
             {/* 첨부 모드 세그먼트 컨트롤: 불러오기 ↔ 직접 쓰기 */}
             <div className="mt-4 flex rounded-lg bg-slate-800 p-1">
               <button
@@ -497,6 +507,7 @@ export default function CommunityWritePage() {
                           onClick={() => {
                             setShareDreamId(entry.id);
                             setShareDreamTitle(entry.title);
+                            setDreamTags(entry.tags);
                           }}
                           className={`w-full rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors ${
                             shareDreamId === entry.id

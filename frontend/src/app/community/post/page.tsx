@@ -329,7 +329,7 @@ export default function CommunityPostPage() {
                   id={entry.id}
                   survey={entry.survey}
                   summary={entry.summary}
-                  tags={entry.interpretation?.tags ?? []}
+                  tags={entry.tags}
                 />
               </>
             )}

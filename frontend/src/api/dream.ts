@@ -179,6 +179,9 @@ export interface DreamEntryRecord {
   survey: DreamSurvey;
   // 무의식 광장 "직접 쓰기" 모드에서 AI 해몽을 건너뛰고 게시했으면 null.
   interpretation: AiInterpretation | null;
+  // 글쓰기 화면에서 유저가 직접 입력한 태그(최대 5개) - AI가 interpretation 안에 자동으로
+  // 붙여주던 태그를 대신해, 커뮤니티 노출/필터링은 이제 이 필드만 쓴다.
+  tags: string[];
   created_at: string;
   updated_at: string;
   // 익명이면 null(프론트가 "익명의 탐험가"로 표시).
@@ -206,6 +209,7 @@ export interface DreamEntryPayload {
   share_caption?: string | null;
   survey: DreamSurvey;
   interpretation?: AiInterpretation | null;
+  tags?: string[];
 }
 
 export async function listDreams(): Promise<DreamEntryRecord[]> {
@@ -246,6 +250,8 @@ export async function setDreamVisibility(
     shareCaption?: string;
     // 커뮤니티 리스트 뷰에 노출되는 제목을 공유 시점에 바꿀 수 있게 한다 - 생략하면 기존 제목 유지.
     title?: string;
+    // 글쓰기 화면에서 직접 입력한 태그를 함께 바꿀 때만 넘긴다 - 생략하면 기존 태그를 그대로 유지한다.
+    tags?: string[];
   }
 ): Promise<DreamEntryRecord> {
   return updateDream(entry.id, {
@@ -259,6 +265,7 @@ export async function setDreamVisibility(
     share_caption: options.shareCaption ?? entry.share_caption,
     survey: entry.survey,
     interpretation: entry.interpretation,
+    tags: options.tags ?? entry.tags,
   });
 }
 

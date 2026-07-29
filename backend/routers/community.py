@@ -163,7 +163,9 @@ def _build_dream_feed_entries(
                 "title": entry.title,
                 "emotion": entry.emotion,
                 "summary": entry.summary,
-                "tags": interpretation.get("tags", []),
+                # 예전엔 AI 해몽(interpretation.tags)이 자동으로 채웠지만, 이제는 글쓰기에서
+                # 유저가 직접 입력한 태그(DreamEntry.tags)만 노출/필터링에 쓴다.
+                "tags": entry.tags,
                 "dream_date": entry.dream_date.isoformat(),
                 "upvote_count": up,
                 "downvote_count": down,
