@@ -97,7 +97,7 @@ export default function CommunityPostPage() {
   };
 
   const handleVote = async (voteType: "up" | "down") => {
-    if (!entry) return;
+    if (!entry || entry.is_mine) return;
     if (!isAuthenticated) {
       router.push("/login");
       return;
@@ -343,6 +343,7 @@ export default function CommunityPostPage() {
                     upvoteCount={entry.upvote_count}
                     downvoteCount={entry.downvote_count}
                     onVote={handleVote}
+                    disabled={entry.is_mine}
                   />
                 </div>
 

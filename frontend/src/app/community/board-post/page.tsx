@@ -105,7 +105,7 @@ export default function BoardPostPage() {
   };
 
   const handleVote = async (voteType: "up" | "down") => {
-    if (!post) return;
+    if (!post || post.is_mine) return;
     if (!isAuthenticated) {
       router.push("/login");
       return;
@@ -322,6 +322,7 @@ export default function BoardPostPage() {
                     upvoteCount={post.upvote_count}
                     downvoteCount={post.downvote_count}
                     onVote={handleVote}
+                    disabled={post.is_mine}
                   />
                   <p className="mt-3 text-center text-xs text-slate-500">💬 댓글 {post.comment_count}</p>
                 </div>

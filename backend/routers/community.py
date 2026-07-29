@@ -241,6 +241,8 @@ def vote_on_dream(
     )
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공개된 꿈 기록을 찾을 수 없습니다.")
+    if entry.user_id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="자신의 글에는 공감할 수 없습니다.")
 
     requested_type = InteractionType.LIKE if payload.vote_type == "up" else InteractionType.DISLIKE
     existing = (
@@ -544,6 +546,8 @@ def vote_on_post(
     post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
+    if post.user_id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="자신의 글에는 공감할 수 없습니다.")
 
     requested_is_upvote = payload.vote_type == "up"
     existing = (
