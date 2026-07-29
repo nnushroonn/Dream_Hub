@@ -10,10 +10,12 @@ import {
   buildDreamOriginalContent,
   createDream,
   requestPostInterpretation,
+  updateDream,
   type DreamEntryRecord,
   type DreamSurvey,
 } from "@/api/dream";
 import NavBar from "@/components/NavBar";
+import { moodBucketForEmoji } from "@/lib/moodBucket";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 
@@ -47,9 +49,28 @@ function moodLabelFor(emoji: string): string {
   return JOURNAL_MOOD_OPTIONS.find((option) => option.emoji === emoji)?.label ?? "";
 }
 
-// 나만의 일기장 - 꿈 기록소(/diary)와 완전히 독립된 페이지. 이 앱엔 DB에 "일기 vs 꿈" type
-// 컬럼이 따로 없어서, interpretation(AI 해몽)이 없는 기록만 "순수 일기"로 취급해 목록/조회
-// 범위를 격리한다 - 해석을 받는 순간 그 기록은 더 이상 이 목록에 나타나지 않는다.
+const BUCKET_CHIP: Record<string, string> = {
+  good: "🌙 길몽",
+  neutral: "🌀 보통",
+  nightmare: "😨 악몽",
+};
+
+// 같은 날짜의 기록을 "꿈(해몽 완료)"과 "일기(해몽 없음)" 두 갈래로 묶는다. DB에 type 컬럼이
+// 따로 없어서, interpretation 유무만으로 갈래를 나눈다 - 한 날짜에 둘 다 있으면 "통합"이다.
+interface DateGroup {
+  date: string;
+  dreamEntry: DreamEntryRecord | null;
+  diaryEntry: DreamEntryRecord | null;
+}
+
+function badgeFor(group: DateGroup): string {
+  if (group.dreamEntry && group.diaryEntry) return "✨ 통합";
+  if (group.dreamEntry) return "🔮 꿈";
+  return "📝 일기";
+}
+
+// 나만의 일기장 - 꿈 기록소(/diary)와 완전히 독립된 라우트지만, 같은 DreamEntry 데이터를
+// 공유해 날짜별로 꿈(해몽 완료) + 일기(해몽 전) 기록을 한 화면에서 오갈 수 있게 한다.
 export default function DailyJournalPage() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -60,24 +81,33 @@ export default function DailyJournalPage() {
     if (!isAuthenticated) router.push("/login");
   }, [isAuthenticated, router]);
 
-  const journalEntries = useMemo(
-    () =>
-      [...allEntries]
-        .filter((entry) => !entry.interpretation)
-        .sort((a, b) => b.created_at.localeCompare(a.created_at)),
-    [allEntries]
-  );
+  const dateGroups = useMemo<DateGroup[]>(() => {
+    const byDate = new Map<string, DateGroup>();
+    for (const entry of allEntries) {
+      const group = byDate.get(entry.dream_date) ?? { date: entry.dream_date, dreamEntry: null, diaryEntry: null };
+      if (entry.interpretation) {
+        group.dreamEntry = group.dreamEntry ?? entry;
+      } else {
+        group.diaryEntry = group.diaryEntry ?? entry;
+      }
+      byDate.set(entry.dream_date, group);
+    }
+    return Array.from(byDate.values()).sort((a, b) => b.date.localeCompare(a.date));
+  }, [allEntries]);
 
-  const [selectedId, setSelectedId] = useState<number | "new" | null>(null);
-  const selectedEntry =
-    selectedId !== null && selectedId !== "new" ? (journalEntries.find((entry) => entry.id === selectedId) ?? null) : null;
+  const [viewMode, setViewMode] = useState<"write" | "view">("view");
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const selectedGroup = selectedDate ? (dateGroups.find((group) => group.date === selectedDate) ?? null) : null;
 
-  // 처음 들어오면 가장 최근 일기를 펼치고, 쓴 일기가 하나도 없으면 곧장 글쓰기 폼을 보여준다.
+  // 처음 들어오면 가장 최근 날짜를 펼치고, 기록이 하나도 없으면 곧장 글쓰기 폼을 보여준다.
   useEffect(() => {
-    if (selectedId !== null) return;
-    setSelectedId(journalEntries.length > 0 ? journalEntries[0].id : "new");
-  }, [journalEntries, selectedId]);
+    if (selectedDate !== null || viewMode === "write") return;
+    if (dateGroups.length > 0) setSelectedDate(dateGroups[0].date);
+    else setViewMode("write");
+  }, [dateGroups, selectedDate, viewMode]);
 
+  const [editingEntry, setEditingEntry] = useState<DreamEntryRecord | null>(null);
+  const [formDate, setFormDate] = useState(todayDateInputValue());
   const [title, setTitle] = useState("");
   const [mood, setMood] = useState(JOURNAL_MOOD_OPTIONS[0].emoji);
   const [body, setBody] = useState("");
@@ -86,22 +116,30 @@ export default function DailyJournalPage() {
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
-  // 방금 해석을 마친 기록 - 해석이 붙는 순간 journalEntries 필터에서 빠지므로, 사라지기 전에
-  // 잠깐 결과를 보여줄 스냅샷을 따로 들고 있는다.
-  const [justAnalyzed, setJustAnalyzed] = useState<DreamEntryRecord | null>(null);
 
-  const startNewEntry = () => {
-    setJustAnalyzed(null);
-    setSelectedId("new");
+  const startNewEntry = (date?: string) => {
+    setViewMode("write");
+    setEditingEntry(null);
+    setFormDate(date ?? todayDateInputValue());
     setTitle("");
     setMood(JOURNAL_MOOD_OPTIONS[0].emoji);
     setBody("");
     setSaveError(null);
   };
 
-  const selectEntry = (id: number) => {
-    setJustAnalyzed(null);
-    setSelectedId(id);
+  const startEditEntry = (entry: DreamEntryRecord) => {
+    setViewMode("write");
+    setEditingEntry(entry);
+    setFormDate(entry.dream_date);
+    setTitle(entry.title);
+    setMood(entry.emotion);
+    setBody(entry.survey.action_detail);
+    setSaveError(null);
+  };
+
+  const selectDate = (date: string) => {
+    setViewMode("view");
+    setSelectedDate(date);
   };
 
   const handleSave = async () => {
@@ -130,8 +168,8 @@ export default function DailyJournalPage() {
         is_lucid: false,
         final_memo: "",
       };
-      const saved = await createDream({
-        dream_date: todayDateInputValue(),
+      const payload = {
+        dream_date: formDate,
         title: trimmedTitle,
         emotion: mood,
         summary: buildDreamOneLineSummary(survey),
@@ -140,10 +178,13 @@ export default function DailyJournalPage() {
         is_anonymous: true,
         share_with_ai_analysis: false,
         survey,
-        interpretation: null,
-      });
+        interpretation: editingEntry?.interpretation ?? null,
+      };
+      const saved = editingEntry ? await updateDream(editingEntry.id, payload) : await createDream(payload);
       upsertEntry(saved);
-      setSelectedId(saved.id);
+      setViewMode("view");
+      setSelectedDate(saved.dream_date);
+      setEditingEntry(null);
     } catch (error) {
       setSaveError(getAuthErrorMessage(error));
     } finally {
@@ -151,15 +192,14 @@ export default function DailyJournalPage() {
     }
   };
 
-  const handleAnalyze = async () => {
-    if (!selectedEntry || isAnalyzing) return;
-    if (!window.confirm("AI 해석을 받아볼까요?")) return;
+  const handleAnalyze = async (entry: DreamEntryRecord) => {
+    if (isAnalyzing) return;
+    if (!window.confirm("이 일기를 꿈으로 해석해 볼까요?")) return;
     setAnalyzeError(null);
     setIsAnalyzing(true);
     try {
-      const updated = await requestPostInterpretation(selectedEntry.id);
+      const updated = await requestPostInterpretation(entry.id);
       upsertEntry(updated);
-      setJustAnalyzed(updated);
     } catch (error) {
       setAnalyzeError(getAuthErrorMessage(error));
     } finally {
@@ -171,93 +211,92 @@ export default function DailyJournalPage() {
     return <div className="min-h-screen bg-slate-950" />;
   }
 
-  // AnimatePresence가 카드 내용 교체를 감지할 키 - 날짜/글이 바뀔 때마다 크로스페이드 슬라이드가 다시 재생된다.
-  const contentKey = justAnalyzed ? `analyzed-${justAnalyzed.id}` : selectedId === "new" ? "new" : (selectedEntry?.id ?? "empty");
+  // AnimatePresence가 내용 교체를 감지할 키 - 모드/날짜가 바뀔 때마다 페이드 슬라이드가 재생된다.
+  const contentKey = viewMode === "write" ? `write-${editingEntry?.id ?? formDate}` : `view-${selectedDate ?? "empty"}`;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <NavBar />
 
-      <main className="mx-auto max-w-6xl px-6 py-12">
-        <h1 className="text-2xl font-semibold text-white">📝 나만의 일기장</h1>
-        <p className="mt-1 text-sm text-slate-400">오늘 하루의 일상과 감정을 편하게 남겨보세요.</p>
+      <div className="flex w-full min-h-screen gap-8 px-8 py-6">
+        {/* 좌측(30%): 오늘 일기 쓰기 + 꿈/일기 통합 타임라인 */}
+        <aside className="flex w-[30%] shrink-0 flex-col">
+          <h1 className="text-xl font-semibold text-white">📝 나만의 일기장</h1>
+          <p className="mt-1 text-xs text-slate-400">일상과 꿈을 한 곳에서 되짚어 보세요.</p>
 
-        <div className="mt-8 flex flex-col gap-6 lg:flex-row lg:items-start">
-          {/* 좌측 사이드바(30%): 지금까지 쓴 일기 타임라인 */}
-          <aside className="w-full shrink-0 lg:max-w-xs lg:border-r lg:border-slate-800 lg:pr-6">
-            <button
-              type="button"
-              onClick={startNewEntry}
-              className="w-full rounded-xl border border-purple-400/30 bg-purple-500/10 px-4 py-2.5 text-sm font-medium text-purple-200 transition-colors hover:border-purple-400/60 hover:bg-purple-500/20"
-            >
-              ✏️ 오늘 일기 쓰기
-            </button>
+          <button
+            type="button"
+            onClick={() => startNewEntry()}
+            className="mt-5 w-full rounded-xl border border-purple-400/30 bg-purple-500/10 px-4 py-2.5 text-sm font-medium text-purple-200 transition-colors hover:border-purple-400/60 hover:bg-purple-500/20"
+          >
+            ✍️ 오늘 일기 쓰기
+          </button>
 
-            <div className="mt-6 flex flex-col gap-1">
-              {journalEntries.length === 0 ? (
+          <div className="mt-6 flex-1 overflow-y-auto pr-1">
+            <div className="flex flex-col gap-1">
+              {dateGroups.length === 0 ? (
                 <p className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-6 text-center text-xs leading-relaxed text-slate-500">
-                  아직 쓴 일기가 없어요.
-                  <br />
-                  첫 하루를 기록해 보세요 ✨
+                  아직 남긴 기록이 없어요.
+                  <br />첫 하루를 기록해 보세요 ✨
                 </p>
               ) : (
-                journalEntries.map((entry) => (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    onClick={() => selectEntry(entry.id)}
-                    className={`rounded-xl px-3 py-2.5 text-left transition-colors ${
-                      selectedId === entry.id
-                        ? "bg-purple-500/15 text-white"
-                        : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2 text-sm">
-                      <span className="shrink-0">📝</span>
-                      <span className="min-w-0 flex-1 truncate">{entry.title}</span>
-                    </span>
-                    <span className="mt-0.5 block text-[11px] text-slate-500">{entry.dream_date}</span>
-                  </button>
-                ))
+                dateGroups.map((group) => {
+                  const primary = group.diaryEntry ?? group.dreamEntry;
+                  return (
+                    <button
+                      key={group.date}
+                      type="button"
+                      onClick={() => selectDate(group.date)}
+                      className={`rounded-xl px-3 py-2.5 text-left transition-colors ${
+                        viewMode === "view" && selectedDate === group.date
+                          ? "bg-purple-500/15 text-white"
+                          : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 text-sm">
+                        <span className="shrink-0 text-xs">{badgeFor(group)}</span>
+                        <span className="min-w-0 flex-1 truncate">{primary?.title}</span>
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-slate-500">{group.date}</span>
+                    </button>
+                  );
+                })
               )}
             </div>
-          </aside>
+          </div>
+        </aside>
 
-          {/* 우측 메인(70%): 글래스모피즘 카드 - 글쓰기 폼 또는 조회 뷰어 */}
-          <div className="flex flex-1 justify-center">
-            <div className="relative w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-700/50 bg-slate-900/60 p-8 shadow-2xl backdrop-blur-md">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={contentKey}
-                  initial={{ opacity: 0, x: 16 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -16 }}
-                  transition={{ duration: 0.25, ease: "easeOut" }}
-                >
-                  {justAnalyzed ? (
-                    // 해석이 막 끝난 순간의 잠깐짜리 확인 화면 - 이후 이 기록은 순수 일기 목록에서 사라진다.
-                    <div className="py-6 text-center">
-                      <p className="text-2xl">✨</p>
-                      <p className="mt-3 text-sm font-medium text-slate-100">AI 해석이 도착했어요</p>
-                      <p className="mt-2 text-sm leading-relaxed text-purple-200">
-                        {justAnalyzed.interpretation?.description.slice(0, 80)}
-                        {(justAnalyzed.interpretation?.description.length ?? 0) > 80 ? "…" : ""}
-                      </p>
-                      <p className="mt-4 text-xs leading-relaxed text-slate-500">
-                        전체 해석 결과는 꿈 기록소에서 계속 볼 수 있어요. 이 일기는 이제 순수 일기 목록에서는 빠집니다.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={startNewEntry}
-                        className="mt-6 rounded-full border border-white/10 px-5 py-2 text-xs text-slate-300 transition-colors hover:border-purple-400/40 hover:text-purple-200"
-                      >
-                        확인
-                      </button>
+        {/* 우측(70%): 반투명 글래스 대시보드 - 조회(스플릿) 또는 작성(단일) */}
+        <main className="flex-1">
+          <div className="relative min-h-[calc(100vh-3rem)] overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/40 p-8 shadow-2xl backdrop-blur-lg">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={contentKey}
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -16 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className="transition-all duration-300 ease-in-out"
+              >
+                {viewMode === "write" ? (
+                  // ✍️ 작성/수정 폼 - 단일 그리드로 와이드하게. AI 호출 없이 제목+감정+본문만 저장한다.
+                  <div className="mx-auto max-w-2xl">
+                    <h2 className="text-lg font-semibold text-white">
+                      {editingEntry ? "일기 수정하기" : "오늘 일기 쓰기"}
+                    </h2>
+
+                    <div className="mt-5">
+                      <label className="text-xs text-indigo-300/70">날짜</label>
+                      <input
+                        type="date"
+                        value={formDate}
+                        onChange={(event) => setFormDate(event.target.value)}
+                        className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm text-white focus:border-purple-400/60 focus:outline-none"
+                      />
                     </div>
-                  ) : selectedId === "new" || !selectedEntry ? (
-                    // ✏️ 새 일기 작성 폼 - AI 호출 없이 제목+감정+본문만 그대로 저장한다.
-                    <div>
-                      <label className="text-xs text-indigo-300/70">오늘의 제목</label>
+
+                    <div className="mt-5">
+                      <label className="text-xs text-indigo-300/70">제목</label>
                       <input
                         type="text"
                         value={title}
@@ -265,94 +304,184 @@ export default function DailyJournalPage() {
                         placeholder="예: 오랜만에 여유로웠던 하루"
                         className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-purple-400/60 focus:outline-none"
                       />
+                    </div>
 
-                      <div className="mt-5">
-                        <label className="text-xs text-indigo-300/70">오늘 나의 감정</label>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {JOURNAL_MOOD_OPTIONS.map((option) => (
-                            <button
-                              key={option.emoji}
-                              type="button"
-                              onClick={() => setMood(option.emoji)}
-                              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-all duration-200 ${
-                                mood === option.emoji
-                                  ? "border-purple-400/70 bg-purple-500/25 text-white"
-                                  : "border-white/10 bg-white/5 text-slate-400 hover:border-purple-400/30 hover:text-slate-200"
-                              }`}
-                            >
-                              <span>{option.emoji}</span>
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
+                    <div className="mt-5">
+                      <label className="text-xs text-indigo-300/70">오늘 나의 감정</label>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {JOURNAL_MOOD_OPTIONS.map((option) => (
+                          <button
+                            key={option.emoji}
+                            type="button"
+                            onClick={() => setMood(option.emoji)}
+                            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-all duration-200 ${
+                              mood === option.emoji
+                                ? "border-purple-400/70 bg-purple-500/25 text-white"
+                                : "border-white/10 bg-white/5 text-slate-400 hover:border-purple-400/30 hover:text-slate-200"
+                            }`}
+                          >
+                            <span>{option.emoji}</span>
+                            {option.label}
+                          </button>
+                        ))}
                       </div>
+                    </div>
 
-                      <div className="mt-5">
-                        <label className="text-xs text-indigo-300/70">오늘 하루는 어땠나요?</label>
-                        <textarea
-                          value={body}
-                          onChange={(event) => setBody(event.target.value)}
-                          placeholder="있었던 일, 만난 사람, 느낀 감정을 자유롭게 적어보세요."
-                          rows={8}
-                          className="mt-1.5 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200 placeholder:text-slate-500 focus:border-purple-400/60 focus:outline-none"
-                        />
-                      </div>
+                    <div className="mt-5">
+                      <label className="text-xs text-indigo-300/70">오늘 하루는 어땠나요?</label>
+                      <textarea
+                        value={body}
+                        onChange={(event) => setBody(event.target.value)}
+                        placeholder="있었던 일, 만난 사람, 느낀 감정을 자유롭게 적어보세요."
+                        rows={10}
+                        className="mt-1.5 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200 placeholder:text-slate-500 focus:border-purple-400/60 focus:outline-none"
+                      />
+                    </div>
 
-                      {saveError && <p className="mt-3 text-xs text-red-300">{saveError}</p>}
+                    {saveError && <p className="mt-3 text-xs text-red-300">{saveError}</p>}
 
+                    <div className="mt-6 flex gap-3">
+                      {dateGroups.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => selectDate(selectedDate ?? dateGroups[0].date)}
+                          className="rounded-xl border border-white/10 px-5 py-3 text-sm text-slate-300 transition-colors hover:border-purple-400/40 hover:text-purple-200"
+                        >
+                          취소
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={handleSave}
                         disabled={isSaving || !title.trim() || !body.trim()}
-                        className="mt-6 w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {isSaving ? "저장 중..." : "💾 오늘 하루 저장하기"}
+                        {isSaving ? "저장 중..." : "💾 저장하기"}
                       </button>
                     </div>
-                  ) : (
-                    // 저장된 일기 조회 뷰 - 좌: 메타 정보(날짜/감정/AI 해석 CTA), 우: 제목+본문.
-                    <div className="relative grid grid-cols-1 gap-8 sm:grid-cols-2">
-                      <div className="sm:pr-6">
-                        <p className="text-sm text-slate-400">{formatJournalDate(selectedEntry.dream_date)}</p>
+                  </div>
+                ) : !selectedGroup ? (
+                  <div className="flex h-full items-center justify-center py-24 text-center text-sm text-slate-500">
+                    왼쪽에서 날짜를 골라보세요.
+                  </div>
+                ) : (
+                  // 🔀 스플릿 뷰 - 좌: 무의식(꿈/해몽), 우: 현실(일기)
+                  <div>
+                    <p className="text-sm text-slate-400">{formatJournalDate(selectedGroup.date)}</p>
 
-                        <div className="mt-4">
-                          <span className="inline-flex items-center gap-2 rounded-full border border-purple-400/30 bg-purple-500/10 px-4 py-2 text-sm text-purple-200">
-                            <span className="text-lg">{selectedEntry.emotion}</span>
-                            {moodLabelFor(selectedEntry.emotion)}
-                          </span>
-                        </div>
+                    <div className="relative mt-4 grid grid-cols-2 gap-8">
+                      {/* 무의식 영역 */}
+                      <div className="rounded-2xl border border-purple-500/20 bg-purple-950/10 p-5">
+                        <h3 className="text-xs font-semibold tracking-wide text-purple-300">🔮 무의식 영역</h3>
 
-                        {/* 사후 분석 트리거 - 제한적으로, 조회 뷰의 좌측 하단에만 노출한다. */}
-                        <div className="mt-10">
-                          <button
-                            type="button"
-                            onClick={handleAnalyze}
-                            disabled={isAnalyzing}
-                            className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {isAnalyzing ? "해석하는 중..." : "🔮 이 날의 일기, AI 해석 받기"}
-                          </button>
-                          {analyzeError && <p className="mt-2 text-xs text-red-300">{analyzeError}</p>}
-                        </div>
+                        {selectedGroup.dreamEntry ? (
+                          <div className="mt-4">
+                            <h4 className="text-base font-semibold text-purple-100">{selectedGroup.dreamEntry.title}</h4>
+                            {selectedGroup.dreamEntry.interpretation && (
+                              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-purple-400/30 bg-purple-500/10 px-3 py-1 text-xs text-purple-200">
+                                {BUCKET_CHIP[moodBucketForEmoji(selectedGroup.dreamEntry.emotion)]}
+                              </span>
+                            )}
+                            <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-purple-100/80">
+                              {buildDreamOriginalContent(selectedGroup.dreamEntry.survey)}
+                            </p>
+                            {selectedGroup.dreamEntry.interpretation && (
+                              <div className="mt-4 space-y-3 border-t border-purple-500/20 pt-4">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {selectedGroup.dreamEntry.interpretation.tags.map((tag) => (
+                                    <span
+                                      key={tag}
+                                      className="rounded-full bg-purple-500/10 px-2.5 py-1 text-[11px] text-purple-200"
+                                    >
+                                      #{tag}
+                                    </span>
+                                  ))}
+                                </div>
+                                <p className="text-sm leading-relaxed text-slate-200">
+                                  {selectedGroup.dreamEntry.interpretation.description}
+                                </p>
+                                <p className="text-xs text-purple-300/80">
+                                  {selectedGroup.dreamEntry.interpretation.expert_badge} ·{" "}
+                                  {selectedGroup.dreamEntry.interpretation.expert_insight}
+                                </p>
+                                <div className="flex gap-2 text-[11px] text-purple-200/80">
+                                  <span className="rounded-lg bg-purple-500/10 px-2.5 py-1.5">
+                                    🍀 {selectedGroup.dreamEntry.interpretation.lucky_item}
+                                  </span>
+                                  <span className="rounded-lg bg-purple-500/10 px-2.5 py-1.5">
+                                    🔢 {selectedGroup.dreamEntry.interpretation.lucky_number}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : selectedGroup.diaryEntry ? (
+                          <div className="mt-4">
+                            <p className="text-xs leading-relaxed text-slate-500">
+                              이 날의 일기는 아직 꿈으로 해석되지 않았어요.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => handleAnalyze(selectedGroup.diaryEntry!)}
+                              disabled={isAnalyzing}
+                              className="mt-4 w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-2.5 text-sm font-semibold text-white shadow-lg transition-all hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {isAnalyzing ? "해석하는 중..." : "🔮 이 일기를 꿈으로 해석하기"}
+                            </button>
+                            {analyzeError && <p className="mt-2 text-xs text-red-300">{analyzeError}</p>}
+                          </div>
+                        ) : (
+                          <p className="mt-4 text-xs text-slate-600">이 날의 꿈 기록은 없어요.</p>
+                        )}
                       </div>
 
-                      {/* 중앙 경계선: 물리적인 책이 아니라 은은하게 빛나는 그라데이션 라인으로 처리 */}
                       <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-purple-500/30 to-transparent sm:block" />
 
-                      <div>
-                        <h2 className="text-xl font-semibold text-slate-200">{selectedEntry.title}</h2>
-                        <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-slate-200">
-                          {buildDreamOriginalContent(selectedEntry.survey)}
-                        </p>
+                      {/* 현실 영역 */}
+                      <div className="rounded-2xl border border-slate-200/10 bg-white/[0.03] p-5">
+                        <h3 className="text-xs font-semibold tracking-wide text-slate-300">📝 현실 영역</h3>
+
+                        {selectedGroup.diaryEntry ? (
+                          <div className="mt-4">
+                            <div className="flex items-center justify-between gap-2">
+                              <h4 className="text-base font-semibold text-slate-100">{selectedGroup.diaryEntry.title}</h4>
+                              <button
+                                type="button"
+                                onClick={() => startEditEntry(selectedGroup.diaryEntry!)}
+                                className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-[11px] text-slate-400 transition-colors hover:border-slate-300/40 hover:text-slate-100"
+                              >
+                                수정하기
+                              </button>
+                            </div>
+                            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                              <span>{selectedGroup.diaryEntry.emotion}</span>
+                              {moodLabelFor(selectedGroup.diaryEntry.emotion)}
+                            </span>
+                            <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-200">
+                              {buildDreamOriginalContent(selectedGroup.diaryEntry.survey)}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="mt-4">
+                            <p className="text-xs text-slate-600">이 날의 일상 일기는 없어요.</p>
+                            <button
+                              type="button"
+                              onClick={() => startNewEntry(selectedGroup.date)}
+                              className="mt-4 w-full rounded-xl border border-white/10 py-2.5 text-xs text-slate-300 transition-colors hover:border-purple-400/40 hover:text-purple-200"
+                            >
+                              이 날짜로 일기 쓰기
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            </div>
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
