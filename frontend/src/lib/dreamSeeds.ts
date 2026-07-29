@@ -20,3 +20,18 @@ export const DREAM_SEED_COLOR: Record<DreamSeed, string> = {
   "💜 치유하기 (위로와 평온)": "#c084fc",
   "✨ 모험하기 (새로운 영감)": "#60a5fa",
 };
+
+// 커뮤니티 헤더 "주파수 필터"용 공개 슬러그 - 백엔드 PUBLIC_TAG_OPTIONS와 반드시 일치해야 한다.
+// 개인 씨앗(DREAM_SEEDS)과 1:1로 대응하되, 이건 유저가 게시글에 "직접" 붙이는 공개 태그다.
+export interface CommunityFrequencyTag {
+  slug: "rest" | "growth" | "healing" | "adventure";
+  label: string;
+  seed: DreamSeed;
+}
+
+export const COMMUNITY_FREQUENCY_TAGS: CommunityFrequencyTag[] = [
+  { slug: "rest", label: "🌿 비움", seed: DREAM_SEEDS[0] },
+  { slug: "growth", label: "🔥 성장", seed: DREAM_SEEDS[1] },
+  { slug: "healing", label: "💜 치유", seed: DREAM_SEEDS[2] },
+  { slug: "adventure", label: "✨ 모험", seed: DREAM_SEEDS[3] },
+];

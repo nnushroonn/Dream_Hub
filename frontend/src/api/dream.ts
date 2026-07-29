@@ -361,14 +361,17 @@ export interface CommunityPost {
   created_at: string;
   // 글쓰기에서 첨부한 이미지들의 R2 공개 URL 목록(최대 3장, 순서대로 노출).
   image_urls: string[];
+  // ?template=galaxy 글쓰기에서 고른 주파수 태그(rest/growth/healing/adventure) - 커뮤니티
+  // 헤더의 주파수 필터는 오직 이 필드만 조회한다. 일반 자유 글은 빈 배열.
+  public_tags: string[];
   // 상세 조회(getCommunityPost)에서만 어뷰징 방지를 거쳐 증가한다.
   view_count: number;
   // 내가 쓴 글인지 - 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는 서버가 다시 한다.
   is_mine: boolean;
 }
 
-export async function getCommunityPosts(): Promise<CommunityPost[]> {
-  const { data } = await api.get<CommunityPost[]>("/api/community/posts");
+export async function getCommunityPosts(tag?: string): Promise<CommunityPost[]> {
+  const { data } = await api.get<CommunityPost[]>("/api/community/posts", { params: tag ? { tag } : undefined });
   return data;
 }
 
@@ -393,13 +396,15 @@ export async function createCommunityPost(
   title: string,
   content: string,
   isAnonymous: boolean,
-  imageUrls: string[] = []
+  imageUrls: string[] = [],
+  publicTags: string[] = []
 ): Promise<CommunityPost> {
   const { data } = await api.post<CommunityPost>("/api/community/posts", {
     title,
     content,
     is_anonymous: isAnonymous,
     image_urls: imageUrls,
+    public_tags: publicTags,
   });
   return data;
 }
@@ -411,13 +416,33 @@ export async function updateCommunityPost(
   postId: number,
   title: string,
   content: string,
-  isAnonymous: boolean
+  isAnonymous: boolean,
+  publicTags: string[] = []
 ): Promise<CommunityPost> {
   const { data } = await api.put<CommunityPost>(`/api/community/posts/${postId}`, {
     title,
     content,
     is_anonymous: isAnonymous,
+    public_tags: publicTags,
   });
+  return data;
+}
+
+// 🌌 무의식 은하 프로필 - 커뮤니티 닉네임 호버 카드용. is_public이 false면 다른 필드는
+// 항상 null(원문/개수 등 어떤 개인 데이터도 응답에 섞이지 않는다).
+export interface GalaxySeedRatio {
+  seed: string;
+  ratio: number;
+}
+
+export interface GalaxyProfile {
+  is_public: boolean;
+  seed_ratios: GalaxySeedRatio[] | null;
+  badge_ids: string[] | null;
+}
+
+export async function getGalaxyProfile(nickname: string): Promise<GalaxyProfile> {
+  const { data } = await api.get<GalaxyProfile>(`/api/community/profiles/${encodeURIComponent(nickname)}/galaxy`);
   return data;
 }
 

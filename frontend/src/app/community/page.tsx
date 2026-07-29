@@ -17,6 +17,8 @@ import {
 } from "@/api/dream";
 import NavBar from "@/components/NavBar";
 import SidebarBestList from "@/components/SidebarBestList";
+import UserDreamProfileModal from "@/components/UserDreamProfileModal";
+import { COMMUNITY_FREQUENCY_TAGS } from "@/lib/dreamSeeds";
 import { markBackNavOrigin } from "@/lib/communityBackNav";
 import { useAuthStore } from "@/store/useAuthStore";
 
@@ -62,6 +64,8 @@ export default function CommunityPage() {
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  // 자유 광장 헤더의 "주파수 필터" - 클라이언트 필터가 아니라 서버 쿼리(?tag=)로 다시 불러온다.
+  const [activeFrequencyTag, setActiveFrequencyTag] = useState<string | null>(null);
   // 리스트에서 바로 삭제할 수 있는 빠른 액션 - 수정은 상세 페이지(edit=1)로 보낸다.
   const [confirmDeletePostId, setConfirmDeletePostId] = useState<number | null>(null);
   const [isDeletingPost, setIsDeletingPost] = useState(false);
@@ -76,11 +80,17 @@ export default function CommunityPage() {
       .then(setDreams)
       .catch(() => {})
       .finally(() => setIsLoadingDreams(false));
-    getCommunityPosts()
+  }, []);
+
+  // 주파수 필터가 바뀔 때마다(최초 진입 포함) 서버에 다시 요청한다 - 다른 유저의 비공개
+  // 일지를 집계하지 않고, 오직 CommunityPost.public_tags로만 걸러진 결과다.
+  useEffect(() => {
+    setIsLoadingPosts(true);
+    getCommunityPosts(activeFrequencyTag ?? undefined)
       .then(setPosts)
       .catch(() => {})
       .finally(() => setIsLoadingPosts(false));
-  }, []);
+  }, [activeFrequencyTag]);
 
   // 무의식 피드에 실제로 등장한 상징 태그만 필터 칩으로 보여준다 - 등장 빈도순.
   const availableTags = useMemo(() => {
@@ -297,7 +307,14 @@ export default function CommunityPage() {
                                 </div>
                               )}
                               <p className="mt-1 text-[11px] text-slate-500">
-                                {dream.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${dream.author_display_name}`} · {dream.dream_date}
+                                {dream.is_anonymous ? (
+                                  "🎭 익명의 탐험가"
+                                ) : (
+                                  <UserDreamProfileModal nickname={dream.author_display_name!}>
+                                    <span className="hover:text-purple-300">👤 {dream.author_display_name}</span>
+                                  </UserDreamProfileModal>
+                                )}{" "}
+                                · {dream.dream_date}
                                 {" "}
                                 · 조회 {dream.view_count}
                               </p>
@@ -343,6 +360,39 @@ export default function CommunityPage() {
                 </div>
               </div>
             ) : (
+              <div>
+                {/* 주파수 필터 - CommunityPost.public_tags만 대상으로 서버가 걸러준 결과다 */}
+                <div className="no-scrollbar flex gap-2 overflow-x-auto pb-3">
+                  <button
+                    type="button"
+                    onClick={() => setActiveFrequencyTag(null)}
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      activeFrequencyTag === null
+                        ? "border-purple-500 bg-purple-600/30 text-purple-300"
+                        : "border-white/10 bg-white/5 text-slate-400 hover:border-purple-500/50"
+                    }`}
+                  >
+                    전체
+                  </button>
+                  {COMMUNITY_FREQUENCY_TAGS.map((freq) => {
+                    const isActive = activeFrequencyTag === freq.slug;
+                    return (
+                      <button
+                        key={freq.slug}
+                        type="button"
+                        onClick={() => setActiveFrequencyTag(isActive ? null : freq.slug)}
+                        className={`shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                          isActive
+                            ? "border-purple-500 bg-purple-600/30 text-purple-300"
+                            : "border-white/10 bg-white/5 text-slate-400 hover:border-purple-500/50"
+                        }`}
+                      >
+                        {freq.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
               <div className="flex flex-col">
                 {isLoadingPosts ? (
                   Array.from({ length: 5 }, (_, index) => (
@@ -410,7 +460,14 @@ export default function CommunityPage() {
                             </div>
                           )}
                           <p className="mt-1 text-[11px] text-slate-500">
-                            {post.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${post.author_display_name}`} · {formatPostTime(post.created_at)}
+                            {post.is_anonymous ? (
+                              "🎭 익명의 탐험가"
+                            ) : (
+                              <UserDreamProfileModal nickname={post.author_display_name!}>
+                                <span className="hover:text-purple-300">👤 {post.author_display_name}</span>
+                              </UserDreamProfileModal>
+                            )}{" "}
+                            · {formatPostTime(post.created_at)}
                             {" "}
                             · 조회 {post.view_count}
                           </p>
@@ -454,6 +511,7 @@ export default function CommunityPage() {
                     아직 작성된 글이 없어요. 첫 이야기를 남겨보세요 ✨
                   </p>
                 )}
+              </div>
               </div>
             )}
           </div>

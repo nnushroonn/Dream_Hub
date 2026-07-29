@@ -149,7 +149,9 @@ export default function BoardPostPage() {
     setIsSaving(true);
     setEditError(null);
     try {
-      const updated = await updateCommunityPost(post.id, title, content, editIsAnonymous);
+      // 이 화면엔 주파수 태그 편집 UI가 없어 - 은하 공유 글을 여기서 고쳐도 기존에 붙여둔
+      // public_tags가 사라지지 않도록 그대로 다시 실어 보낸다.
+      const updated = await updateCommunityPost(post.id, title, content, editIsAnonymous, post.public_tags);
       setPost(updated);
       setIsEditing(false);
     } catch (error) {

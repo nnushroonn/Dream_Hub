@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { getMyLikedDreams, type DreamFeedEntry } from "@/api/dream";
 import AuraToggle from "@/components/AuraToggle";
 import DreamClusterChart from "@/components/DreamClusterChart";
+import GalaxyVisibilityToggle from "@/components/GalaxyVisibilityToggle";
 import LevelBadgeBoard from "@/components/LevelBadgeBoard";
 import MyActivityTabs from "@/components/MyActivityTabs";
 import NavBar from "@/components/NavBar";
@@ -145,13 +146,16 @@ export default function MyPage() {
                 <NicknameEditor />
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleShareGalaxy}
-              className="shrink-0 rounded-full border border-purple-400/40 bg-transparent px-4 py-2 text-xs font-medium text-purple-200 transition-all hover:border-purple-400/70 hover:bg-purple-500/10"
-            >
-              🌌 내 무의식 은하 공유하기
-            </button>
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              <button
+                type="button"
+                onClick={handleShareGalaxy}
+                className="rounded-full border border-purple-400/40 bg-transparent px-4 py-2 text-xs font-medium text-purple-200 transition-all hover:border-purple-400/70 hover:bg-purple-500/10"
+              >
+                🌌 내 무의식 은하 공유하기
+              </button>
+              <GalaxyVisibilityToggle />
+            </div>
           </div>
           <div className="mt-5 border-t border-white/[0.06] pt-4">
             <LevelBadgeBoard />

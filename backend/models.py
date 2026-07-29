@@ -48,6 +48,9 @@ class User(Base):
     # 마이페이지 아바타 오라 커스텀 - "good"(길몽 위주)/"lucid"(자각몽 위주)/"calm"(평온 위주).
     # 유저가 직접 고르는 값이라 기본은 미선택(None) - 프론트가 그때는 중립 톤으로 보여준다.
     aura_preference: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # 커뮤니티 닉네임 호버 카드(무의식 은하 프로필)에 씨앗 비율/뱃지 스냅샷을 공개할지 여부.
+    # 기본은 비공개 - 유저가 마이페이지에서 직접 켜야만 다른 유저에게 집계 데이터가 보인다.
+    is_galaxy_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     dream_entries: Mapped[list["DreamEntry"]] = relationship(
@@ -256,6 +259,10 @@ class CommunityPost(Base):
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     # 글쓰기에서 첨부한 이미지들의 R2 공개 URL 목록(최대 3장) - 순서가 곧 노출 순서.
     image_urls: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False, server_default="{}")
+    # 무의식 은하 공유(?template=galaxy) 글쓰기에서 고른 주파수 태그(healing/growth/rest/adventure).
+    # 커뮤니티 헤더의 주파수 필터(?tag=)는 오직 이 컬럼만 조회한다 - 다른 유저의 비공개 일지를
+    # 집계해서 정렬하지 않는다.
+    public_tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False, server_default="{}")
     # 상세 조회(GET /api/community/posts/{id})가 호출될 때마다 증가 - 어뷰징 방지는
     # view_tracking.should_count_view()가 Redis로 24시간 중복을 걸러준 뒤에만 커밋한다.
     view_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")

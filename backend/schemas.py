@@ -50,6 +50,7 @@ class UserResponse(BaseModel):
     nickname: str
     is_verified: bool
     aura_preference: str | None = None
+    is_galaxy_public: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -89,6 +90,10 @@ class AuraUpdateInput(BaseModel):
         if value not in AURA_OPTIONS:
             raise ValueError(f"오라 옵션은 {sorted(AURA_OPTIONS)} 중 하나여야 합니다.")
         return value
+
+
+class GalaxyVisibilityUpdateInput(BaseModel):
+    is_galaxy_public: bool
 
 
 class BadgeInfo(BaseModel):

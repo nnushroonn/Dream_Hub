@@ -10,6 +10,8 @@ export interface AuthUser {
   nickname: string;
   is_verified?: boolean;
   aura_preference?: AuraPreference | null;
+  // 커뮤니티 닉네임 호버 카드(무의식 은하 프로필) 공개 여부 - 기본은 비공개.
+  is_galaxy_public?: boolean;
 }
 
 export interface AuthResponse {
@@ -56,6 +58,12 @@ export async function updateNickname(nickname: string): Promise<AuthUser> {
 // 마이페이지 아바타 오라 토글 - 유저가 직접 고르는 시각적 정체성.
 export async function updateAuraPreference(auraPreference: AuraPreference): Promise<AuthUser> {
   const { data } = await api.patch<AuthUser>("/api/user/aura", { aura_preference: auraPreference });
+  return data;
+}
+
+// 커뮤니티 닉네임 호버 카드 공개 토글 - 켜는 순간부터만 다른 유저가 씨앗 비율/뱃지 집계를 볼 수 있다.
+export async function updateGalaxyVisibility(isGalaxyPublic: boolean): Promise<AuthUser> {
+  const { data } = await api.patch<AuthUser>("/api/user/galaxy-visibility", { is_galaxy_public: isGalaxyPublic });
   return data;
 }
 

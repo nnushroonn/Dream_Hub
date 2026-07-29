@@ -15,6 +15,7 @@ import {
   uploadCommunityImage,
   type AiInterpretation,
 } from "@/api/dream";
+import CommunityPostTagSelector from "@/components/CommunityPostTagSelector";
 import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import TagInput from "@/components/TagInput";
@@ -76,6 +77,8 @@ export default function CommunityWritePage() {
   // 마이페이지에서 "🌌 내 무의식 은하 공유하기"로 넘어온 경우에만 채워진다 - 에디터 안에
   // 보라색 테두리 미리보기 카드로 렌더링하고, 실제 게시되는 본문은 별도의 서술형 텍스트다.
   const [galaxyTemplate, setGalaxyTemplate] = useState<GalaxyTemplateData | null>(null);
+  // 은하 공유 글에만 필요한 필수 선택 - CommunityPostTagSelector가 채운다.
+  const [publicTags, setPublicTags] = useState<string[]>([]);
 
   // --- 🌙 무의식 광장 글쓰기 상태 ---
   // NavBar가 이 페이지에는 없어(집중 모드) NavBar의 listDreams() 동기화를 기대할 수 없다 -
@@ -220,14 +223,15 @@ export default function CommunityWritePage() {
   const handleCreatePost = async () => {
     const title = composeTitle.trim();
     const content = composeText.trim();
-    if (!title || !content || isPosting) return;
+    // 은하 공유 템플릿은 주파수 태그를 반드시 하나 골라야 발행할 수 있다.
+    if (!title || !content || isPosting || (galaxyTemplate && publicTags.length === 0)) return;
     setPostError(null);
     setIsPosting(true);
     try {
       // 이미지는 게시 시점에 순서대로 하나씩 R2로 업로드한 뒤, 받은 공개 URL 목록만
       // createCommunityPost에 함께 실어 보낸다.
       const imageUrls = await Promise.all(selectedImages.map((file) => uploadCommunityImage(file)));
-      await createCommunityPost(title, content, composeIsAnonymous, imageUrls);
+      await createCommunityPost(title, content, composeIsAnonymous, imageUrls, publicTags);
       router.push("/community?tab=board");
     } catch (error) {
       setPostError(getAuthErrorMessage(error));
@@ -335,7 +339,8 @@ export default function CommunityWritePage() {
     return <div className="min-h-screen bg-slate-950" />;
   }
 
-  const isBoardSubmitDisabled = !composeTitle.trim() || !composeText.trim() || isPosting;
+  const isBoardSubmitDisabled =
+    !composeTitle.trim() || !composeText.trim() || isPosting || (galaxyTemplate !== null && publicTags.length === 0);
   const isDreamSubmitDisabled =
     isSharingDream ||
     isAnalyzingNewDream ||
@@ -400,6 +405,10 @@ export default function CommunityWritePage() {
                 )}
               </div>
             )}
+
+            {/* 은하 공유 글만 필수로 노출되는 주파수 태그 선택 - 여기서 고른 값이 그대로
+                CommunityPost.public_tags로 저장되고, 헤더의 주파수 필터가 이것만 조회한다. */}
+            {galaxyTemplate && <CommunityPostTagSelector value={publicTags} onChange={setPublicTags} />}
 
             <input
               type="text"

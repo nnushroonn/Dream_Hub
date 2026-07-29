@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import CommunityComment, CommunityPost, CommunityPostReaction, DreamEntry, DreamStatus, Interaction, InteractionType, User
 from routers.auth import get_current_user
-from schemas import AuraUpdateInput, ProfileUpdateInput, UserResponse, UserStatsResponse
+from schemas import AuraUpdateInput, GalaxyVisibilityUpdateInput, ProfileUpdateInput, UserResponse, UserStatsResponse
 
 router = APIRouter(prefix="/api/user", tags=["user"])
 
@@ -40,6 +40,21 @@ def update_aura(
 ) -> User:
     """마이페이지 아바타 오라 커스텀 - 유저가 직접 고르는 시각적 정체성 토글."""
     current_user.aura_preference = payload.aura_preference
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.patch("/galaxy-visibility", response_model=UserResponse)
+def update_galaxy_visibility(
+    payload: GalaxyVisibilityUpdateInput,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    """커뮤니티 닉네임 호버 카드(무의식 은하 프로필) 공개 여부 - 기본은 비공개다.
+    켜는 순간부터만 GET /api/community/profiles/{nickname}/galaxy가 이 유저의 씨앗
+    비율·뱃지 집계를 다른 사람에게 보여준다."""
+    current_user.is_galaxy_public = payload.is_galaxy_public
     db.commit()
     db.refresh(current_user)
     return current_user

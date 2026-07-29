@@ -289,6 +289,12 @@ def vote_on_dream(
 
 # --- 💬 자유 광장: 꿈과 무관한 자유 게시글 -----------------------------------
 
+# 커뮤니티 헤더 "주파수 필터"가 사용하는 슬러그 - 일기장 꿈 씨앗(DREAM_SEEDS)과 1:1로 대응한다.
+# 필터/정렬은 이 컬럼(공개 게시글에 스스로 붙인 태그)만 조회한다 - 다른 유저의 비공개 일지를
+# 서버가 집계해서 정렬하는 방식은 쓰지 않는다.
+PUBLIC_TAG_OPTIONS = {"rest", "growth", "healing", "adventure"}
+MAX_PUBLIC_TAGS = 3
+
 
 class CommunityPostInput(BaseModel):
     title: str = Field(min_length=1, max_length=200)
@@ -296,6 +302,18 @@ class CommunityPostInput(BaseModel):
     is_anonymous: bool = False
     # /api/community/images로 미리 업로드해 받은 R2 공개 URL 목록 - 게시 시점에 함께 저장한다.
     image_urls: list[str] = Field(default_factory=list)
+    # ?template=galaxy 글쓰기에서 고른 주파수 태그 - 일반 자유 글은 빈 배열로 둬도 된다.
+    public_tags: list[str] = Field(default_factory=list)
+
+    @field_validator("public_tags")
+    @classmethod
+    def _validate_public_tags(cls, value: list[str]) -> list[str]:
+        if len(value) > MAX_PUBLIC_TAGS:
+            raise ValueError(f"주파수 태그는 최대 {MAX_PUBLIC_TAGS}개까지 선택할 수 있습니다.")
+        invalid = set(value) - PUBLIC_TAG_OPTIONS
+        if invalid:
+            raise ValueError(f"허용되지 않은 주파수 태그입니다: {sorted(invalid)}")
+        return value
 
     @field_validator("image_urls")
     @classmethod
@@ -317,6 +335,7 @@ class CommunityPostResponse(BaseModel):
     comment_count: int
     created_at: str
     image_urls: list[str] = []
+    public_tags: list[str] = []
     # 상세 조회(get_community_post)에서만 어뷰징 방지 로직을 거쳐 증가한다 - 목록/생성/수정
     # 응답은 그 시점의 현재 값을 그대로 내려줄 뿐 증가시키지 않는다.
     view_count: int = 0
@@ -376,6 +395,7 @@ def _build_post_entries(
                 "comment_count": _post_comment_count(db, post.id),
                 "created_at": post.created_at.isoformat(),
                 "image_urls": post.image_urls or [],
+                "public_tags": post.public_tags or [],
                 "view_count": post.view_count,
                 "is_mine": current_user_id is not None and post.user_id == current_user_id,
             }
@@ -385,10 +405,18 @@ def _build_post_entries(
 
 @router.get("/posts", response_model=list[CommunityPostResponse])
 def list_community_posts(
+    tag: str | None = None,
     current_user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ) -> list[dict]:
-    posts = db.query(CommunityPost).order_by(CommunityPost.created_at.desc()).limit(POST_FEED_LIMIT).all()
+    """자유 광장 목록 - ?tag=healing처럼 넘기면 그 주파수 태그를 스스로 붙인 공개 글만 남긴다.
+    다른 유저의 비공개 일지를 집계해 정렬하지 않고, 오직 CommunityPost.public_tags만 본다."""
+    query = db.query(CommunityPost)
+    if tag:
+        if tag not in PUBLIC_TAG_OPTIONS:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="알 수 없는 주파수 태그입니다.")
+        query = query.filter(CommunityPost.public_tags.any(tag))
+    posts = query.order_by(CommunityPost.created_at.desc()).limit(POST_FEED_LIMIT).all()
     my_votes = _my_post_votes(db, current_user, posts) if current_user else {}
     return _build_post_entries(db, posts, my_votes, current_user.id if current_user else None)
 
@@ -457,6 +485,7 @@ def create_community_post(
         content=content,
         is_anonymous=payload.is_anonymous,
         image_urls=payload.image_urls,
+        public_tags=payload.public_tags,
     )
     db.add(post)
     db.commit()
@@ -473,6 +502,7 @@ def create_community_post(
         "comment_count": 0,
         "created_at": post.created_at.isoformat(),
         "image_urls": post.image_urls or [],
+        "public_tags": post.public_tags or [],
         "view_count": 0,
         "is_mine": True,
     }
@@ -502,6 +532,7 @@ def update_community_post(
     post.title = title
     post.content = content
     post.is_anonymous = payload.is_anonymous
+    post.public_tags = payload.public_tags
     db.commit()
     db.refresh(post)
     up, down = _post_vote_counts(db, post.id)
@@ -517,6 +548,7 @@ def update_community_post(
         "comment_count": _post_comment_count(db, post.id),
         "created_at": post.created_at.isoformat(),
         "image_urls": post.image_urls or [],
+        "public_tags": post.public_tags or [],
         "view_count": post.view_count,
         "is_mine": True,
     }
@@ -536,6 +568,91 @@ def delete_community_post(
 
     db.delete(post)
     db.commit()
+
+
+# --- 🌌 무의식 은하 프로필: 커뮤니티 닉네임 호버 카드 -------------------------
+# 유저가 마이페이지에서 직접 공개(is_galaxy_public=True)로 켜야만 값이 채워진다. 원문
+# 텍스트(일기 본문, AI 해몽 설명 등)는 절대 포함하지 않고, 씨앗 비율 숫자와 뱃지 코드만 낸다.
+
+DREAM_SEED_TAGS = [
+    "🌿 비워내기 (차분한 휴식)",
+    "🔥 성장하기 (자신감과 용기)",
+    "💜 치유하기 (위로와 평온)",
+    "✨ 모험하기 (새로운 영감)",
+]
+
+
+class SeedRatio(BaseModel):
+    seed: str
+    ratio: float
+
+
+class GalaxyProfileResponse(BaseModel):
+    is_public: bool
+    seed_ratios: list[SeedRatio] | None = None
+    badge_ids: list[str] | None = None
+
+
+def _compute_badge_ids(user_id: int, db: Session) -> list[str]:
+    """/api/user/stats의 뱃지 판정 기준을 그대로 재사용하되, 코드만 뽑는 경량 버전."""
+    dream_count = db.query(DreamEntry).filter(DreamEntry.user_id == user_id).count()
+    lucid_count = db.query(DreamEntry).filter(DreamEntry.user_id == user_id, DreamEntry.is_lucid.is_(True)).count()
+    post_count = db.query(CommunityPost).filter(CommunityPost.user_id == user_id).count()
+    comment_count = db.query(CommunityComment).filter(CommunityComment.user_id == user_id).count()
+
+    my_dream_ids = [row[0] for row in db.query(DreamEntry.id).filter(DreamEntry.user_id == user_id).all()]
+    empathy_on_dreams = (
+        db.query(Interaction)
+        .filter(Interaction.dream_entry_id.in_(my_dream_ids), Interaction.type == InteractionType.LIKE)
+        .count()
+        if my_dream_ids
+        else 0
+    )
+    my_post_ids = [row[0] for row in db.query(CommunityPost.id).filter(CommunityPost.user_id == user_id).all()]
+    empathy_on_posts = (
+        db.query(CommunityPostReaction)
+        .filter(CommunityPostReaction.post_id.in_(my_post_ids), CommunityPostReaction.is_upvote.is_(True))
+        .count()
+        if my_post_ids
+        else 0
+    )
+    empathy_received = empathy_on_dreams + empathy_on_posts
+
+    codes: list[str] = []
+    if lucid_count >= 1:
+        codes.append("FIRST_LUCID")
+    if dream_count >= 10:
+        codes.append("DREAM_MASTER")
+    if (post_count + comment_count) >= 5 or empathy_received >= 10:
+        codes.append("COMMUNITY_STAR")
+    return codes
+
+
+@router.get("/profiles/{nickname}/galaxy", response_model=GalaxyProfileResponse)
+def get_galaxy_profile(nickname: str, db: Session = Depends(get_db)) -> dict:
+    """호버 카드 전용 조회 - user_id가 아니라 이미 공개돼 있는 닉네임으로만 찾는다. 이 라우터의
+    다른 응답들과 마찬가지로 user_id는 절대 노출하지 않는다는 원칙을 그대로 지킨다."""
+    user = db.query(User).filter(User.nickname == nickname).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="유저를 찾을 수 없습니다.")
+    if not user.is_galaxy_public:
+        return {"is_public": False}
+
+    diary_entries = (
+        db.query(DreamEntry).filter(DreamEntry.user_id == user.id, DreamEntry.interpretation.is_(None)).all()
+    )
+    total = len(diary_entries)
+    counts = {seed: 0 for seed in DREAM_SEED_TAGS}
+    for entry in diary_entries:
+        for tag in entry.tags or []:
+            if tag in counts:
+                counts[tag] += 1
+                break
+
+    seed_ratios = [
+        {"seed": seed, "ratio": round(count / total, 4) if total else 0.0} for seed, count in counts.items()
+    ]
+    return {"is_public": True, "seed_ratios": seed_ratios, "badge_ids": _compute_badge_ids(user.id, db)}
 
 
 @router.post("/posts/{post_id}/vote", response_model=VoteResponse)
