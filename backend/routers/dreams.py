@@ -16,7 +16,12 @@ from sqlalchemy.orm import Session
 
 from database import get_db, get_redis
 from models import DreamEntry, DreamStatus, Interaction, InteractionType, User
-from routers.ai_interpretation import CounselingReportInput, DreamSurveyInput
+from routers.ai_interpretation import (
+    CounselingReportInput,
+    DreamSurveyInput,
+    build_quick_system_prompt,
+    request_interpretation,
+)
 from routers.auth import get_current_user, get_current_user_optional
 from view_tracking import should_count_view
 
@@ -259,6 +264,26 @@ def update_dream(
 ):
     entry = _get_owned_entry(dream_id, current_user, db)
     _apply_input(entry, payload)
+    db.commit()
+    db.refresh(entry)
+    return _to_response(entry)
+
+
+@router.post("/{dream_id}/interpretation", response_model=DreamEntryResponse)
+def analyze_existing_dream(
+    dream_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """해몽 없이 저장된 기록(무의식 광장 "직접 쓰기"/나만의 일기장)에 사후적으로 AI 해몽을 붙인다.
+    이미 해몽이 있는 기록은 재해몽 대상이 아니므로 막는다 - 이 기능은 "없던 걸 채우는" 용도다."""
+    entry = _get_owned_entry(dream_id, current_user, db)
+    if entry.interpretation is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 AI 해몽이 있는 기록이에요.")
+
+    static_block, data_block = build_quick_system_prompt(entry.title, entry.survey.get("action_detail", ""))
+    result = request_interpretation(static_block, data_block)
+    entry.interpretation = AiInterpretationPayload(**result).model_dump()
     db.commit()
     db.refresh(entry)
     return _to_response(entry)

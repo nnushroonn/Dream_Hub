@@ -254,6 +254,13 @@ export async function deleteDream(id: number): Promise<void> {
   await api.delete(`/api/dreams/${id}`);
 }
 
+// 해몽 없이 저장된 기록(무의식 광장 "직접 쓰기"/나만의 일기장)에 사후적으로 AI 해몽을 붙인다.
+// 이미 해몽이 있으면 서버가 400으로 거절한다.
+export async function requestPostInterpretation(id: number): Promise<DreamEntryRecord> {
+  const { data } = await api.post<DreamEntryRecord>(`/api/dreams/${id}/interpretation`);
+  return data;
+}
+
 // 이미 저장된 기록의 공개 범위만 바꾼다 (AI 재분석 없음) - survey/interpretation은 그대로 재사용하고
 // is_public/is_anonymous/share_with_ai_analysis만 교체해 updateDream을 호출한다. 꿈 기록소 상세 보기와
 // 커뮤니티 페이지의 "내 꿈 공유하기" 둘 다 이 함수 하나를 공유한다.
