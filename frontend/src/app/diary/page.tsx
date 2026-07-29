@@ -106,6 +106,20 @@ function isMinimalEntry(survey: DreamSurvey): boolean {
   return !hasStructuredAnswers && Boolean(survey.action_detail);
 }
 
+// ✍️ 나만의 일기장 전용 감정 스티커 - 꿈의 분위기(MOOD_OPTIONS, 악몽/길몽 버킷 포함)가 아니라
+// 일상 회고에 어울리는 톤으로 별도 구성한다. DreamEntry.emotion 컬럼을 그대로 재사용하므로
+// 백엔드 변경은 필요 없다.
+const DIARY_MOOD_OPTIONS = [
+  { emoji: "😊", label: "행복" },
+  { emoji: "🥰", label: "설렘" },
+  { emoji: "😐", label: "평온" },
+  { emoji: "🥱", label: "지침" },
+  { emoji: "😢", label: "슬픔" },
+  { emoji: "😡", label: "짜증" },
+  { emoji: "🤔", label: "혼란" },
+  { emoji: "🥳", label: "신남" },
+];
+
 export default function DiaryPage() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -720,7 +734,11 @@ export default function DiaryPage() {
 
       <main className="relative mx-auto max-w-5xl px-6 py-12">
         <h1 className="text-2xl font-semibold text-white">꿈 기록소</h1>
-        <p className="mt-1 text-sm text-slate-400">지난밤의 꿈을 기록하고, AI에게 해몽을 받아보세요.</p>
+        <p className="mt-1 text-sm text-slate-400">
+          {topSection === "DIARY"
+            ? "오늘 하루의 일상과 감정을 정돈해 보세요."
+            : "지난밤의 꿈을 기록하고, AI에게 해몽을 받아보세요."}
+        </p>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,360px)_1fr] lg:items-start">
           {/* 좌측: 꿈 별자리 캘린더 & 출석 체크 */}
@@ -737,7 +755,14 @@ export default function DiaryPage() {
               <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur-md">
                 <button
                   type="button"
-                  onClick={() => setTopSection("DREAM")}
+                  onClick={() => {
+                    setTopSection("DREAM");
+                    // 일기장 전용 스티커를 고른 채로 넘어오면 꿈 분위기 세트엔 없는 이모지라
+                    // 아무 것도 선택되지 않은 것처럼 보인다 - 기본값(평온)으로 되돌린다.
+                    if (!MOOD_OPTIONS.some((option) => option.emoji === mood)) {
+                      setMood(MOOD_OPTIONS[3].emoji);
+                    }
+                  }}
                   className={`rounded-xl px-3 py-3 text-sm font-semibold transition-all duration-200 ${
                     topSection === "DREAM"
                       ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]"
@@ -748,7 +773,12 @@ export default function DiaryPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTopSection("DIARY")}
+                  onClick={() => {
+                    setTopSection("DIARY");
+                    if (!DIARY_MOOD_OPTIONS.some((option) => option.emoji === mood)) {
+                      setMood(DIARY_MOOD_OPTIONS[0].emoji);
+                    }
+                  }}
                   className={`rounded-xl px-3 py-3 text-sm font-semibold transition-all duration-200 ${
                     topSection === "DIARY"
                       ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]"
@@ -781,7 +811,9 @@ export default function DiaryPage() {
               <button
                 type="button"
                 onClick={startNewToday}
-                className="shrink-0 rounded-full border border-violet-400/30 bg-violet-500/10 px-3.5 py-2 text-xs font-medium text-violet-200 transition-colors hover:border-violet-400/60 hover:bg-violet-500/20"
+                className={`shrink-0 rounded-full border border-violet-400/30 bg-violet-500/10 px-3.5 py-2 text-xs font-medium text-violet-200 transition-colors hover:border-violet-400/60 hover:bg-violet-500/20 ${
+                  topSection === "DIARY" ? "hidden" : ""
+                }`}
               >
                 ➕ 오늘 다른 꿈 추가 기록
               </button>
@@ -942,7 +974,7 @@ export default function DiaryPage() {
                 <div className="mt-5">
                   <label className="text-xs text-indigo-300/70">오늘 나의 감정 스티커</label>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {MOOD_OPTIONS.map((option) => (
+                    {DIARY_MOOD_OPTIONS.map((option) => (
                       <button
                         key={option.emoji}
                         type="button"
@@ -961,19 +993,12 @@ export default function DiaryPage() {
                 </div>
 
                 <div className="mt-5">
-                  <label className="text-xs text-indigo-300/70">오늘 하루는 어땠나요?</label>
-
-                  <p className="mt-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs leading-relaxed text-slate-400">
-                    있었던 일, 만난 사람, 느꼈던 감정을 편하게 적어보세요. AI 해몽 없이 나만 볼 수 있는
-                    순수한 일기예요 - 나중에 원하면 상세 보기에서 언제든 AI 꿈해몽을 받아볼 수 있어요.
-                  </p>
-
                   <textarea
                     value={quickText}
                     onChange={(event) => setQuickText(event.target.value)}
-                    placeholder="오늘 하루를 자유롭게 적어보세요..."
+                    placeholder="오늘 하루 있었던 일이나 느낀 감정을 자유롭게 적어보세요. (작성 후 언제든 AI 해몽을 요청할 수 있습니다)"
                     rows={7}
-                    className="mt-1.5 w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-slate-500/60 focus:border-violet-400/60 focus:outline-none"
+                    className="w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-slate-500/60 focus:border-violet-400/60 focus:outline-none"
                   />
                 </div>
 
