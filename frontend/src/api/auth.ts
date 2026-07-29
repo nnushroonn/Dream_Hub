@@ -77,6 +77,10 @@ export interface UserStats {
   empathy_received: number;
   level: number;
   level_title: string;
+  // 레벨 게이지에 "2,450 / 3,000 XP"처럼 실제 수치를 보여주기 위한 값. next_level_threshold가
+  // null이면 이미 최고 레벨(만렙)이라 게이지는 항상 꽉 찬 상태로 그린다.
+  points: number;
+  next_level_threshold: number | null;
   badges: BadgeInfo[];
 }
 

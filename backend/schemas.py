@@ -107,4 +107,8 @@ class UserStatsResponse(BaseModel):
     empathy_received: int
     level: int
     level_title: str
+    # 마이페이지 레벨 게이지가 "2,450 / 3,000 XP"처럼 실제 수치를 보여줄 수 있도록 노출한다.
+    # next_level_threshold가 None이면 이미 최고 레벨(만렙) 상태.
+    points: int
+    next_level_threshold: int | None
     badges: list[BadgeInfo]

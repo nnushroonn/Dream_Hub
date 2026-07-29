@@ -15,6 +15,15 @@
   --animate-twinkle: twinkle 3.5s ease-in-out infinite;
   --animate-aurora: aurora-float 14s ease-in-out infinite;
   --animate-shine: shine 3s linear infinite;
+  --animate-spin-slow: spin-slow 6s linear infinite;
+}
+
+/* 마이페이지 레벨 칭호 옆 별무리 아이콘 - animate-spin(1s)은 너무 빨라 "미세하게 회전"하는
+   느낌을 못 살려서 훨씬 느린 전용 키프레임을 둔다. */
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes twinkle {

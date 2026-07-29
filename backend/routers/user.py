@@ -57,12 +57,14 @@ _LEVEL_TIERS: list[tuple[int, str]] = [
 ]
 
 
-def _compute_level(points: int) -> tuple[int, str]:
+def _compute_level(points: int) -> tuple[int, str, int | None]:
     level, title = 1, _LEVEL_TIERS[0][1]
+    next_threshold: int | None = _LEVEL_TIERS[1][0] if len(_LEVEL_TIERS) > 1 else None
     for index, (threshold, name) in enumerate(_LEVEL_TIERS):
         if points >= threshold:
             level, title = index + 1, name
-    return level, title
+            next_threshold = _LEVEL_TIERS[index + 1][0] if index + 1 < len(_LEVEL_TIERS) else None
+    return level, title, next_threshold
 
 
 @router.get("/stats", response_model=UserStatsResponse)
@@ -98,7 +100,7 @@ def get_user_stats(current_user: User = Depends(get_current_user), db: Session =
     empathy_received = empathy_on_dreams + empathy_on_posts
 
     points = dream_count * 10 + public_dream_count * 5 + empathy_received * 3 + post_count * 5 + comment_count * 2
-    level, level_title = _compute_level(points)
+    level, level_title, next_level_threshold = _compute_level(points)
 
     badges = [
         {"code": "FIRST_LUCID", "label": "첫 자각몽 성공", "emoji": "🌌", "earned": lucid_count >= 1},
@@ -120,5 +122,7 @@ def get_user_stats(current_user: User = Depends(get_current_user), db: Session =
         "empathy_received": empathy_received,
         "level": level,
         "level_title": level_title,
+        "points": points,
+        "next_level_threshold": next_level_threshold,
         "badges": badges,
     }
