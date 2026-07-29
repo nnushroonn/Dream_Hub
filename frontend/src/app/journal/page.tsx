@@ -55,6 +55,56 @@ const BUCKET_CHIP: Record<string, string> = {
   nightmare: "😨 악몽",
 };
 
+// 꿈 씨앗 - 오늘의 일기가 오늘 밤 무의식에 심어줄 기운을 고르는, 저장과 무관한 리추얼용
+// 단일 선택 칩. 별도 DB 컬럼이 없어 서버에는 저장하지 않고, 글쓰기 세션 동안만 유지된다.
+const DREAM_SEEDS = [
+  "🌿 비워내기 (차분한 휴식)",
+  "🔥 성장하기 (자신감과 용기)",
+  "💜 치유하기 (위로와 평온)",
+  "✨ 모험하기 (새로운 영감)",
+];
+
+// 본문 길이(최대 60%)와 꿈 씨앗 선택 여부(40%)로 계산하는 "무의식 준비도" - 저장 가능 여부와는
+// 무관한 리추얼 지표라, 100%가 안 돼도 저장 버튼은 그대로 눌린다.
+function dreamReadiness(bodyLength: number, hasSeed: boolean): number {
+  const bodyProgress = Math.min(bodyLength / 150, 1) * 60;
+  return Math.round(bodyProgress + (hasSeed ? 40 : 0));
+}
+
+function ReadinessRing({ percent }: { percent: number }) {
+  const radius = 16;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percent / 100) * circumference;
+  return (
+    <div className="relative h-10 w-10 shrink-0">
+      <svg viewBox="0 0 40 40" className="h-10 w-10 -rotate-90">
+        <circle cx="20" cy="20" r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
+        <circle
+          cx="20"
+          cy="20"
+          r={radius}
+          fill="none"
+          stroke="url(#journal-readiness-gradient)"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="transition-all duration-700 ease-out"
+        />
+        <defs>
+          <linearGradient id="journal-readiness-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#a855f7" />
+            <stop offset="100%" stopColor="#6366f1" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-[9px] font-medium text-purple-200">
+        {percent}%
+      </span>
+    </div>
+  );
+}
+
 // 같은 날짜의 기록을 "꿈(해몽 완료)"과 "일기(해몽 없음)" 두 갈래로 묶는다. DB에 type 컬럼이
 // 따로 없어서, interpretation 유무만으로 갈래를 나눈다 - 한 날짜에 둘 다 있으면 "통합"이다.
 interface DateGroup {
@@ -111,8 +161,10 @@ export default function DailyJournalPage() {
   const [title, setTitle] = useState("");
   const [mood, setMood] = useState(JOURNAL_MOOD_OPTIONS[0].emoji);
   const [body, setBody] = useState("");
+  const [dreamSeed, setDreamSeed] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const readiness = dreamReadiness(body.trim().length, dreamSeed !== null);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
@@ -124,6 +176,7 @@ export default function DailyJournalPage() {
     setTitle("");
     setMood(JOURNAL_MOOD_OPTIONS[0].emoji);
     setBody("");
+    setDreamSeed(null);
     setSaveError(null);
   };
 
@@ -134,6 +187,7 @@ export default function DailyJournalPage() {
     setTitle(entry.title);
     setMood(entry.emotion);
     setBody(entry.survey.action_detail);
+    setDreamSeed(null);
     setSaveError(null);
   };
 
@@ -281,9 +335,19 @@ export default function DailyJournalPage() {
                 {viewMode === "write" ? (
                   // ✍️ 작성/수정 폼 - 단일 그리드로 와이드하게. AI 호출 없이 제목+감정+본문만 저장한다.
                   <div className="mx-auto max-w-2xl">
-                    <h2 className="text-lg font-semibold text-white">
-                      {editingEntry ? "일기 수정하기" : "오늘 일기 쓰기"}
-                    </h2>
+                    <div className="flex items-start justify-between gap-3">
+                      <h2 className="text-lg font-semibold text-white">
+                        {editingEntry ? "일기 수정하기" : "오늘 일기 쓰기"}
+                      </h2>
+                      <div className="flex flex-col items-center gap-1">
+                        <ReadinessRing percent={readiness} />
+                        {readiness >= 100 && (
+                          <span className="w-24 text-center text-[9px] leading-tight text-purple-300">
+                            ✨ 좋은 꿈을 꿀 준비가 완료되었습니다
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
                     <div className="mt-5">
                       <label className="text-xs text-indigo-300/70">날짜</label>
@@ -338,6 +402,29 @@ export default function DailyJournalPage() {
                       />
                     </div>
 
+                    {/* 꿈 씨앗 선택 - 저장과 무관한 리추얼. 오늘 밤 무의식에 심고 싶은 기운을 하나 고른다. */}
+                    <div className="mt-5">
+                      <p className="font-serif text-xs text-purple-400/80">
+                        오늘 밤, 당신의 무의식에 어떤 기운을 심고 싶나요?
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {DREAM_SEEDS.map((seed) => (
+                          <button
+                            key={seed}
+                            type="button"
+                            onClick={() => setDreamSeed(dreamSeed === seed ? null : seed)}
+                            className={`rounded-full border px-3 py-1.5 text-xs transition-all duration-300 ${
+                              dreamSeed === seed
+                                ? "border-purple-400/60 bg-gradient-to-r from-purple-500/25 to-indigo-500/25 text-white shadow-[0_0_12px_rgba(168,85,247,0.3)]"
+                                : "border-white/10 bg-white/5 text-slate-400 hover:border-purple-400/30 hover:text-slate-200"
+                            }`}
+                          >
+                            {seed}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {saveError && <p className="mt-3 text-xs text-red-300">{saveError}</p>}
 
                     <div className="mt-6 flex gap-3">
@@ -356,7 +443,7 @@ export default function DailyJournalPage() {
                         disabled={isSaving || !title.trim() || !body.trim()}
                         className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {isSaving ? "저장 중..." : "💾 저장하기"}
+                        {isSaving ? "저장 중..." : "🌌 오늘을 갈무리하고, 좋은 꿈 씨앗 심기"}
                       </button>
                     </div>
                   </div>
@@ -397,7 +484,9 @@ export default function DailyJournalPage() {
                               </p>
                             </div>
                           ) : (
-                            <p className="mt-6 text-xs text-slate-600">이 날의 일상 일기는 없어요.</p>
+                            <p className="mt-6 text-xs leading-relaxed text-slate-600">
+                              아직 오늘의 현실이 기록되지 않았습니다. 마음을 정돈하고 아름다운 밤을 준비해 보세요.
+                            </p>
                           )}
                         </div>
 
