@@ -306,7 +306,7 @@ export default function CommunityPage() {
                                   <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-slate-950 to-transparent" />
                                 </div>
                               )}
-                              <p className="mt-1 text-[11px] text-slate-500">
+                              <div className="mt-1 text-[11px] text-slate-500">
                                 {dream.is_anonymous ? (
                                   "🎭 익명의 탐험가"
                                 ) : (
@@ -317,7 +317,7 @@ export default function CommunityPage() {
                                 · {dream.dream_date}
                                 {" "}
                                 · 조회 {dream.view_count}
-                              </p>
+                              </div>
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-3">
@@ -459,7 +459,7 @@ export default function CommunityPage() {
                               <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-slate-950 to-transparent" />
                             </div>
                           )}
-                          <p className="mt-1 text-[11px] text-slate-500">
+                          <div className="mt-1 text-[11px] text-slate-500">
                             {post.is_anonymous ? (
                               "🎭 익명의 탐험가"
                             ) : (
@@ -470,7 +470,7 @@ export default function CommunityPage() {
                             · {formatPostTime(post.created_at)}
                             {" "}
                             · 조회 {post.view_count}
-                          </p>
+                          </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-3">
                           {post.is_mine && (
