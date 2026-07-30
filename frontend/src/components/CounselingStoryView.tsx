@@ -194,8 +194,9 @@ export default function CounselingStoryView({ report, tags, onSave, isSaving, sa
       </button>
 
       {/* 슬라이드 콘텐츠: 드래그 스와이프로도 컷을 넘길 수 있다. 텍스트 길이가 달라도
-          뷰포트가 덜컹거리지 않도록 min-h를 고정하고, 좌우 화살표에 텍스트가 가리지 않도록 px-8을 둔다. */}
-      <div className="relative flex min-h-[400px] flex-1 items-center overflow-hidden px-8 py-8">
+          뷰포트가 덜컹거리지 않도록 min-h를 고정하고, 좌우 화살표(left-2/right-2, w-8)와
+          겹치지 않도록 화살표 폭+여백을 완전히 덮는 px-12를 둔다. */}
+      <div className="relative flex min-h-[400px] flex-1 items-center overflow-hidden px-12 py-8">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={step}
