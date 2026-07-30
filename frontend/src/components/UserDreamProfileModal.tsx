@@ -47,15 +47,17 @@ export default function UserDreamProfileModal({ nickname, children }: UserDreamP
     >
       {children}
 
+      {/* 이 카드가 호출부(커뮤니티 목록의 <p> 안)에 인라인으로 박히는 경우가 있어, 여기서는
+          <p>가 아니라 전부 <div>/<span>만 쓴다 - <p> 안에 <p>가 들어가면 하이드레이션 에러가 난다. */}
       <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-[320px] rounded-2xl border border-purple-500/30 bg-slate-950/90 p-4 opacity-0 shadow-[0_0_30px_rgba(0,0,0,0.5)] backdrop-blur-lg transition-opacity duration-200 group-hover:opacity-100">
-        <p className="text-xs font-semibold text-purple-200">🌌 {nickname}의 무의식 은하</p>
+        <div className="text-xs font-semibold text-purple-200">🌌 {nickname}의 무의식 은하</div>
 
-        {isLoading && <p className="mt-4 text-xs text-slate-500">불러오는 중...</p>}
+        {isLoading && <div className="mt-4 text-xs text-slate-500">불러오는 중...</div>}
 
         {!isLoading && profile && !profile.is_public && (
           <div className="mt-2 flex flex-col items-center py-5 text-center">
             <span className="text-2xl">🔒</span>
-            <p className="mt-2 text-xs leading-relaxed text-slate-400">아직 공개되지 않은 은하계예요.</p>
+            <div className="mt-2 text-xs leading-relaxed text-slate-400">아직 공개되지 않은 은하계예요.</div>
           </div>
         )}
 
