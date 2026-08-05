@@ -7,10 +7,11 @@
 
 import json
 import logging
+from typing import Literal
 
 import anthropic
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from database import get_settings
 
@@ -206,7 +207,7 @@ SYSTEM_PROMPT_DATA_TEMPLATE = """[유저의 6단계 무의식 데이터 리포�
 3. 시선을 끈 핵심 대상 (Target Factor): {identity_factor} — 상세 묘사: {target_detail}
 4. 무의식 속 핵심 행동 (Action & Physics): {action_physics} — 상세 묘사: {action_detail}
 5. 현실과의 공명 (Reality Resonance): {reality_link} — 상세 서술: {reality_detail}
-6. 차원 제어 지수 (Vividness & Lucid): 선명도 {vividness}%, 자각몽 여부 {is_lucid}, 추가 잔상 메모: {final_memo}"""
+6. 차원 제어 지수 (Vividness & Lucid): 선명도 {vividness}%, 자각몽 수준 {lucid_level}{control_level_note}, 추가 잔상 메모: {final_memo}"""
 
 QUICK_SYSTEM_PROMPT_STATIC = """당신은 깊은 통찰력과 감성적인 언어 해설 능력을 겸비한 세계 최고의 심층 심리학자이자 꿈 분석 전문가(Dream Analyst)입니다. 프로이트, 융, 아들러, 게슈탈트 심리학 등 여러 학파에 두루 정통하며, 곧이어 주어지는 유저가 형식 없이 자유롭게 적은 꿈 서술 한 편을 분석해 신뢰감 있고 몽환적인 꿈해몽 보고서를 작성해야 합니다.
 
@@ -241,8 +242,20 @@ class DreamSurveyInput(BaseModel):
     reality_link: str
     reality_detail: str
     vividness: int
-    is_lucid: bool
+    # 자각의 정도 - 기존 단순 on/off 토글(is_lucid)을 대신한다. "감독 모드"처럼 세부 통제력까지
+    # 물으려면 최소한 순간적으로라도 자각은 했어야 하므로, control_level은 lucid_level이
+    # "momentary"/"full"일 때만 의미가 있다.
+    lucid_level: Literal["none", "momentary", "full"] = "none"
+    control_level: Literal["director", "observer", "lost_control"] | None = None
     final_memo: str
+
+    @field_validator("control_level")
+    @classmethod
+    def _clear_control_level_when_not_lucid(cls, value, info):
+        # 프론트가 실수로 값을 남겨 보내도, 일반 꿈(lucid_level="none")이면 서버가 조용히 무효화한다.
+        if info.data.get("lucid_level") == "none":
+            return None
+        return value
 
 
 # routers/dreams.py의 저장 payload가 이 모델을 그대로 재사용한다 - AI 응답의 counseling_report와
@@ -269,9 +282,16 @@ class QuickDreamInterpretationRequest(BaseModel):
 # --- 비즈니스 로직: 프롬프트 주입 / Claude 호출 -----------------------------
 
 
+_LUCID_LEVEL_LABEL = {"none": "일반 꿈(자각 없음)", "momentary": "순간적 자각", "full": "완벽한 자각몽"}
+_CONTROL_LEVEL_LABEL = {"director": "감독 모드(적극적 통제)", "observer": "관찰자/참여자 모드", "lost_control": "통제 상실"}
+
+
 def build_system_prompt(survey: DreamSurveyInput) -> tuple[str, str]:
     """6단계 문답 응답을 (캐시 가능한 STATIC 블록, 매번 바뀌는 DATA 블록) 튜플로 나눠 반환한다."""
     static_block = SYSTEM_PROMPT_STATIC.format(expert_matrix=EXPERT_MATRIX_BLOCK, counseling_block=COUNSELING_REPORT_BLOCK)
+    control_level_note = (
+        f", 꿈 통제력 {_CONTROL_LEVEL_LABEL[survey.control_level]}" if survey.control_level is not None else ""
+    )
     data_block = SYSTEM_PROMPT_DATA_TEMPLATE.format(
         title=survey.title,
         brightness=survey.brightness,
@@ -284,7 +304,8 @@ def build_system_prompt(survey: DreamSurveyInput) -> tuple[str, str]:
         reality_link=survey.reality_link,
         reality_detail=survey.reality_detail,
         vividness=survey.vividness,
-        is_lucid="True" if survey.is_lucid else "False",
+        lucid_level=_LUCID_LEVEL_LABEL[survey.lucid_level],
+        control_level_note=control_level_note,
         final_memo=survey.final_memo or "(없음)",
     )
     return static_block, data_block

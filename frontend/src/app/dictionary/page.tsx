@@ -16,6 +16,8 @@ import type { DictionaryEntry, DreamScenario, RecentDreamTitle, ScenarioDetail, 
 import NavBar from "@/components/NavBar";
 import { ALL_DICTIONARY_WORDS, BASIC_CHOSEONG, DICTIONARY_CATEGORIES } from "@/lib/dictionaryCategories";
 import { getChoseong } from "@/lib/hangul";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useLoginModalStore } from "@/store/useLoginModalStore";
 
 // 홈/꿈 기록소와 완전히 분리된 페이지 - 여기서 쓰는 모든 상태(검색어, 결과, 트렌드 등)는
 // 이 컴포넌트 트리 밖으로 절대 새어나가지 않는다.
@@ -101,6 +103,8 @@ function HighlightedTitle({ title, keyword }: { title: string; keyword: string }
 
 export default function DictionaryPage() {
   const router = useRouter();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const openLoginModal = useLoginModalStore((state) => state.open);
 
   const [query, setQuery] = useState("");
   const [activeChoseong, setActiveChoseong] = useState<string | null>(null);
@@ -644,7 +648,15 @@ export default function DictionaryPage() {
                       targetChip: target.chip,
                     });
                     if (target.other) params.set("targetOther", target.other);
-                    router.push(`/diary?${params.toString()}`);
+                    const destination = `/diary?${params.toString()}`;
+
+                    if (!isAuthenticated) {
+                      // 로그인만 끝나면(이메일/비밀번호는 그 자리에서, 구글 OAuth는 홈을 거쳐)
+                      // 지금 고른 상징 데이터를 그대로 들고 일기 작성 폼으로 이어서 이동한다.
+                      openLoginModal({ onSuccess: () => router.push(destination), redirectPath: destination, triggerSource: "diary" });
+                      return;
+                    }
+                    router.push(destination);
                   }}
                   className="mt-6 w-full rounded-full border border-violet-400/40 bg-violet-500/15 px-5 py-2.5 text-sm font-semibold text-violet-100 transition-transform hover:-translate-y-0.5"
                 >

@@ -19,6 +19,7 @@ export function buildDayEntryMap(entries: DreamEntryRecord[], monthKey: string):
       date: entry.dream_date,
       tooltip: entry.title,
       emoji: entry.emotion,
+      createdAt: entry.created_at,
     };
     const existing = map.get(day);
     if (existing) existing.push(summary);

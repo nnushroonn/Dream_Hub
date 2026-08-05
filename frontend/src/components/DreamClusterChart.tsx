@@ -11,8 +11,8 @@ interface SeedStat {
 // 차트 라이브러리 없이도 은은하게 빛나는 성운처럼 보이게 한다.
 export default function DreamClusterChart({ seedStats }: { seedStats: SeedStat[] }) {
   const total = seedStats.reduce((sum, stat) => sum + stat.count, 0);
-  const radius = 70;
-  const strokeWidth = 22;
+  const radius = 60;
+  const strokeWidth = 18;
   const circumference = 2 * Math.PI * radius;
 
   let cumulative = 0;
@@ -25,8 +25,11 @@ export default function DreamClusterChart({ seedStats }: { seedStats: SeedStat[]
   });
 
   return (
-    <div className="flex flex-col items-center gap-8 sm:flex-row sm:justify-center">
-      <div className="relative h-48 w-48 shrink-0">
+    // 이 카드가 항상 좁은 컬럼(lg:col-span-1) 안에 놓이게 되면서, 도넛과 범례를 가로로
+    // 나란히 두면 범례 폭이 너무 좁아져 텍스트가 한 글자씩 세로로 쪼개지는 문제가 있었다 -
+    // 폭에 흔들리지 않도록 아예 세로로 쌓아 차트는 상단 중앙에, 범례는 그 아래 전체 폭으로 둔다.
+    <div className="flex flex-col items-center gap-5">
+      <div className="relative h-36 w-36 shrink-0">
         {/* 글로우 레이어 */}
         <svg viewBox="0 0 200 200" className="absolute inset-0 -rotate-90 opacity-60 blur-xl" aria-hidden>
           {total === 0 ? (
@@ -80,15 +83,15 @@ export default function DreamClusterChart({ seedStats }: { seedStats: SeedStat[]
         </div>
       </div>
 
-      <ul className="flex w-full max-w-xs flex-col gap-2.5 sm:w-auto">
+      <ul className="flex w-full flex-col gap-2.5">
         {segments.map((seg) => (
           <li key={seg.seed} className="flex items-center gap-2.5 text-xs text-slate-300">
             <span
               className="h-2.5 w-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: DREAM_SEED_COLOR[seg.seed], boxShadow: `0 0 8px ${DREAM_SEED_COLOR[seg.seed]}` }}
             />
-            <span className="flex-1">{seg.seed}</span>
-            <span className="shrink-0 text-slate-500">
+            <span className="flex-1 truncate">{seg.seed}</span>
+            <span className="shrink-0 whitespace-nowrap text-slate-500">
               {seg.count}회{total > 0 ? ` · ${Math.round(seg.ratio * 100)}%` : ""}
             </span>
           </li>

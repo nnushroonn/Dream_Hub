@@ -60,6 +60,8 @@ class DreamEntryInput(BaseModel):
     # 꿈 내용 자체와는 별개로, 공유하면서 덧붙이는 한마디(질문/자랑거리 등) - 무의식 피드
     # 카드 상단에 노출된다. 300자 제한은 DB 컬럼(String(300))과 맞춘다.
     share_caption: str | None = None
+    # 현실 일기 전용 사진 첨부 - 별도 업로드 서버 없이 프론트가 base64 data URL을 그대로 보낸다.
+    photo_url: str | None = None
     survey: DreamSurveyInput
     # 무의식 광장 "직접 쓰기" 모드에서 AI 해몽을 건너뛰고 게시할 수 있어 Optional이다.
     interpretation: AiInterpretationPayload | None = None
@@ -91,7 +93,10 @@ class DreamEntryResponse(BaseModel):
     is_anonymous: bool
     share_with_ai_analysis: bool
     share_caption: str | None
+    photo_url: str | None = None
     is_lucid: bool
+    lucid_level: str
+    control_level: str | None = None
     survey: DreamSurveyInput
     interpretation: AiInterpretationPayload | None = None
     tags: list[str] = []
@@ -128,7 +133,10 @@ def _to_response(
         is_anonymous=entry.is_anonymous,
         share_with_ai_analysis=entry.share_with_ai_analysis,
         share_caption=entry.share_caption,
+        photo_url=entry.photo_url,
         is_lucid=entry.is_lucid,
+        lucid_level=entry.lucid_level,
+        control_level=entry.control_level,
         survey=entry.survey,
         interpretation=entry.interpretation,
         tags=entry.tags,
@@ -153,10 +161,13 @@ def _apply_input(entry: DreamEntry, payload: DreamEntryInput) -> None:
     # 실수로 true를 보내도 여기서 강제로 무효화한다.
     entry.share_with_ai_analysis = payload.share_with_ai_analysis if payload.interpretation is not None else False
     entry.share_caption = (payload.share_caption or "").strip() or None
+    entry.photo_url = payload.photo_url
     entry.survey = payload.survey.model_dump()
     entry.interpretation = payload.interpretation.model_dump() if payload.interpretation is not None else None
     entry.tags = payload.tags
-    entry.is_lucid = payload.survey.is_lucid
+    entry.is_lucid = payload.survey.lucid_level != "none"
+    entry.lucid_level = payload.survey.lucid_level
+    entry.control_level = payload.survey.control_level
     entry.status = DreamStatus.PUBLIC if payload.is_public else DreamStatus.PRIVATE
 
 

@@ -124,6 +124,16 @@ export default function LoginPage() {
     }
   };
 
+  // 이 페이지는 모달과 달리 NavBar 없이 단독으로 뜨는 화면이라 "닫기"가 아니라 브라우저
+  // 히스토리를 거슬러 이전 화면으로 돌아간다 - 히스토리가 없는 직접 진입(딥링크)이면 홈으로.
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/");
+    }
+  };
+
   const nicknameHelperClass =
     nicknameStatus === "available"
       ? "text-emerald-400"
@@ -159,6 +169,13 @@ export default function LoginPage() {
             className="mt-6 w-full rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-4 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5"
           >
             로그인 화면으로
+          </button>
+          <button
+            type="button"
+            onClick={handleBack}
+            className="mt-4 w-full cursor-pointer text-center text-sm text-slate-400 underline underline-offset-4 transition-colors hover:text-slate-200"
+          >
+            이전 화면으로 돌아가기
           </button>
         </div>
       </div>
@@ -296,6 +313,14 @@ export default function LoginPage() {
           <GoogleIcon />
           Google 계정으로 로그인
         </a>
+
+        <button
+          type="button"
+          onClick={handleBack}
+          className="mt-6 w-full cursor-pointer text-center text-sm text-slate-400 underline underline-offset-4 transition-colors hover:text-slate-200"
+        >
+          이전 화면으로 돌아가기
+        </button>
       </div>
     </div>
   );

@@ -27,8 +27,9 @@ function shiftMonth(date: Date, delta: number): Date {
 }
 
 interface DiaryCalendarPanelProps {
-  /** 불 켜진 별자리 노드를 클릭했을 때, 그 날의 꿈 기록 전체 목록을 들고 상세 보기를 열어달라는 콜백 */
-  onSelectDay?: (dayEntries: DreamEntryRecord[]) => void;
+  /** 불 켜진 별자리 노드(또는 다중 기록일의 미니 스냅샷 팝오버 항목)를 선택했을 때, 그 날의 꿈
+   * 기록 전체 목록과 어떤 편을 먼저 열어야 하는지(preferredEntryId)를 함께 들고 상세 보기를 열어달라는 콜백 */
+  onSelectDay?: (dayEntries: DreamEntryRecord[], preferredEntryId?: number) => void;
   /** 오늘 아직 출석하지 않았을 때, "오늘의 무의식 기록하기" 유도 문구를 클릭하면 호출된다 */
   onRequestWrite?: () => void;
 }
@@ -82,10 +83,10 @@ export default function DiaryCalendarPanel({ onSelectDay, onRequestWrite }: Diar
     }
   }, [checkedInToday]);
 
-  const handleSelectDay = (dayEntries: ConstellationEntry[]) => {
+  const handleSelectDay = (dayEntries: ConstellationEntry[], preferredEntryId?: number) => {
     const ids = new Set(dayEntries.map((e) => e.id));
     const fullEntries = entries.filter((e) => ids.has(e.id));
-    if (fullEntries.length > 0) onSelectDay?.(fullEntries);
+    if (fullEntries.length > 0) onSelectDay?.(fullEntries, preferredEntryId);
   };
 
   return (

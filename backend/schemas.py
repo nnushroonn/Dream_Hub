@@ -117,3 +117,14 @@ class UserStatsResponse(BaseModel):
     points: int
     next_level_threshold: int | None
     badges: list[BadgeInfo]
+    # Daily XP Cap - 오늘(KST) 활동으로 번 포인트가 daily_xp_cap에 도달하면 그 이상은 points에
+    # 반영되지 않는다. daily_cap_reached가 true면 프론트가 "오늘의 탐험을 충분히 마쳤어요" 안내를 띄운다.
+    daily_xp_cap: int
+    daily_points_earned: int
+    daily_cap_reached: bool
+    # Milestone Lock - 포인트는 다음 레벨 문턱을 넘었지만 승급 조건(연속 기록 등)을 채우지 못해
+    # 레벨이 그 앞 단계에서 멈춰 있는 상태. next_level_requirement는 그 조건을 설명하는 안내 문구.
+    next_level_locked: bool
+    next_level_requirement: str | None
+    next_level_streak_goal: int | None
+    diary_streak: int

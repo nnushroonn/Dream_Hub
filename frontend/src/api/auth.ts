@@ -90,6 +90,17 @@ export interface UserStats {
   points: number;
   next_level_threshold: number | null;
   badges: BadgeInfo[];
+  // Daily XP Cap - 오늘(KST) 활동으로 번 포인트가 daily_xp_cap에 도달하면 그 이상은 points에
+  // 반영되지 않는다. daily_cap_reached가 true면 "오늘의 탐험을 충분히 마쳤어요" 안내를 띄운다.
+  daily_xp_cap: number;
+  daily_points_earned: number;
+  daily_cap_reached: boolean;
+  // Milestone Lock - 포인트는 다음 레벨 문턱을 넘었지만 승급 조건(연속 기록 등)을 채우지 못해
+  // 레벨이 그 앞 단계에서 멈춰 있는 상태. next_level_requirement는 그 조건을 설명하는 안내 문구.
+  next_level_locked: boolean;
+  next_level_requirement: string | null;
+  next_level_streak_goal: number | null;
+  diary_streak: number;
 }
 
 export async function getUserStats(): Promise<UserStats> {

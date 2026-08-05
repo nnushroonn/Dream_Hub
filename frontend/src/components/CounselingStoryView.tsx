@@ -85,7 +85,7 @@ function StepContent({ step, report, tags }: StepContentProps) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.15, duration: 0.5, ease: "easeOut" }}
-            className="text-left text-lg font-normal leading-7 text-slate-200 break-keep"
+            className="text-left font-serif text-lg font-normal leading-[1.85] tracking-wide text-slate-200 break-keep"
           >
             {sentence}
           </motion.p>
@@ -98,20 +98,22 @@ function StepContent({ step, report, tags }: StepContentProps) {
     return (
       <div className="space-y-6">
         {tags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap justify-center gap-1.5">
             {tags.map((tag, i) => (
               <motion.span
                 key={tag}
                 animate={{ y: [0, -6, 0] }}
                 transition={{ duration: 2.4 + i * 0.3, repeat: Infinity, ease: "easeInOut" }}
-                className="rounded-full bg-purple-500/20 px-3 py-1.5 text-sm text-purple-100"
+                className="rounded-full bg-purple-500/20 px-2.5 py-1 text-xs text-purple-100"
               >
                 {tag.startsWith("#") ? tag : `#${tag}`}
               </motion.span>
             ))}
           </div>
         )}
-        <p className="text-left text-base font-normal leading-7 text-slate-200 break-keep">{report.unconscious_stage}</p>
+        <p className="text-left font-serif text-base font-normal leading-[1.85] tracking-wide text-slate-200 break-keep">
+          {report.unconscious_stage}
+        </p>
       </div>
     );
   }
@@ -119,7 +121,9 @@ function StepContent({ step, report, tags }: StepContentProps) {
   if (step === 2) {
     return (
       <motion.div animate={{ x: [0, -8, 8, -6, 6, -3, 3, 0] }} transition={{ duration: 0.2 }}>
-        <p className="text-left text-lg font-normal leading-7 text-slate-200 break-keep">{report.reality_check}</p>
+        <p className="text-left font-serif text-lg font-normal leading-[1.85] tracking-wide text-slate-200 break-keep">
+          {report.reality_check}
+        </p>
       </motion.div>
     );
   }
@@ -133,7 +137,7 @@ function StepContent({ step, report, tags }: StepContentProps) {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.15, duration: 0.5, ease: "easeOut" }}
-          className="text-base font-normal leading-7 text-slate-200 break-keep"
+          className="font-serif text-base font-normal leading-[1.85] tracking-wide text-slate-200 break-keep"
         >
           {sentence}
         </motion.p>
@@ -173,13 +177,15 @@ export default function CounselingStoryView({ report, tags, onSave, isSaving, sa
     <div className={`relative mx-auto flex w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-white/5 shadow-lg ${CARD_THEME}`}>
       <p className="pt-6 text-center text-xs font-medium tracking-wide text-white/80">{STEP_LABELS[step]}</p>
 
-      {/* 좌우 화살표: 클릭 시에만 컷이 넘어간다. 첫/마지막 컷에서는 비활성화. */}
+      {/* 좌우 화살표: 클릭 시에만 컷이 넘어간다. 평소엔 은은하게(opacity-30) 존재만 알리다가,
+          마우스를 올리면 보라 네온 글로우와 함께 또렷해져(opacity-100) 데스크톱에서도 클릭
+          내비게이션이 쉽게 눈에 띈다. 첫/마지막 컷에서는 완전히 비활성화. */}
       <button
         type="button"
         aria-label="이전 컷"
         onClick={() => goTo(step - 1, -1)}
         disabled={step === 0}
-        className="absolute left-2 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-md transition-opacity disabled:pointer-events-none disabled:opacity-0"
+        className="absolute left-2 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white opacity-30 backdrop-blur-md transition-all duration-300 hover:bg-purple-500/30 hover:opacity-100 hover:shadow-[0_0_16px_rgba(168,85,247,0.7)] disabled:pointer-events-none disabled:opacity-0"
       >
         <ChevronLeftIcon />
       </button>
@@ -188,7 +194,7 @@ export default function CounselingStoryView({ report, tags, onSave, isSaving, sa
         aria-label="다음 컷"
         onClick={() => goTo(step + 1, 1)}
         disabled={step === TOTAL_STEPS - 1}
-        className="absolute right-2 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-md transition-opacity disabled:pointer-events-none disabled:opacity-0"
+        className="absolute right-2 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white opacity-30 backdrop-blur-md transition-all duration-300 hover:bg-purple-500/30 hover:opacity-100 hover:shadow-[0_0_16px_rgba(168,85,247,0.7)] disabled:pointer-events-none disabled:opacity-0"
       >
         <ChevronRightIcon />
       </button>

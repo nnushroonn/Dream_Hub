@@ -2,7 +2,7 @@ import enum
 from datetime import date as PyDate, datetime, time
 from typing import Any, Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Integer, JSON, String, Time, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Integer, JSON, String, Text, Time, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -174,7 +174,17 @@ class DreamEntry(Base):
     # 공개(PUBLIC) 상태일 때만 의미 있음: 꿈 내용 자체와는 별개로, 공유하면서 덧붙이는 한마디
     # (질문/자랑거리 등). 무의식 피드 카드 상단에 말풍선처럼 노출된다.
     share_caption: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # 현실 일기 전용 사진 첨부 - 별도 업로드/스토리지 서버 없이, 클라이언트가 FileReader로 만든
+    # base64 data URL을 그대로 저장한다(DreamWizard의 스케치 미리보기와 동일한 방식). 길이 제한이
+    # 없는 Text로 둔다 - String(N)으로는 이미지 데이터를 담을 수 없다.
+    photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 자각몽 여부 - lucid_level이 "none"이 아니면 True. FIRST_LUCID 뱃지/통계 쿼리가 계속
+    # 이 불리언 컬럼을 쓰므로, JSON인 survey를 매번 풀어보지 않도록 남겨둔 파생 컬럼이다.
     is_lucid: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 자각의 정도(none/momentary/full)와, 자각했을 때의 꿈 통제력(director/observer/lost_control) -
+    # 향후 마이페이지 통계에서 바로 집계할 수 있도록 survey JSON과 별개로 컬럼을 둔다.
+    lucid_level: Mapped[str] = mapped_column(String(20), nullable=False, default="none", server_default="none")
+    control_level: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     # 공개 상세 조회(GET /api/dreams/public/{id})가 호출될 때마다 1씩 증가 - 베스트 피드
     # 랭킹에서 좋아요 수가 동점일 때 2차 정렬 기준(조회수)으로 쓰인다.
     view_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")

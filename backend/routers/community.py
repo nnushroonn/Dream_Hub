@@ -17,12 +17,15 @@
 응답 어디에도 담지 않는다.
 """
 
+from collections import Counter
 from datetime import datetime, timedelta, timezone
+from math import ceil
 from typing import Literal
 
 import redis
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from database import get_db, get_redis
@@ -53,7 +56,11 @@ router = APIRouter(prefix="/api/community", tags=["community"])
 DREAM_FEED_LIMIT = 30
 # 자유 광장 게시글 수정 가능 시간 - 게시 후 이 시간이 지나면 삭제만 가능하다.
 POST_EDIT_WINDOW = timedelta(minutes=10)
-POST_FEED_LIMIT = 50
+POST_LIST_DEFAULT_LIMIT = 20
+POST_LIST_MAX_LIMIT = 50
+# 상단 태그 필터 바 - 최근 이 기간 동안 쓰인 해시태그만 집계해 "지금 뜨는 태그"만 보여준다.
+TOP_TAGS_WINDOW_DAYS = 7
+TOP_TAGS_LIMIT = 8
 
 
 def _display_name(user: User, is_anonymous: bool) -> str | None:
@@ -289,11 +296,12 @@ def vote_on_dream(
 
 # --- 💬 자유 광장: 꿈과 무관한 자유 게시글 -----------------------------------
 
-# 커뮤니티 헤더 "주파수 필터"가 사용하는 슬러그 - 일기장 꿈 씨앗(DREAM_SEEDS)과 1:1로 대응한다.
-# 필터/정렬은 이 컬럼(공개 게시글에 스스로 붙인 태그)만 조회한다 - 다른 유저의 비공개 일지를
-# 서버가 집계해서 정렬하는 방식은 쓰지 않는다.
-PUBLIC_TAG_OPTIONS = {"rest", "growth", "healing", "adventure"}
-MAX_PUBLIC_TAGS = 3
+# ?template=galaxy 글쓰기가 제공하는 4개의 큐레이션 프리셋 - CommunityPostTagSelector가 이
+# 중에서만 고르게 강제하는 건 프론트 UI 몫이고, 여기(백엔드)는 더 이상 이 값들로 제한하지
+# 않는다 - public_tags는 이제 자유 String 배열이라 일반 자유 글도 커스텀 해시태그를 붙일 수 있다.
+GALAXY_FREQUENCY_TAGS = {"rest", "growth", "healing", "adventure"}
+MAX_PUBLIC_TAGS = 5
+MAX_TAG_LENGTH = 20
 
 
 class CommunityPostInput(BaseModel):
@@ -302,18 +310,21 @@ class CommunityPostInput(BaseModel):
     is_anonymous: bool = False
     # /api/community/images로 미리 업로드해 받은 R2 공개 URL 목록 - 게시 시점에 함께 저장한다.
     image_urls: list[str] = Field(default_factory=list)
-    # ?template=galaxy 글쓰기에서 고른 주파수 태그 - 일반 자유 글은 빈 배열로 둬도 된다.
+    # 자유 해시태그 - ?template=galaxy 글쓰기는 4개 프리셋 중에서, 일반 자유 글은 TagInput으로
+    # 직접 입력한 커스텀 태그가 들어온다. 둘 다 같은 필드/같은 검증을 거친다.
     public_tags: list[str] = Field(default_factory=list)
 
     @field_validator("public_tags")
     @classmethod
     def _validate_public_tags(cls, value: list[str]) -> list[str]:
-        if len(value) > MAX_PUBLIC_TAGS:
-            raise ValueError(f"주파수 태그는 최대 {MAX_PUBLIC_TAGS}개까지 선택할 수 있습니다.")
-        invalid = set(value) - PUBLIC_TAG_OPTIONS
-        if invalid:
-            raise ValueError(f"허용되지 않은 주파수 태그입니다: {sorted(invalid)}")
-        return value
+        cleaned: list[str] = []
+        for raw in value:
+            tag = raw.strip().lstrip("#")[:MAX_TAG_LENGTH]
+            if tag and tag not in cleaned:
+                cleaned.append(tag)
+        if len(cleaned) > MAX_PUBLIC_TAGS:
+            raise ValueError(f"태그는 최대 {MAX_PUBLIC_TAGS}개까지 등록할 수 있습니다.")
+        return cleaned
 
     @field_validator("image_urls")
     @classmethod
@@ -342,6 +353,18 @@ class CommunityPostResponse(BaseModel):
     # 내가 쓴 글인지 - 수정/삭제 버튼 노출 여부를 프론트가 이걸로 판단한다. 실제 권한 체크는
     # PUT/DELETE 엔드포인트가 서버에서 다시 하므로, 이 값은 순전히 UI 표시용이다.
     is_mine: bool = False
+
+
+class CommunityPostListResponse(BaseModel):
+    items: list[CommunityPostResponse]
+    total_count: int
+    total_pages: int
+    page: int
+
+
+class TagCount(BaseModel):
+    tag: str
+    count: int
 
 
 def _post_vote_counts(db: Session, post_id: int) -> tuple[int, int]:
@@ -403,22 +426,95 @@ def _build_post_entries(
     return result
 
 
-@router.get("/posts", response_model=list[CommunityPostResponse])
+@router.get("/posts", response_model=CommunityPostListResponse)
 def list_community_posts(
-    tag: str | None = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(POST_LIST_DEFAULT_LIMIT, ge=1, le=POST_LIST_MAX_LIMIT),
+    search_type: Literal["all", "title", "hashtag", "author"] | None = None,
+    keyword: str | None = None,
+    sort: Literal["latest", "likes", "views"] = "latest",
+    period: Literal["weekly", "monthly", "all"] = "all",
     current_user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
-) -> list[dict]:
-    """자유 광장 목록 - ?tag=healing처럼 넘기면 그 주파수 태그를 스스로 붙인 공개 글만 남긴다.
-    다른 유저의 비공개 일지를 집계해 정렬하지 않고, 오직 CommunityPost.public_tags만 본다."""
+) -> dict:
+    """자유 광장 목록 - offset/limit 페이지네이션 + 제목/해시태그/작성자(또는 전체) 검색 +
+    정렬(최신/공감/조회) + 기간 필터. 비공개(익명) 글은 작성자 검색/전체 검색의 작성자 조건에서
+    항상 제외된다 - 익명 글은 애초에 조회 가능한 작성자명이 없다."""
     query = db.query(CommunityPost)
-    if tag:
-        if tag not in PUBLIC_TAG_OPTIONS:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="알 수 없는 주파수 태그입니다.")
-        query = query.filter(CommunityPost.public_tags.any(tag))
-    posts = query.order_by(CommunityPost.created_at.desc()).limit(POST_FEED_LIMIT).all()
+
+    trimmed_keyword = keyword.strip() if keyword else ""
+    if search_type and trimmed_keyword:
+        like_pattern = f"%{trimmed_keyword}%"
+        hashtag_value = trimmed_keyword.lstrip("#")
+        if search_type == "title":
+            query = query.filter(CommunityPost.title.ilike(like_pattern))
+        elif search_type == "hashtag":
+            query = query.filter(CommunityPost.public_tags.any(hashtag_value))
+        elif search_type == "author":
+            query = query.join(User, CommunityPost.user_id == User.id).filter(
+                CommunityPost.is_anonymous.is_(False), User.nickname.ilike(like_pattern)
+            )
+        else:  # "all" - 제목/해시태그/작성자 중 하나라도 일치하면 포함
+            query = query.outerjoin(User, CommunityPost.user_id == User.id).filter(
+                or_(
+                    CommunityPost.title.ilike(like_pattern),
+                    CommunityPost.public_tags.any(hashtag_value),
+                    (CommunityPost.is_anonymous.is_(False)) & User.nickname.ilike(like_pattern),
+                )
+            )
+
+    # 기간 필터 - 정렬 기준과 독립적인 파라미터다(최신순에서는 프론트가 이 값을 보내지 않고,
+    # 기본값 "all"이면 기간 제한이 없다). ORDER BY보다 먼저 WHERE로 걸러 total_count/페이지
+    # 수 계산에도 반영되게 한다.
+    if period == "weekly":
+        query = query.filter(CommunityPost.created_at >= datetime.now(timezone.utc) - timedelta(days=7))
+    elif period == "monthly":
+        query = query.filter(CommunityPost.created_at >= datetime.now(timezone.utc) - timedelta(days=30))
+
+    total_count = query.count()
+    total_pages = max(ceil(total_count / limit), 1)
+
+    if sort == "likes":
+        # upvote_count는 저장된 컬럼이 아니라 CommunityPostReaction을 집계한 값이라, 정렬을
+        # DB 레벨에서 하려면 게시물당 좋아요 수를 미리 센 서브쿼리와 조인해야 한다.
+        like_counts = (
+            db.query(CommunityPostReaction.post_id, func.count().label("like_count"))
+            .filter(CommunityPostReaction.is_upvote.is_(True))
+            .group_by(CommunityPostReaction.post_id)
+            .subquery()
+        )
+        query = query.outerjoin(like_counts, like_counts.c.post_id == CommunityPost.id).order_by(
+            func.coalesce(like_counts.c.like_count, 0).desc(), CommunityPost.created_at.desc()
+        )
+    elif sort == "views":
+        query = query.order_by(CommunityPost.view_count.desc(), CommunityPost.created_at.desc())
+    else:  # "latest"
+        query = query.order_by(CommunityPost.created_at.desc())
+
+    posts = query.offset((page - 1) * limit).limit(limit).all()
     my_votes = _my_post_votes(db, current_user, posts) if current_user else {}
-    return _build_post_entries(db, posts, my_votes, current_user.id if current_user else None)
+    items = _build_post_entries(db, posts, my_votes, current_user.id if current_user else None)
+    return {"items": items, "total_count": total_count, "total_pages": total_pages, "page": page}
+
+
+@router.get("/tags/top", response_model=list[TagCount])
+def get_top_community_tags(
+    days: int = Query(TOP_TAGS_WINDOW_DAYS, ge=0),
+    limit: int = Query(TOP_TAGS_LIMIT, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """해시태그를 사용 빈도순으로 돌려준다 - 두 화면이 이 엔드포인트 하나를 공유한다.
+    ?days=7&limit=8(기본값)이면 상단 필터 바의 "최근 인기 태그", ?days=0&limit=100처럼 기간
+    제한을 풀면(0 = 전체 기간) "+ 태그 더보기" 모달의 서비스 전체 태그 목록이 된다. 게시물
+    볼륨이 크지 않은 초기 서비스라 DB 집계 함수 대신 파이썬에서 직접 센다."""
+    query = db.query(CommunityPost.public_tags)
+    if days > 0:
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        query = query.filter(CommunityPost.created_at >= since)
+    counts: Counter[str] = Counter()
+    for (tags,) in query.all():
+        counts.update(tags or [])
+    return [{"tag": tag, "count": count} for tag, count in counts.most_common(limit)]
 
 
 @router.get("/posts/{post_id}", response_model=CommunityPostResponse)

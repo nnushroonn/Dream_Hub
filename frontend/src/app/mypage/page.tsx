@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { getMyLikedDreams, type DreamFeedEntry } from "@/api/dream";
 import AuraToggle from "@/components/AuraToggle";
 import DreamClusterChart from "@/components/DreamClusterChart";
 import GalaxyVisibilityToggle from "@/components/GalaxyVisibilityToggle";
@@ -11,8 +10,10 @@ import LevelBadgeBoard from "@/components/LevelBadgeBoard";
 import MyActivityTabs from "@/components/MyActivityTabs";
 import NavBar from "@/components/NavBar";
 import NicknameEditor from "@/components/NicknameEditor";
+import PreviewGateway from "@/components/PreviewGateway";
 import { DREAM_SEEDS, isDreamSeed } from "@/lib/dreamSeeds";
 import { moodBucketForEmoji } from "@/lib/moodBucket";
+import { useAuthStore } from "@/store/useAuthStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 
 function todayDateInputValue(): string {
@@ -46,17 +47,17 @@ function computeDiaryStreak(dates: string[]): number {
 
 const STREAK_GOAL_DAYS = 7;
 const CARD_CLASS = "rounded-3xl border border-purple-900/30 bg-slate-900/40 p-6 backdrop-blur-md";
+// 상단 프로필/레벨/페르소나를 하나로 묶는 코어 카드 - 아래 아카이브 카드들보다 한 톤 더
+// 진하고 선명한 글래스모피즘으로, 대시보드의 시각적 출발점임을 분명히 한다.
+const CORE_CARD_CLASS = "rounded-3xl border border-purple-500/30 bg-slate-900/70 p-6 backdrop-blur-xl";
 
 export default function MyPage() {
   const router = useRouter();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const allEntries = useSavedDreamsStore((state) => state.entries);
-  const [likedDreams, setLikedDreams] = useState<DreamFeedEntry[]>([]);
-
-  useEffect(() => {
-    getMyLikedDreams()
-      .then(setLikedDreams)
-      .catch(() => {});
-  }, []);
+  // 대시보드/내 활동 상단 탭 - "내가 담아둔 신비로운 순간들"(공감한 꿈 스크랩북)은 별도
+  // 섹션으로 중복 노출하지 않고, 내 활동 탭 안의 "❤️ 공감한 꿈" 하나로 완전히 합쳤다.
+  const [pageTab, setPageTab] = useState<"dashboard" | "activity">("dashboard");
 
   // 🌌 은하계 대시보드 - /mypage/calendar, /mypage/stats는 백엔드가 하드코딩된 더미를
   // 내려줄 뿐이라(routers/mypage.py 주석 참고) 아예 쓰지 않는다. 대신 NavBar가 이미
@@ -102,11 +103,19 @@ export default function MyPage() {
   }, [allEntries]);
 
   // 자주 등장한 키워드 - 실제 AI 해몽 결과(interpretation.tags)를 전부 모아 빈도순으로 센다.
+  // tags는 "#선명함"처럼 해시를 이미 포함해 오는 경우와 아닌 경우가 섞여 있어(다른 화면들도
+  // 렌더링 시점에 매번 startsWith("#")로 방어한다), 여기서는 애초에 순수 텍스트로 정규화해
+  // 카운트 키 자체가 갈라지거나(같은 키워드가 "선명함"/"#선명함"으로 중복 집계) 화면에서
+  // "##"로 겹쳐 찍히는 일이 없게 한다.
   const topKeywords = useMemo(() => {
     const counts = new Map<string, number>();
     for (const entry of allEntries) {
       if (!entry.interpretation) continue;
-      for (const tag of entry.interpretation.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      for (const rawTag of entry.interpretation.tags) {
+        const tag = rawTag.replace(/^#+/, "").trim();
+        if (!tag) continue;
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
     }
     return Array.from(counts.entries())
       .map(([keyword, count]) => ({ keyword, count }))
@@ -129,6 +138,26 @@ export default function MyPage() {
     router.push(`/community/write?${params.toString()}`);
   };
 
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#0b0518] via-[#170b2e] to-black text-indigo-50">
+        <NavBar />
+        <main className="mx-auto max-w-6xl p-8">
+          <h1 className="text-2xl font-semibold">마이페이지</h1>
+          <p className="mt-1 text-sm text-indigo-300/70">나의 무의식 기록을 한눈에 확인해보세요.</p>
+          <div className="mt-6">
+            <PreviewGateway
+              title="나의 무의식 기록, 한눈에 확인해보세요"
+              subtitle="로그인하면 지금까지 기록한 꿈을 바탕으로 나만의 통계와 레벨을 확인할 수 있어요."
+              ctaLabel="🔒 로그인하고 마이페이지 열기"
+              triggerSource="mypage"
+            />
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0b0518] via-[#170b2e] to-black text-indigo-50">
       <NavBar />
@@ -137,8 +166,8 @@ export default function MyPage() {
         <h1 className="text-2xl font-semibold">마이페이지</h1>
         <p className="mt-1 text-sm text-indigo-300/70">나의 무의식 기록을 한눈에 확인해보세요.</p>
 
-        {/* 1단: 유저 아이덴티티 성운 패널 */}
-        <div className={`mt-6 ${CARD_CLASS}`}>
+        {/* 1단: 코어 프로필(커맨드 센터) - 프로필/레벨/페르소나를 하나의 큰 글래스 카드로 통합 */}
+        <div className={`mt-6 ${CORE_CARD_CLASS}`}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
               <AuraToggle />
@@ -146,11 +175,13 @@ export default function MyPage() {
                 <NicknameEditor />
               </div>
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-2">
+            {/* 공유 버튼과 그 아래 공개 토글이 같은 우측 정렬 축 위에서 리듬이 맞도록, 버튼
+                패딩을 토글의 컴팩트한 높이에 맞춰 살짝 좁혔다. */}
+            <div className="flex shrink-0 flex-col items-end gap-2.5">
               <button
                 type="button"
                 onClick={handleShareGalaxy}
-                className="rounded-full border border-purple-400/40 bg-transparent px-4 py-2 text-xs font-medium text-purple-200 transition-all hover:border-purple-400/70 hover:bg-purple-500/10"
+                className="rounded-full border border-purple-400/40 bg-transparent px-4 py-1.5 text-xs font-medium text-purple-200 transition-all hover:border-purple-400/70 hover:bg-purple-500/10"
               >
                 🌌 내 무의식 은하 공유하기
               </button>
@@ -162,10 +193,39 @@ export default function MyPage() {
           </div>
         </div>
 
-        {/* 2단: 현실 x 무의식 투트랙 그리드 스플릿 */}
-        <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-2">
-          {/* LEFT: 현실의 발자국 아카이브 */}
-          <div className="flex flex-col gap-6">
+        {/* 대시보드/내 활동 탭 - 통계+캘린더와 아카이브 리스트를 한 화면에 다 쌓지 않고 나눠서,
+            스크롤 피로도를 줄인다. NavBar(sticky, 약 64px) 바로 아래에 이어 붙어 스크롤해도
+            항상 손 닿는 곳에 남아 있다. */}
+        <div className="sticky top-16 z-30 mt-8 flex gap-1.5 rounded-2xl border border-white/10 bg-slate-950/85 p-1.5 backdrop-blur-xl">
+          <button
+            type="button"
+            onClick={() => setPageTab("dashboard")}
+            className={`flex-1 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 ${
+              pageTab === "dashboard"
+                ? "bg-violet-500/25 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            대시보드
+          </button>
+          <button
+            type="button"
+            onClick={() => setPageTab("activity")}
+            className={`flex-1 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 ${
+              pageTab === "activity"
+                ? "bg-violet-500/25 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            내 활동
+          </button>
+        </div>
+
+        {/* 2단: 현실 x 무의식 투트랙 그리드 스플릿 - 우측(무의식 캘린더)이 메인 시각화라 2:1 비중으로 넓힌다 */}
+        {pageTab === "dashboard" && (
+        <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
+          {/* LEFT (1 span): 현실의 발자국 아카이브 */}
+          <div className="flex flex-col gap-6 lg:col-span-1">
             <h2 className="text-lg font-semibold text-indigo-100">📝 현실의 발자국 아카이브</h2>
 
             <div className={CARD_CLASS}>
@@ -185,28 +245,8 @@ export default function MyPage() {
 
             <div className={CARD_CLASS}>
               <h3 className="text-sm font-semibold text-slate-200">최근 심은 꿈 씨앗</h3>
-              <div className="mt-5">
+              <div className="mt-4">
                 <DreamClusterChart seedStats={seedStats} />
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT: 무의식의 우주 아카이브 */}
-          <div className="flex flex-col gap-6">
-            <h2 className="text-lg font-semibold text-indigo-100">🔮 무의식의 우주 아카이브</h2>
-
-            <div className={`flex flex-1 flex-col ${CARD_CLASS}`}>
-              <h3 className="text-sm font-semibold text-slate-200">이번 달 꿈 달력</h3>
-              <div className="mt-4 grid h-full w-full grid-cols-7 gap-2">
-                {dreamCalendarDays.map((day) => (
-                  <div
-                    key={day.day}
-                    className="flex aspect-square w-full flex-col items-center justify-center rounded-xl border border-purple-900/40 bg-purple-950/20 text-xs"
-                  >
-                    <span className="text-purple-400/70">{day.day}</span>
-                    <span className="mt-1 text-lg">{day.emotion ?? "·"}</span>
-                  </div>
-                ))}
               </div>
             </div>
 
@@ -228,38 +268,31 @@ export default function MyPage() {
               </div>
             </div>
           </div>
-        </div>
 
-        {/* 3단: 커뮤니티 연동 스크랩북 - 내가 공감 누른 타인의 공개 꿈 기록 타임라인 슬라이더 */}
-        <section className="mt-10">
-          <h2 className="text-lg font-semibold text-indigo-100">💫 내가 담아둔 신비로운 순간들</h2>
-          <p className="mt-1 text-xs text-indigo-300/60">커뮤니티에서 공감을 눌러 간직해둔 다른 탐험가의 꿈이에요.</p>
+          {/* RIGHT (2 span): 무의식의 우주 아카이브 - 이번 달 꿈 별자리 캘린더를 메인 시각화로 크게 배치 */}
+          <div className="flex flex-col gap-6 lg:col-span-2">
+            <h2 className="text-lg font-semibold text-indigo-100">🔮 무의식의 우주 아카이브</h2>
 
-          {likedDreams.length === 0 ? (
-            <p className="mt-4 rounded-3xl border border-purple-900/30 bg-slate-900/40 px-4 py-8 text-center text-xs text-slate-500 backdrop-blur-md">
-              아직 담아둔 꿈이 없어요. 커뮤니티에서 마음에 드는 꿈에 공감을 눌러보세요.
-            </p>
-          ) : (
-            <div className="mt-4 flex gap-4 overflow-x-auto pb-2">
-              {likedDreams.map((dream) => (
-                <div key={dream.id} className={`w-64 shrink-0 ${CARD_CLASS} p-4`}>
-                  <div className="flex items-center justify-between text-[11px] text-slate-500">
-                    <span>
-                      {dream.emotion} {dream.author_display_name ?? "익명의 탐험가"}
-                    </span>
-                    <span>{dream.dream_date}</span>
+            <div className={`flex flex-1 flex-col ${CARD_CLASS}`}>
+              <h3 className="text-sm font-semibold text-slate-200">이번 달 꿈 달력</h3>
+              <div className="mt-5 grid h-full w-full grid-cols-7 gap-2.5">
+                {dreamCalendarDays.map((day) => (
+                  <div
+                    key={day.day}
+                    className="flex aspect-square w-full flex-col items-center justify-center rounded-xl border border-purple-900/40 bg-purple-950/20 text-xs transition-colors hover:border-purple-500/50"
+                  >
+                    <span className="text-purple-400/70">{day.day}</span>
+                    <span className="mt-1 text-xl">{day.emotion ?? "·"}</span>
                   </div>
-                  <h4 className="mt-2 font-serif text-sm font-semibold text-purple-100">{dream.title}</h4>
-                  <p className="mt-2 line-clamp-3 font-serif text-xs leading-loose tracking-wide text-slate-400">
-                    {dream.summary}
-                  </p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          )}
-        </section>
+          </div>
+        </div>
+        )}
 
-        <MyActivityTabs />
+        {/* 내 활동 탭 - "내가 담아둔 신비로운 순간들"(공감한 꿈)은 여기 "❤️ 공감한 꿈" 탭 하나로 통합됐다 */}
+        {pageTab === "activity" && <MyActivityTabs />}
       </main>
     </div>
   );

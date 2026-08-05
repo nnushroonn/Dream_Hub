@@ -16,6 +16,24 @@
   --animate-aurora: aurora-float 14s ease-in-out infinite;
   --animate-shine: shine 3s linear infinite;
   --animate-spin-slow: spin-slow 6s linear infinite;
+  --animate-pearl-sweep: pearl-sweep 2.2s ease-in-out infinite;
+  --animate-shake: shake 0.4s ease-in-out;
+}
+
+/* 필수 선택을 건너뛰고 제출을 시도했을 때, 그 항목 컨테이너에 짧게 붙이는 흔들림 피드백. */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
 }
 
 /* 마이페이지 레벨 칭호 옆 별무리 아이콘 - animate-spin(1s)은 너무 빨라 "미세하게 회전"하는
@@ -45,6 +63,17 @@
   }
   50% {
     transform: translate(30px, -40px) scale(1.15);
+  }
+}
+
+/* 마이페이지 XP 바 위를 스쳐 지나가는 진주빛 하이라이트 - 채워진 만큼만 보이도록 부모의
+   overflow-hidden 안에서, -translate-x-full에서 시작해 오른쪽 끝까지 대각선으로 훑고 지나간다. */
+@keyframes pearl-sweep {
+  0% {
+    transform: translateX(-100%) skewX(-20deg);
+  }
+  100% {
+    transform: translateX(250%) skewX(-20deg);
   }
 }
 
@@ -87,4 +116,65 @@ body {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* 다크 테마 전역 스크롤바 - 브라우저 기본 회색 스크롤바 대신 은은한 보라 톤의 얇은 바로 통일한다.
+   특정 스크롤 영역에 명시적으로 붙이고 싶을 때 쓰는 클래스(둘 다 필요, 순서 무관). */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+.scrollbar-thumb-purple-900\/40 {
+  scrollbar-color: rgba(88, 28, 135, 0.4) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thumb-purple-900\/40::-webkit-scrollbar-thumb {
+  background-color: rgba(88, 28, 135, 0.4);
+  border-radius: 9999px;
+}
+.scrollbar-thumb-purple-900\/40::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* textarea 등 좁은 스크롤 영역용 - 좀 더 옅은 틴트(/30)와 완전히 투명한 트랙을 명시적으로 쓰고
+   싶을 때 조합한다: scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent */
+.scrollbar-thumb-purple-900\/30 {
+  scrollbar-color: rgba(88, 28, 135, 0.3) transparent;
+}
+.scrollbar-thumb-purple-900\/30::-webkit-scrollbar-thumb {
+  background-color: rgba(88, 28, 135, 0.3);
+  border-radius: 9999px;
+}
+.scrollbar-track-transparent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 위 클래스를 일일이 붙이지 않은 곳도 같은 톤을 쓰도록, 사이트 전역 기본값으로도 깔아 둔다. */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(88, 28, 135, 0.4) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgba(88, 28, 135, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(88, 28, 135, 0.6);
+}
+
+/* 입력창의 브라우저 기본 파란 포커스 아웃라인 대신 테마에 맞는 은은한 보라 링으로 통일한다. */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.3);
 }

@@ -14,6 +14,7 @@ import {
   setDreamVisibility,
   uploadCommunityImage,
   type AiInterpretation,
+  type DreamSurvey,
 } from "@/api/dream";
 import CommunityPostTagSelector from "@/components/CommunityPostTagSelector";
 import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
@@ -92,6 +93,12 @@ export default function CommunityWritePage() {
   );
   const [attachmentMode, setAttachmentMode] = useState<"load" | "write">("load");
   const [shareDreamId, setShareDreamId] = useState<number | null>(null);
+  // 불러오기로 고른 기록의 원본 AI 해몽 키워드(interpretation.tags) - 유저가 직접 입력한
+  // dreamTags와 별개로, "이것도 태그로 붙일래?" 하고 클릭 한 번으로 추가할 수 있는 추천 목록이다.
+  const selectedDreamEntry = useMemo(
+    () => myPrivateDreams.find((entry) => entry.id === shareDreamId) ?? null,
+    [myPrivateDreams, shareDreamId]
+  );
   // 자유 광장과 완전히 동일한 필드 구성(제목+본문) - 두 모드가 함께 쓴다.
   const [shareDreamTitle, setShareDreamTitle] = useState("");
   const [shareDreamCaption, setShareDreamCaption] = useState("");
@@ -100,10 +107,17 @@ export default function CommunityWritePage() {
   // AI가 자동으로 붙여주던 해시태그를 대신해, 유저가 직접 입력한 태그(최대 5개) - 불러오기/직접
   // 쓰기 두 모드가 함께 쓴다.
   const [dreamTags, setDreamTags] = useState<string[]>([]);
+  // 이미 dreamTags에 들어간 것과 겹치지 않는 AI 원본 키워드만 추천 칩으로 보여준다.
+  const suggestedDreamTags = useMemo(
+    () => (selectedDreamEntry?.interpretation?.tags ?? []).filter((tag) => !dreamTags.includes(tag)),
+    [selectedDreamEntry, dreamTags]
+  );
   const [shareDreamWithAiReport, setShareDreamWithAiReport] = useState(false);
   const [isSharingDream, setIsSharingDream] = useState(false);
   const [shareDreamError, setShareDreamError] = useState<string | null>(null);
-  const [newDreamMood, setNewDreamMood] = useState(MOOD_OPTIONS[3].emoji);
+  // 인덱스가 아니라 이모지를 직접 고정한다 - MOOD_OPTIONS 목록 순서가 바뀌어도 이 페이지의
+  // 기본 감정(평온)이 조용히 달라지지 않는다.
+  const [newDreamMood, setNewDreamMood] = useState("😌");
   const [newDreamContent, setNewDreamContent] = useState("");
   const newDreamContentRef = useAutoResizeTextarea(newDreamContent);
   const [isAnalyzingNewDream, setIsAnalyzingNewDream] = useState(false);
@@ -289,7 +303,7 @@ export default function CommunityWritePage() {
 
     setIsSharingDream(true);
     try {
-      const survey = {
+      const survey: DreamSurvey = {
         title,
         brightness: "",
         space_depth: "",
@@ -301,7 +315,8 @@ export default function CommunityWritePage() {
         reality_link: "",
         reality_detail: "",
         vividness: 50,
-        is_lucid: false,
+        lucid_level: "none",
+        control_level: null,
         final_memo: "",
       };
       await createDream({
@@ -408,7 +423,13 @@ export default function CommunityWritePage() {
 
             {/* 은하 공유 글만 필수로 노출되는 주파수 태그 선택 - 여기서 고른 값이 그대로
                 CommunityPost.public_tags로 저장되고, 헤더의 주파수 필터가 이것만 조회한다. */}
-            {galaxyTemplate && <CommunityPostTagSelector value={publicTags} onChange={setPublicTags} />}
+            {galaxyTemplate ? (
+              <CommunityPostTagSelector value={publicTags} onChange={setPublicTags} />
+            ) : (
+              // 일반 자유 글은 큐레이션 프리셋 대신, 직접 입력한 커스텀 해시태그를 자유롭게 붙일
+              // 수 있다 - 같은 public_tags 필드를 쓰므로 상단 태그 필터 바 집계에도 그대로 잡힌다.
+              <TagInput tags={publicTags} onChange={setPublicTags} />
+            )}
 
             <input
               type="text"
@@ -526,8 +547,29 @@ export default function CommunityWritePage() {
               className="mt-3 min-h-[120px] w-full resize-none overflow-hidden rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/50 focus:outline-none"
             />
 
-            {/* 꿈 상징 태그 - AI가 자동으로 붙여주던 해시태그를 대신해 유저가 직접 입력한다. */}
-            <TagInput tags={dreamTags} onChange={setDreamTags} />
+            {/* 꿈 상징 태그 - AI가 자동으로 붙여주던 해시태그를 대신해 유저가 직접 입력한다.
+                (최대 3개로 제한 - 태그가 너무 많으면 필터 바 집계가 희석된다.) */}
+            <TagInput tags={dreamTags} onChange={setDreamTags} maxTags={3} />
+
+            {/* AI 추천 태그 - 불러온 기록에 원래 AI가 뽑아줬던 키워드(interpretation.tags) 중
+                아직 안 붙인 것만 클릭 한 번으로 추가할 수 있는 프리셋으로 보여준다. */}
+            {attachmentMode === "load" && suggestedDreamTags.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-slate-500">💡 AI 추천 태그</span>
+                {suggestedDreamTags.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() =>
+                      setDreamTags((prev) => (prev.length >= 5 || prev.includes(tag) ? prev : [...prev, tag]))
+                    }
+                    className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2.5 py-1 text-[11px] text-purple-200 transition-colors hover:border-purple-400/60 hover:bg-purple-500/20"
+                  >
+                    + #{tag}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* 첨부 모드 세그먼트 컨트롤: 불러오기 ↔ 직접 쓰기 */}
             <div className="mt-4 flex rounded-lg bg-slate-800 p-1">

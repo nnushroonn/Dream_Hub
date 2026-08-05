@@ -84,6 +84,11 @@ export async function getBestPosts(limit: number): Promise<BestPostEntry[]> {
   return data.posts;
 }
 
+// 자각의 정도 - 기존 단순 on/off 토글(is_lucid)을 대신한다. control_level은 lucid_level이
+// "momentary"/"full"일 때만 의미가 있고, "none"이면 항상 null이다.
+export type LucidLevel = "none" | "momentary" | "full";
+export type ControlLevel = "director" | "observer" | "lost_control";
+
 export interface DreamSurvey {
   title: string;
   brightness: string;
@@ -96,7 +101,8 @@ export interface DreamSurvey {
   reality_link: string;
   reality_detail: string;
   vividness: number;
-  is_lucid: boolean;
+  lucid_level: LucidLevel;
+  control_level: ControlLevel | null;
   final_memo: string;
 }
 
@@ -191,7 +197,12 @@ export interface DreamEntryRecord {
   share_with_ai_analysis: boolean;
   // 꿈 내용과는 별개로, 공유할 때 덧붙인 한마디(질문/자랑거리 등). is_public=false면 의미 없음.
   share_caption: string | null;
+  // 현실 일기 전용 사진 첨부(base64 data URL) - 꿈 기록에는 쓰지 않는다.
+  photo_url: string | null;
+  // 자각 여부(뱃지/통계 등 레거시 boolean 용도) - lucid_level이 "none"이 아니면 항상 true.
   is_lucid: boolean;
+  lucid_level: LucidLevel;
+  control_level: ControlLevel | null;
   survey: DreamSurvey;
   // 무의식 광장 "직접 쓰기" 모드에서 AI 해몽을 건너뛰고 게시했으면 null.
   interpretation: AiInterpretation | null;
@@ -223,6 +234,7 @@ export interface DreamEntryPayload {
   is_anonymous: boolean;
   share_with_ai_analysis: boolean;
   share_caption?: string | null;
+  photo_url?: string | null;
   survey: DreamSurvey;
   interpretation?: AiInterpretation | null;
   tags?: string[];
@@ -286,6 +298,7 @@ export async function setDreamVisibility(
     is_anonymous: options.isAnonymous,
     share_with_ai_analysis: options.shareWithAiAnalysis,
     share_caption: options.shareCaption ?? entry.share_caption,
+    photo_url: entry.photo_url,
     survey: entry.survey,
     interpretation: entry.interpretation,
     tags: options.tags ?? entry.tags,
@@ -370,8 +383,55 @@ export interface CommunityPost {
   is_mine: boolean;
 }
 
-export async function getCommunityPosts(tag?: string): Promise<CommunityPost[]> {
-  const { data } = await api.get<CommunityPost[]>("/api/community/posts", { params: tag ? { tag } : undefined });
+export interface CommunityPostListResponse {
+  items: CommunityPost[];
+  total_count: number;
+  total_pages: number;
+  page: number;
+}
+
+export type CommunitySearchType = "all" | "title" | "hashtag" | "author";
+export type CommunitySort = "latest" | "likes" | "views";
+export type CommunityPeriod = "weekly" | "monthly" | "all";
+
+export interface CommunityPostListParams {
+  page?: number;
+  limit?: number;
+  searchType?: CommunitySearchType;
+  keyword?: string;
+  sort?: CommunitySort;
+  period?: CommunityPeriod;
+}
+
+export async function getCommunityPosts(params: CommunityPostListParams = {}): Promise<CommunityPostListResponse> {
+  const { page = 1, limit = 20, searchType, keyword, sort, period } = params;
+  const { data } = await api.get<CommunityPostListResponse>("/api/community/posts", {
+    params: {
+      page,
+      limit,
+      search_type: searchType,
+      keyword: keyword?.trim() ? keyword.trim() : undefined,
+      sort,
+      period,
+    },
+  });
+  return data;
+}
+
+// 커뮤니티 상단 태그 필터 바 - 최근 7일간 가장 많이 쓰인 해시태그 Top 8을 서버가 집계해서 준다.
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
+export interface TopCommunityTagsParams {
+  // 0이면 기간 제한 없이(전체 기간) 집계한다 - "+ 태그 더보기" 전체 목록 모달이 쓴다.
+  days?: number;
+  limit?: number;
+}
+
+export async function getTopCommunityTags(params: TopCommunityTagsParams = {}): Promise<TagCount[]> {
+  const { data } = await api.get<TagCount[]>("/api/community/tags/top", { params });
   return data;
 }
 
