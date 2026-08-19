@@ -7,7 +7,9 @@
 
 좋아요(LIKE)는 투표 자체에 익명 선택지가 없어 항상 행위자 이름을 감춘다. 댓글(COMMENT)은
 그 댓글을 쓸 때 고른 is_anonymous를 그대로 따른다. 베스트 피드(BEST) 진입 알림은 이를
-자동으로 만들어 줄 스케줄러가 없어 타입만 정의해 뒀고 실제로 생성되지는 않는다."""
+자동으로 만들어 줄 스케줄러가 없어 타입만 정의해 뒀고 실제로 생성되지는 않는다. 이슬(DEW)은
+정원 자체가 닉네임 기반 공개 페이지라 신원을 감출 이유가 없어 항상 actor_is_anonymous=False로
+생성된다."""
 
 from typing import Literal
 
@@ -56,8 +58,8 @@ def create_notification(
 
 class NotificationResponse(BaseModel):
     id: int
-    type: Literal["COMMENT", "LIKE", "BEST"]
-    target_type: Literal["POST", "DREAM"]
+    type: Literal["COMMENT", "LIKE", "BEST", "DEW"]
+    target_type: Literal["POST", "DREAM", "GARDEN"]
     target_id: int
     comment_id: int | None
     preview_text: str

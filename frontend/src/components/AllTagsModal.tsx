@@ -7,21 +7,23 @@ import { getTopCommunityTags, type TagCount } from "@/api/dream";
 interface AllTagsModalProps {
   onClose: () => void;
   onSelectTag: (tag: string) => void;
+  // 자유 광장(board, 기본값)/꿈 게시판(dream) 중 어느 태그를 검색할지 - 두 탭이 이 모달을 공유한다.
+  source?: "board" | "dream";
 }
 
-// 상단 필터 바는 "최근 인기 태그" Top 6만 보여주고, 이 모달이 서비스 전체 기간에 걸쳐 쓰인
+// 상단 필터 바는 "최근 인기 태그" Top 4만 보여주고, 이 모달이 서비스 전체 기간에 걸쳐 쓰인
 // 모든 해시태그를 검색할 수 있는 자리를 맡는다 - 열릴 때만 지연 로드한다(?days=0=기간 제한 없음).
-export default function AllTagsModal({ onClose, onSelectTag }: AllTagsModalProps) {
+export default function AllTagsModal({ onClose, onSelectTag, source = "board" }: AllTagsModalProps) {
   const [tags, setTags] = useState<TagCount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    getTopCommunityTags({ days: 0, limit: 200 })
+    getTopCommunityTags({ days: 0, limit: 200, source })
       .then(setTags)
       .catch(() => {})
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [source]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

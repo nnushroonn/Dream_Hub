@@ -4,17 +4,9 @@ import { useEffect, useState } from "react";
 import { Lock, Sparkles } from "lucide-react";
 
 import { getUserStats, type UserStats } from "@/api/auth";
+import { CHALLENGER_TIER_INDEX } from "@/lib/levels";
 
-// 실제 레벨 상한은 5단계(backend _LEVEL_TIERS)라 1~9 스펙 그대로는 못 쓴다. 백엔드가 이미
-// 계산해 내려주는 level_title 문구는 그대로 쓰고, 여기서는 구간별 색 톤만 실제 레벨 범위에
-// 맞게 재분배한다 - 초반(1~2) 시안 / 중반(3~4) 퍼플 / 후반(5) 푸시아.
-function tierStyleForLevel(level: number): { text: string; shadow: string } {
-  if (level <= 2) return { text: "text-cyan-400", shadow: "shadow-cyan-500/20" };
-  if (level <= 4) return { text: "text-purple-400", shadow: "shadow-purple-500/20" };
-  return { text: "text-fuchsia-400", shadow: "shadow-fuchsia-500/20" };
-}
-
-// 잠긴 뱃지에 호버했을 때 보여줄 해제 조건 - 백엔드(user.py _compute_stats)의 badges 판정
+// 잠긴 뱃지에 호버했을 때 보여줄 해제 조건 - 백엔드(user.py get_user_stats)의 badges 판정
 // 로직을 그대로 문장으로 옮긴 것이라, 조건식이 바뀌면 여기도 같이 고쳐야 한다.
 const BADGE_HINTS: Record<string, string> = {
   FIRST_LUCID: "자각몽 기록 1회 달성 시 잠금 해제",
@@ -22,8 +14,9 @@ const BADGE_HINTS: Record<string, string> = {
   COMMUNITY_STAR: "커뮤니티 글+댓글 5회 또는 공감 10회 달성 시 잠금 해제",
 };
 
-// 마이페이지 프로필 카드 하단의 레벨 게이지 + 업적 뱃지 그리드. 전부 /api/user/stats가 매
-// 요청마다 실제 활동 데이터(꿈 기록 수, 공감 수 등)로 다시 계산해 내려주는 값 - 저장된 더미가 아니다.
+// 마이페이지 프로필 카드 하단의 레벨 게이지 + 업적 뱃지 그리드. 레벨/티어는 /api/user/stats가
+// User.total_xp(award_xp가 액션 시점에 이미 적립해 둔 값)에서 파생해 내려주는 값이고, 업적
+// 뱃지는 매 요청마다 실제 활동 데이터로 다시 계산된다 - 둘 다 저장된 더미가 아니다.
 export default function LevelBadgeBoard() {
   const [stats, setStats] = useState<UserStats | null>(null);
 
@@ -35,9 +28,8 @@ export default function LevelBadgeBoard() {
 
   if (!stats) return null;
 
-  const tier = tierStyleForLevel(stats.level);
-  const isMaxLevel = stats.next_level_threshold === null;
-  const percent = isMaxLevel ? 100 : Math.min(Math.round((stats.points / stats.next_level_threshold!) * 100), 100);
+  const isChallenger = stats.tier_index >= CHALLENGER_TIER_INDEX;
+  const percent = Math.min(Math.round((stats.xp_into_level / stats.xp_for_next_level) * 100), 100);
 
   return (
     <div>
@@ -45,16 +37,29 @@ export default function LevelBadgeBoard() {
         {/* group으로 감싸 호버 시 아래 보상 힌트 툴팁이 뜬다 */}
         <div className="group relative inline-block">
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-semibold shadow-lg ${tier.text} ${tier.shadow}`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-semibold shadow-lg"
+            style={
+              isChallenger
+                ? {
+                    backgroundImage: "linear-gradient(135deg, rgba(255,215,0,0.15), rgba(59,130,246,0.15))",
+                    boxShadow: "0 0 15px rgba(255,215,0,0.25), 0 0 20px rgba(59,130,246,0.2)",
+                    color: "#FFD700",
+                  }
+                : { color: stats.tier_color }
+            }
           >
-            Level {stats.level}. {stats.level_title}
+            {/* Lv.24와 칭호는 굵기/투명도로 위계를 나눈다 - 숫자가 성장 체감의 핵심이라 더 진하고
+                굵게, 칭호는 그 뒤를 은은하게 받쳐준다. */}
+            <span className="font-bold">Lv.{stats.level}</span>
+            <span className="text-white/40">✦</span>
+            <span className="font-medium opacity-80">{stats.tier_title}</span>
             <Sparkles className="h-3.5 w-3.5 animate-spin-slow" />
           </span>
 
           {/* 보상 힌트 툴팁 - 반투명 글래스 카드, 명조체 */}
           <div className="pointer-events-none absolute bottom-full left-0 z-10 mb-2 w-64 rounded-xl border border-purple-400/30 bg-slate-900/90 p-3 opacity-0 shadow-xl backdrop-blur-md transition-opacity duration-200 group-hover:opacity-100">
             <p className="font-serif text-xs leading-relaxed text-slate-300">
-              Level 5 달성 시: 세 번째 무의식 룬 슬롯 해금 및 커뮤니티 보라빛 성운 프로필 테두리 획득
+              티어가 오를수록 커뮤니티 프로필 테두리 색이 브론즈에서 챌린저까지 화려해집니다.
             </p>
           </div>
         </div>
@@ -77,53 +82,19 @@ export default function LevelBadgeBoard() {
           </div>
         </div>
         <p className="mt-1.5 font-mono text-xs tracking-wider text-slate-400">
-          {isMaxLevel || stats.next_level_locked
-            ? `${stats.points.toLocaleString()} XP (MAX)`
-            : `${stats.points.toLocaleString()} / ${stats.next_level_threshold!.toLocaleString()} XP (${percent}%)`}
+          {stats.xp_into_level.toLocaleString()} / {stats.xp_for_next_level.toLocaleString()} XP ({percent}%) · 총{" "}
+          {stats.total_xp.toLocaleString()} XP
         </p>
-
-        {/* 경험치 바 위에서도 같은 보상 힌트가 뜬다 */}
-        <div className="pointer-events-none absolute bottom-full left-0 z-10 mb-2 w-64 rounded-xl border border-purple-400/30 bg-slate-900/90 p-3 opacity-0 shadow-xl backdrop-blur-md transition-opacity duration-200 group-hover:opacity-100">
-          <p className="font-serif text-xs leading-relaxed text-slate-300">
-            Level 5 달성 시: 세 번째 무의식 룬 슬롯 해금 및 커뮤니티 보라빛 성운 프로필 테두리 획득
-          </p>
-        </div>
       </div>
 
-      {/* Daily XP Cap 안내 - 오늘 활동으로 번 포인트가 상한에 닿으면, 더 활동해도 레벨에는
-          반영되지 않는다는 걸 미리 알려줘 "왜 안 오르지?" 하는 혼란을 막는다. 경고가 아니라
-          "오늘 몫은 다 했다"는 긍정적인 마무리 톤이라 차분한 슬레이트 톤으로 둔다. */}
+      {/* Daily XP Cap 안내 - 게시글/댓글 "작성"으로 번 XP가 오늘 상한에 닿으면, 더 써도 더 이상
+          레벨에 반영되지 않는다는 걸 미리 알려준다. 좋아요/댓글을 "받는" XP는 상한과 무관하니
+          여기서 언급하지 않는다 - 계속 들어온다. */}
       {stats.daily_cap_reached && (
         <p className="mt-3 rounded-xl border border-slate-700/50 bg-slate-800/40 px-3 py-2 text-xs leading-relaxed text-slate-400">
-          🌙 오늘의 무의식 탐험을 충분히 마쳤습니다. 내일 또 만나요! (오늘 획득 {stats.daily_points_earned}/
-          {stats.daily_xp_cap} XP)
+          🌙 오늘 작성한 글/댓글로는 더 이상 XP가 붙지 않아요. 대신 받는 좋아요·댓글 XP는 계속
+          쌓입니다! (오늘 작성 XP {stats.daily_capped_xp_earned}/{stats.daily_xp_cap})
         </p>
-      )}
-
-      {/* Milestone Lock 안내 - 포인트는 다음 레벨 문턱을 넘었지만 연속 기록 조건이 부족해 승급이
-          막힌 상태. "승급 미션" 톤으로 강조해, 이 조건만 채우면 바로 다음 레벨이라는 걸 알려준다. */}
-      {stats.next_level_locked && stats.next_level_requirement && (
-        <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-500/[0.06] px-3.5 py-3">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
-            <Lock className="h-3.5 w-3.5" />
-            승급 미션: {stats.next_level_requirement}
-          </div>
-          {stats.next_level_streak_goal !== null && (
-            <>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-400 transition-all duration-700 ease-out"
-                  style={{
-                    width: `${Math.min((stats.diary_streak / stats.next_level_streak_goal) * 100, 100)}%`,
-                  }}
-                />
-              </div>
-              <p className="mt-1.5 font-mono text-[11px] tracking-wider text-amber-200/70">
-                연속 {stats.diary_streak} / {stats.next_level_streak_goal}일
-              </p>
-            </>
-          )}
-        </div>
       )}
 
       <div className="mt-4 flex flex-wrap gap-3">

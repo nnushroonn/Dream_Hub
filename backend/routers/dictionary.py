@@ -8,14 +8,16 @@ import json
 import logging
 
 import anthropic
+import redis
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from database import get_db, get_settings
+from database import get_db, get_redis, get_settings
 from models import DreamDictionaryCache, DreamStatus, DreamEntry, StandardKeyword
 from routers.ai_interpretation import EXPERT_MATRIX_BLOCK
+from routers.trends import record_search_trend
 
 router = APIRouter(prefix="/api/dictionary", tags=["dictionary"])
 logger = logging.getLogger(__name__)
@@ -527,7 +529,11 @@ def _request_scenario_detail(keyword: str, scenario_title: str) -> dict | None:
 
 
 @router.post("/search", response_model=DictionaryEntry)
-def search_dictionary(payload: SearchRequest, db: Session = Depends(get_db)) -> dict:
+def search_dictionary(
+    payload: SearchRequest,
+    db: Session = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
+) -> dict:
     keyword = payload.keyword.strip()
     if not keyword:
         return {"keyword": "", **FALLBACK_RESULT}
@@ -542,16 +548,22 @@ def search_dictionary(payload: SearchRequest, db: Session = Depends(get_db)) -> 
             entry = {"keyword": keyword, **FALLBACK_RESULT}
     if payload.record:
         _record_search(db, keyword)
+        record_search_trend(redis_client, keyword)
     return entry
 
 
 @router.post("/parse-query", response_model=QueryParseResponse)
-def parse_dictionary_query(payload: QueryParseRequest, db: Session = Depends(get_db)) -> dict:
+def parse_dictionary_query(
+    payload: QueryParseRequest,
+    db: Session = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
+) -> dict:
     query = payload.query.strip()
     if not query:
         return {"keyword": "", "context": ""}
     if payload.record:
         _record_search(db, query)
+        record_search_trend(redis_client, query)
     return _parse_query(query)
 
 
@@ -621,4 +633,7 @@ def get_recent_public_dreams(db: Session = Depends(get_db)) -> list[dict]:
         .scalars()
         .all()
     )
-    return [{"title": row.title, "emotion": row.emotion, "dream_date": row.dream_date.isoformat()} for row in rows]
+    return [
+        {"title": row.public_title or row.title, "emotion": row.emotion, "dream_date": row.dream_date.isoformat()}
+        for row in rows
+    ]

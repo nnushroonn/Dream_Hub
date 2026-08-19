@@ -17,12 +17,14 @@ import {
   voteOnPost,
   type CommunityPost,
 } from "@/api/dream";
+import AuthorBadge from "@/components/AuthorBadge";
 import CommentSection from "@/components/CommentSection";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
 import VoteButtons from "@/components/VoteButtons";
 import { consumeBackNavOrigin } from "@/lib/communityBackNav";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useLoginModalStore } from "@/store/useLoginModalStore";
 
 function formatPostTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -45,6 +47,7 @@ export default function BoardPostPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const authUser = useAuthStore((state) => state.user);
   const nickname = authUser?.nickname ?? "탐험가";
+  const openLoginModal = useLoginModalStore((state) => state.open);
 
   const [post, setPost] = useState<CommunityPost | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -104,12 +107,11 @@ export default function BoardPostPage() {
     }
   };
 
-  const handleVote = async (voteType: "up" | "down") => {
+  // 인증 확인 없이 곧장 투표를 실행하는 부분 - handleVote(게이트)와 로그인 모달의 onSuccess
+  // 복귀 콜백이 공유한다. onSuccess 시점엔 handleVote의 예전 클로저를 다시 부르면 isAuthenticated가
+  // 그 순간의 stale 값(false)에 갇혀 다시 로그인 모달을 띄우는 문제가 생기므로 분리해 둔다.
+  const performVote = async (voteType: "up" | "down") => {
     if (!post || post.is_mine) return;
-    if (!isAuthenticated) {
-      router.push("/login");
-      return;
-    }
     const previous = post;
     setPost((prev) => {
       if (!prev) return prev;
@@ -128,6 +130,15 @@ export default function BoardPostPage() {
     } catch {
       setPost(previous);
     }
+  };
+
+  const handleVote = (voteType: "up" | "down") => {
+    if (!post || post.is_mine) return;
+    if (!isAuthenticated) {
+      openLoginModal({ triggerSource: "community", onSuccess: () => performVote(voteType) });
+      return;
+    }
+    void performVote(voteType);
   };
 
   const canEdit = post?.is_mine && Date.now() - new Date(post.created_at).getTime() < POST_EDIT_WINDOW_MS;
@@ -273,13 +284,24 @@ export default function BoardPostPage() {
                       </button>
                     </div>
                   )}
+                  {/* 부적절한 콘텐츠 신고 - 실제 처리 로직은 아직 없고, 우선 UI만 배치한다. */}
+                  {!post.is_mine && (
+                    <button
+                      type="button"
+                      onClick={() => window.alert("신고가 접수되었습니다. 빠르게 검토할게요.")}
+                      className="shrink-0 pt-1 text-[11px] text-slate-500 underline-offset-2 transition-colors hover:text-red-300 hover:underline"
+                    >
+                      🚨 신고하기
+                    </button>
+                  )}
                 </div>
 
-                <p className="mt-1.5 text-xs text-slate-500">
-                  {post.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${post.author_display_name}`} · {formatPostTime(post.created_at)}
-                  {" "}
-                  · 조회 {post.view_count.toLocaleString()}
-                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-slate-500">
+                  <AuthorBadge isAnonymous={post.is_anonymous} displayName={post.author_display_name} badge={post.author_badge} />
+                  <span>
+                    · {formatPostTime(post.created_at)} · 조회 {post.view_count.toLocaleString()}
+                  </span>
+                </div>
 
                 {confirmDelete && (
                   <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-red-400/30 bg-red-500/10 px-3.5 py-2.5">
@@ -336,7 +358,7 @@ export default function BoardPostPage() {
                     defaultAnonymous={post.is_anonymous}
                     nickname={nickname}
                     isAuthenticated={isAuthenticated}
-                    onRequireLogin={() => router.push("/login")}
+                    onRequireLogin={() => openLoginModal({ triggerSource: "community" })}
                     onCommentCountChange={(count) => setPost((prev) => (prev ? { ...prev, comment_count: count } : prev))}
                     fetchComments={getPostComments}
                     submitComment={createPostComment}

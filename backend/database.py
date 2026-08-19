@@ -1,3 +1,4 @@
+import logging
 from functools import lru_cache
 
 import redis
@@ -5,9 +6,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
+logger = logging.getLogger(__name__)
+
+# jwt_secret_key/session_secret_key의 기본값 - .env 설정을 깜빡해도 서버가 "그냥" 뜨는 걸
+# 막기 위한 감시 대상. 이 문자열 자체를 실제 시크릿으로 쓰는 배포가 있으면 HS256 서명을
+# 아는 사람 누구나 어떤 유저로도 위조된 로그인 토큰을 만들 수 있다 - _validate_secrets가
+# get_settings() 최초 호출(=앱 기동) 시점에 이 값 그대로인지 검사한다.
+_PLACEHOLDER_SECRETS = {
+    "jwt_secret_key": "change-this-to-a-long-random-secret",
+    "session_secret_key": "change-this-session-secret",
+}
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # "production"일 때만 시크릿 placeholder 검사가 기동을 막는다(fail-fast) - 로컬 개발/CI
+    # 환경까지 막으면 최초 세팅 경험이 나빠지므로, 그런 환경은 경고 로그만 남기고 넘어간다.
+    environment: str = "development"
 
     database_url: str = "postgresql+psycopg2://dream_hub:dream_hub_password@localhost:5433/dream_hub_db"
     redis_url: str = "redis://localhost:6380/0"
@@ -19,8 +35,36 @@ class Settings(BaseSettings):
     # 세션 미들웨어(구글 OAuth state/nonce 저장용) 서명 키
     session_secret_key: str = "change-this-session-secret"
 
+    # --- 인증 쿠키(httpOnly) 설정 - localStorage 저장 방식에서 전환하며 도입 ---
+    # 액세스 토큰(httpOnly, JS가 못 읽음)과 CSRF 토큰(JS가 읽어서 헤더로 되돌려 보내야 하므로
+    # httpOnly 아님) 두 쿠키의 이름. 프론트(frontend/src/api/axios.ts)가 CSRF 쿠키 이름/헤더
+    # 이름을 문자열로 직접 알고 있어야 하므로 그쪽 상수와 반드시 같은 값을 유지해야 한다.
+    access_token_cookie_name: str = "access_token"
+    csrf_cookie_name: str = "csrf_token"
+    csrf_header_name: str = "X-CSRF-Token"
+    # SameSite 속성 - 프론트/백엔드가 같은 루트 도메인의 서로 다른 서브도메인을 쓴다는 전제
+    # (예: dreamhub.com / api.dreamhub.com)라면 "lax"로 충분하다: SameSite는 "같은 사이트인가
+    # (eTLD+1이 같은가)"만 보고 포트/서브도메인은 안 보므로, 서브도메인 간 요청은 여전히
+    # "동일 사이트"로 취급돼 Lax 쿠키가 정상적으로 실린다.
+    #
+    # ⚠️ 나중에 프론트/백엔드가 완전히 다른 등록 도메인(예: dreamhub.com과 dream-hub-api.io처럼
+    # eTLD+1 자체가 다름)으로 분리되면, 그 순간부터는 "교차 사이트" 요청이 되어 Lax로는 쿠키가
+    # 전혀 전달되지 않는다 - 그때는 아래 세 가지를 함께 바꿔야 한다:
+    #   1. 이 값을 "none"으로 변경 (SameSite=None은 Secure=True 필수 - 아래 secure 판정은
+    #      이미 production에서 True라 그대로 두면 된다).
+    #   2. main.py의 CORSMiddleware가 이미 allow_origins를 와일드카드가 아닌 명시적 origin
+    #      리스트로, allow_credentials=True로 쓰고 있는지 재확인(현재 이미 그렇게 돼 있다 -
+    #      SameSite=None 쿠키가 실제로 브라우저에 저장/전송되려면 이 조합이 필수다).
+    #   3. 쿠키에 Domain 속성을 새로 줄 필요는 없다(도메인이 아예 다르면 Domain 속성으로
+    #      공유 자체가 불가능하다 - 지금처럼 host-only로 두고, 프론트가 항상 백엔드의 실제
+    #      도메인으로 credentials 포함 요청을 보내는 구조는 변하지 않는다).
+    cookie_samesite: str = "lax"
+
     # 이메일 인증
     email_verification_token_expire_minutes: int = 60 * 24
+    # 비밀번호 재설정 - 이메일 인증보다 짧게 잡는다(계정 탈취로 바로 이어질 수 있는 링크라
+    # 유효 기간을 더 보수적으로 둔다).
+    password_reset_token_expire_minutes: int = 60
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_username: str = ""
@@ -45,9 +89,28 @@ class Settings(BaseSettings):
     r2_public_base_url: str = ""
 
 
+def _validate_secrets(settings: Settings) -> None:
+    is_production = settings.environment.strip().lower() == "production"
+    for field_name, placeholder in _PLACEHOLDER_SECRETS.items():
+        if getattr(settings, field_name) != placeholder:
+            continue
+        message = (
+            f"{field_name}가 기본 placeholder 값 그대로입니다 - .env에서 실제 랜덤 값으로 "
+            "반드시 교체하세요(예: python -c \"import secrets; print(secrets.token_urlsafe(32))\")."
+        )
+        if is_production:
+            # 경고로 그치면 이 상태로도 서버가 계속 떠 있을 수 있다 - 이 시크릿을 아는 사람은
+            # 누구나 임의 유저로 로그인 토큰을 위조할 수 있으므로, 프로덕션에서는 아예
+            # 기동 자체를 막는다.
+            raise RuntimeError(message)
+        logger.warning(message)
+
+
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    _validate_secrets(settings)
+    return settings
 
 
 settings = get_settings()

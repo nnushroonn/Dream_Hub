@@ -1,37 +1,91 @@
-// 나만의 일기장(/journal)의 "꿈 씨앗" 리추얼 - 마이페이지 은하계 대시보드가 같은 목록/색상을
-// 다시 써야 해서 두 화면이 공유하는 단일 소스로 뺐다. DB에 별도 컬럼이 없어, journal에서
-// 선택한 씨앗은 DreamEntry.tags에 문자열 그대로 실어 저장한다(최대 5개 태그 중 하나 슬롯).
-export const DREAM_SEEDS = [
-  "🌿 비워내기 (차분한 휴식)",
-  "🔥 성장하기 (자신감과 용기)",
-  "💜 치유하기 (위로와 평온)",
-  "✨ 모험하기 (새로운 영감)",
-] as const;
+import { colorForGenus } from "@/lib/flowerTaxonomy";
+import { EMOTION_CATEGORIES, EMOTION_CATEGORY_TO_GENUS, type EmotionCategoryKey } from "@/lib/emotionWordbook";
 
-export type DreamSeed = (typeof DREAM_SEEDS)[number];
+// 무의식 씨앗 - "밤에 심기 -> 아침에 상태 확인"의 소스 오브 트루스.
+// 예전엔 SeedType(SLEEP/CONFIDENCE 등, 감정과 무관한 목적 6종 + 히든 WIND)이었지만, writing
+// 단계에서 이미 고른 감정이 곧 그날 심는 씨앗이 되도록 바뀌면서 감정 대분류 7종
+// (emotionWordbook.EmotionCategoryKey, backend/emotion_wordbook.py의 EMOTION_CATEGORIES와
+// 동일)으로 완전히 대체됐다. 별도의 8번째 "바람이 물어온 씨앗" 값도 이제 없다 - 씨앗 없이
+// 꿈만 기록해도 백엔드가 그 꿈의 무드로 7종 중 하나를 골라 채운다(emotion_wordbook.
+// emotion_category_for_emoji).
+export type SeedType = EmotionCategoryKey;
 
-export function isDreamSeed(tag: string): tag is DreamSeed {
-  return (DREAM_SEEDS as readonly string[]).includes(tag);
+export const SEED_TYPES: SeedType[] = EMOTION_CATEGORIES.map((c) => c.key);
+
+export type SeedStatus = "PLANTED" | "BLOOMING" | "RESTING";
+
+// "꿈이 기억나지 않아요"를 명시적으로 선택했는지 - status(PLANTED 등)만으로는 "아직 안 씀"과
+// "기억 안 나서 명시적으로 넘어감"을 구분할 수 없어 별도로 둔다. 백엔드 DreamRecallStatus
+// (models.py)와 문자열이 정확히 일치해야 한다.
+export type DreamRecallStatus = "PENDING" | "REMEMBERED" | "FORGOTTEN";
+
+export interface SeedDefinition {
+  type: SeedType;
+  // 씨앗/도감 화면에 노출되는 직관적인 명사 - 감정 대분류 이름 그대로.
+  label: string;
+  // bloom.flower_name이 없을 때만 쓰는 방어적 폴백 이름 - 개화 시 classify_flower가 항상
+  // 실제 종 이름을 채우므로, 정상적인 새 기록에서는 사실상 등장하지 않는다.
+  flowerName: string;
+  meaning: string;
+  // [주 테마 컬러, 보조 테마 컬러] - 이 감정이 genus로 파생될 때 쓰는 GENUS_COLORS와 동일
+  // (colorForGenus로 연결) - 씨앗 색이 나중에 필 꽃의 색과 항상 이어지도록 한다.
+  colors: [string, string];
 }
 
-export const DREAM_SEED_COLOR: Record<DreamSeed, string> = {
-  "🌿 비워내기 (차분한 휴식)": "#34d399",
-  "🔥 성장하기 (자신감과 용기)": "#fb923c",
-  "💜 치유하기 (위로와 평온)": "#c084fc",
-  "✨ 모험하기 (새로운 영감)": "#60a5fa",
+const MEANING: Record<SeedType, string> = {
+  사랑: "따뜻하게 아끼는 마음",
+  기쁨: "벅차게 차오르는 행복",
+  즐거움: "가볍고 유쾌한 기분",
+  바램: "닿고 싶은 간절한 마음",
+  슬픔: "고요히 젖어드는 마음",
+  분노: "뜨겁게 끓어오르는 감정",
+  미움: "차갑게 식어버린 마음",
 };
 
-// 커뮤니티 헤더 "주파수 필터"용 공개 슬러그 - 백엔드 PUBLIC_TAG_OPTIONS와 반드시 일치해야 한다.
-// 개인 씨앗(DREAM_SEEDS)과 1:1로 대응하되, 이건 유저가 게시글에 "직접" 붙이는 공개 태그다.
-export interface CommunityFrequencyTag {
-  slug: "rest" | "growth" | "healing" | "adventure";
-  label: string;
-  seed: DreamSeed;
+export const SEED_DEFINITIONS: Record<SeedType, SeedDefinition> = Object.fromEntries(
+  SEED_TYPES.map((type) => [
+    type,
+    {
+      type,
+      label: type,
+      flowerName: `${type} 씨앗이 피운 꽃`,
+      meaning: MEANING[type],
+      colors: colorForGenus(EMOTION_CATEGORY_TO_GENUS[type]),
+    },
+  ])
+) as Record<SeedType, SeedDefinition>;
+
+export const SEED_DEFINITION_LIST: SeedDefinition[] = SEED_TYPES.map((type) => SEED_DEFINITIONS[type]);
+
+export function getSeedDefinition(type: SeedType): SeedDefinition {
+  return SEED_DEFINITIONS[type];
 }
 
-export const COMMUNITY_FREQUENCY_TAGS: CommunityFrequencyTag[] = [
-  { slug: "rest", label: "🌿 비움", seed: DREAM_SEEDS[0] },
-  { slug: "growth", label: "🔥 성장", seed: DREAM_SEEDS[1] },
-  { slug: "healing", label: "💜 치유", seed: DREAM_SEEDS[2] },
-  { slug: "adventure", label: "✨ 모험", seed: DREAM_SEEDS[3] },
-];
+export function isSeedType(value: string): value is SeedType {
+  return (SEED_TYPES as readonly string[]).includes(value);
+}
+
+// 커뮤니티 헤더 "주파수 필터"/?template=galaxy 글쓰기용 공개 슬러그 - 백엔드에는 이 값을
+// 강제하는 화이트리스트가 없다(public_tags는 자유 String 배열). 개인 씨앗(감정 대분류)과
+// 1:1 대응하는 라벨만 프론트에서 노출용으로 쓴다.
+export interface CommunityFrequencyTag {
+  slug: string;
+  label: string;
+  seed: SeedType;
+}
+
+const SLUG_BY_TYPE: Record<SeedType, string> = {
+  즐거움: "fun",
+  바램: "longing",
+  슬픔: "sadness",
+  분노: "anger",
+  기쁨: "joy",
+  사랑: "love",
+  미움: "hatred",
+};
+
+export const COMMUNITY_FREQUENCY_TAGS: CommunityFrequencyTag[] = SEED_DEFINITION_LIST.map((seed) => ({
+  slug: SLUG_BY_TYPE[seed.type],
+  label: seed.label,
+  seed: seed.type,
+}));

@@ -1,17 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { getMySeeds, type DreamSeedRecord } from "@/api/seeds";
 import AuraToggle from "@/components/AuraToggle";
-import DreamClusterChart from "@/components/DreamClusterChart";
 import GalaxyVisibilityToggle from "@/components/GalaxyVisibilityToggle";
 import LevelBadgeBoard from "@/components/LevelBadgeBoard";
 import MyActivityTabs from "@/components/MyActivityTabs";
 import NavBar from "@/components/NavBar";
 import NicknameEditor from "@/components/NicknameEditor";
 import PreviewGateway from "@/components/PreviewGateway";
-import { DREAM_SEEDS, isDreamSeed } from "@/lib/dreamSeeds";
+import { getSeedDefinition, SEED_TYPES } from "@/lib/dreamSeeds";
 import { moodBucketForEmoji } from "@/lib/moodBucket";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
@@ -60,31 +61,42 @@ export default function MyPage() {
   const [pageTab, setPageTab] = useState<"dashboard" | "activity">("dashboard");
 
   // 🌌 은하계 대시보드 - /mypage/calendar, /mypage/stats는 백엔드가 하드코딩된 더미를
-  // 내려줄 뿐이라(routers/mypage.py 주석 참고) 아예 쓰지 않는다. 대신 NavBar가 이미
-  // 채워둔 useSavedDreamsStore 원본 기록에서 전부 실제 데이터로 계산한다.
-  const seedStats = useMemo(() => {
-    const counts = new Map(DREAM_SEEDS.map((seed) => [seed, 0]));
-    for (const entry of allEntries) {
-      if (entry.interpretation) continue; // 씨앗은 일기(해몽 전) 기록에만 심을 수 있다
-      const seed = entry.tags.find(isDreamSeed);
-      if (seed) counts.set(seed, (counts.get(seed) ?? 0) + 1);
+  // 내려줄 뿐이라(routers/mypage.py 주석 참고) 아예 쓰지 않는다. 대부분은 NavBar가 이미
+  // 채워둔 useSavedDreamsStore 원본 기록에서 계산하지만, 무의식 씨앗만은 DreamEntry가 아니라
+  // 별도 DreamSeed 테이블에 살고 있어 이 페이지에서 직접 내 씨앗 이력을 불러온다.
+  const [mySeeds, setMySeeds] = useState<DreamSeedRecord[]>([]);
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setMySeeds([]);
+      return;
     }
-    return DREAM_SEEDS.map((seed) => ({ seed, count: counts.get(seed) ?? 0 }));
-  }, [allEntries]);
+    getMySeeds()
+      .then(setMySeeds)
+      .catch(() => {});
+  }, [isAuthenticated]);
+
+  const seedStats = useMemo(() => {
+    const counts = new Map(SEED_TYPES.map((seed) => [seed, 0]));
+    for (const seed of mySeeds) {
+      counts.set(seed.seed_type, (counts.get(seed.seed_type) ?? 0) + 1);
+    }
+    return SEED_TYPES.map((seed) => ({ seed, count: counts.get(seed) ?? 0 }));
+  }, [mySeeds]);
 
   const diaryStats = useMemo(() => {
-    const diaryDates = allEntries.filter((entry) => !entry.interpretation).map((entry) => entry.dream_date);
+    const diaryDates = allEntries.filter((entry) => entry.entry_type === "emotion").map((entry) => entry.dream_date);
     return { totalCount: new Set(diaryDates).size, streak: computeDiaryStreak(diaryDates) };
   }, [allEntries]);
 
   const luckyDreamPercent = useMemo(() => {
-    const dreamEntries = allEntries.filter((entry) => entry.interpretation);
+    const dreamEntries = allEntries.filter((entry) => entry.entry_type === "dream");
     if (dreamEntries.length === 0) return null;
     const goodCount = dreamEntries.filter((entry) => moodBucketForEmoji(entry.emotion) === "good").length;
     return Math.round((goodCount / dreamEntries.length) * 100);
   }, [allEntries]);
 
-  // 이번 달 꿈 달력 - AI 해몽까지 붙은 실제 꿈 기록만 대상으로, 날짜별 감정 이모지를 뽑는다.
+  // 이번 달 꿈 달력 - 실제 꿈 기록(entry_type==="dream")만 대상으로, 날짜별 감정 이모지를 뽑는다.
+  // AI 해몽 유무로 걸러내지 않는다(해몽 없이 저장되는 진짜 꿈일기도 있다).
   const dreamCalendarDays = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -92,7 +104,7 @@ export default function MyPage() {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const emotionByDate = new Map<string, string>();
     for (const entry of allEntries) {
-      if (!entry.interpretation) continue;
+      if (entry.entry_type !== "dream") continue;
       if (!emotionByDate.has(entry.dream_date)) emotionByDate.set(entry.dream_date, entry.emotion);
     }
     return Array.from({ length: daysInMonth }, (_, index) => {
@@ -131,7 +143,7 @@ export default function MyPage() {
       streak: diaryStats.streak,
       totalDiary: diaryStats.totalCount,
       luckyPercent: luckyDreamPercent,
-      topSeed: topSeed && topSeed.count > 0 ? topSeed.seed : null,
+      topSeed: topSeed && topSeed.count > 0 ? getSeedDefinition(topSeed.seed).label : null,
       topKeywords: topKeywords.slice(0, 3).map((item) => item.keyword),
     };
     const params = new URLSearchParams({ type: "board", template: "galaxy", data: JSON.stringify(payload) });
@@ -243,18 +255,24 @@ export default function MyPage() {
               <p className="mt-2 text-xs text-slate-500">누적 {diaryStats.totalCount}개의 하루를 기록했어요.</p>
             </div>
 
-            <div className={CARD_CLASS}>
-              <h3 className="text-sm font-semibold text-slate-200">최근 심은 꿈 씨앗</h3>
-              <div className="mt-4">
-                <DreamClusterChart seedStats={seedStats} />
-              </div>
-            </div>
+            {/* 씨앗 심기/개화 통계는 이제 이 대시보드가 아니라 전용 정원 페이지에서 전시된다 -
+                여기서는 그리로 넘어가는 다리만 남겨둔다. */}
+            <Link
+              href="/garden"
+              className={`${CARD_CLASS} block transition-colors hover:border-emerald-500/40`}
+            >
+              <h3 className="text-sm font-semibold text-slate-200">🌱 무의식의 정원</h3>
+              <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                밤마다 심은 씨앗이 피워낸 식물들을 한자리에 모아볼 수 있어요.
+              </p>
+              <span className="mt-3 inline-block text-xs text-emerald-300/80">정원 보러 가기 →</span>
+            </Link>
 
             <div className={CARD_CLASS}>
               <h3 className="text-sm font-semibold text-slate-200">자주 등장한 키워드</h3>
               <div className="mt-4 flex flex-wrap gap-2">
                 {topKeywords.length === 0 ? (
-                  <p className="text-xs text-slate-600">아직 해몽 키워드가 쌓이지 않았어요.</p>
+                  <p className="text-xs text-slate-400">아직 해몽 키워드가 쌓이지 않았어요.</p>
                 ) : (
                   topKeywords.map((item) => (
                     <span

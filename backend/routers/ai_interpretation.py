@@ -7,16 +7,53 @@
 
 import json
 import logging
+from datetime import date as PyDate
 from typing import Literal
 
 import anthropic
-from fastapi import APIRouter, HTTPException
+import redis as redis_lib
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
+from sqlalchemy.orm import Session
 
-from database import get_settings
+from database import get_db, get_redis, get_settings
+from models import DreamEntry, EntryType, User
+from routers.auth import (
+    _rate_limit_exceeded,
+    _record_rate_limit_attempt,
+    _too_many_requests,
+    get_current_user_optional,
+)
 
 router = APIRouter(prefix="/api", tags=["ai"])
 logger = logging.getLogger(__name__)
+
+# --- AI 해몽 레이트리밋 - 실제 Claude API를 호출하는 비용이 드는 경로라, 로그인 브루트포스
+# 방어와 같은 Redis INCR+TTL 패턴을 그대로 재사용한다. dream-interpretation과
+# dream-interpretation-quick 두 엔드포인트가 같은 카운터를 공유한다(번갈아 호출해서 사실상
+# 한도를 두 배로 늘리는 걸 막기 위해) - "10분 동안 이 사용자/IP가 실제 Claude 호출을 몇 번
+# 했는가" 하나만 센다. 로그인 사용자는 user_id 기준(정상적인 하루 사용 패턴엔 넉넉하게),
+# 비로그인 미리보기는 IP 기준으로 더 빡빡하게 잡는다 - 회원가입 없이도 두드릴 수 있는
+# 경로라 남용 위험이 더 크다.
+AI_INTERPRET_USER_LIMIT = 10
+AI_INTERPRET_ANON_LIMIT = 3
+AI_INTERPRET_WINDOW_SECONDS = 600  # 10분
+
+
+def _ai_interpret_rate_limit_key(current_user: User | None, client_ip: str) -> tuple[str, int]:
+    if current_user is not None:
+        return f"ai:interpret:user:{current_user.id}", AI_INTERPRET_USER_LIMIT
+    return f"ai:interpret:ip:{client_ip}", AI_INTERPRET_ANON_LIMIT
+
+
+def _enforce_ai_interpret_rate_limit(
+    redis_client: redis_lib.Redis, current_user: User | None, request: Request
+) -> None:
+    client_ip = request.client.host if request.client else "unknown"
+    key, limit = _ai_interpret_rate_limit_key(current_user, client_ip)
+    if _rate_limit_exceeded(redis_client, key, limit):
+        raise _too_many_requests()
+    _record_rate_limit_attempt(redis_client, key, AI_INTERPRET_WINDOW_SECONDS)
 
 # --- 선언부: 모델 / 응답 스키마 / 시스템 프롬프트 템플릿 --------------------
 
@@ -166,6 +203,16 @@ RESPONSE_SCHEMA = {
                 "'0'으로 차단하고 다른 일에 집중하기) 1~2문장"
             ),
         },
+        "inferred_mood_emoji": {
+            "type": "string",
+            "description": (
+                "이 꿈 서술 전체의 정서적 톤을 가장 잘 나타내는 이모지 하나를, 아래 후보 중에서 정확히 "
+                "골라 그대로(다른 문자 추가 없이) 반환하세요: 😱 🤩 😢 😌 🤔 🥰 😰 😠 👁️ 😤 💧 😔 💓 😮 🌀 🤷 ✨. "
+                "유저가 이미 별도로 감정 태그를 직접 선택했더라도, 이 필드는 그 선택과 무관하게 서술/데이터 "
+                "내용만 근거로 독립적으로 추론해 채우세요 - 유저가 감정 태그를 고르지 않고 저장하는 경우를 "
+                "대비한 폴백 값입니다."
+            ),
+        },
     },
     "required": [
         "tags",
@@ -178,6 +225,7 @@ RESPONSE_SCHEMA = {
         "lucky_item_reason",
         "lucky_number",
         "lucky_number_reason",
+        "inferred_mood_emoji",
     ],
     "additionalProperties": False,
 }
@@ -248,6 +296,27 @@ class DreamSurveyInput(BaseModel):
     lucid_level: Literal["none", "momentary", "full"] = "none"
     control_level: Literal["director", "observer", "lost_control"] | None = None
     final_memo: str
+    # --- 씨앗 심기(감정일기) "마음 기록장" 깊이 모드 전용 필드 - 모두 선택값이라 꿈일기
+    # (entry_type=dream)나 감정일기 간단 모드는 전혀 채우지 않는다. journal_mode가 "guided"인
+    # 행만 아래 필드가 채워진다. 씨앗의 속(genus)은 initial_emotion(+initial_emotion_category)만
+    # 근거로 삼고(프론트가 이 값으로 대표 이모지를 골라 emotion 컬럼에 실어 보내므로 백엔드
+    # genus 계산 로직은 손대지 않는다), closing_emotion(+closing_emotion_category)은 "감정의
+    # 여정" 표시와 성장 배지 판정 전용이라 꽃의 속 분류 자체에는 관여하지 않는다.
+    journal_mode: Literal["simple", "guided"] = "simple"
+    initial_emotion: str | None = None
+    # 사용자가 실제로 고른 대분류 아코디언 - "고통스러운"/"구역질나는"처럼 같은 단어가 여러
+    # 대분류(예: 분노/미움)에 겹쳐 있을 때, 이 힌트가 없으면 단어만으로는 어느 쪽을 골랐는지
+    # 구분할 수 없어 flower_taxonomy.genus_for_word_or_category가 배열 순서 우선 폴백으로
+    # 넘어간다(EMOTION_CATEGORY_TO_GENUS에 없는 값이 오면 같은 폴백). 선택값이라 예전
+    # 프론트 버전이 안 보내도(레거시 초안 등) 여전히 정상 동작한다.
+    initial_emotion_category: str | None = None
+    trigger_event: str | None = None
+    desire: str | None = None
+    message_to_other: str | None = None
+    desired_message: str | None = None
+    self_compassion: str | None = None
+    closing_emotion: str | None = None
+    closing_emotion_category: str | None = None
 
     @field_validator("control_level")
     @classmethod
@@ -267,6 +336,28 @@ class CounselingReportInput(BaseModel):
     action_plan: str
 
 
+class LinkedDiaryContext(BaseModel):
+    """이 꿈을 꾸기 전(같은 취침일의) 감정일기 내용 - 서버가 DB에서 직접 조회해 채운다
+    (예전엔 프론트가 이미 화면에 로드해 둔 목록에서 조립해 보냈는데, 화면마다 그 목록을
+    안 갖고 있으면 - 예: /journal/record 전용 페이지 - 조용히 빠지는 문제가 있었다. 이제는
+    요청 쪽에서 이 필드 자체를 보내지 않고, 아래 _resolve_linked_diary_context가 매 요청마다
+    직접 조회한다). journal_mode로 형태가 갈린다:
+    - guided(마음 기록장): 서술형 5개(trigger_event~self_compassion)가 채워진다.
+    - simple(간단히 쓰기): 자유 텍스트(body) + 그날 고른 감정 이모지(mood_emoji) 하나만 채워진다.
+    원본 텍스트를 요약하지 않고 그대로 전달하되(질문당 몇 문장 수준이라 별도 요약 호출을
+    추가하면 오히려 지연시간+비용만 늘고 절감 효과는 미미하다), 극단적으로 긴 간단 모드
+    본문만 방어적으로 길이를 자른다(_truncate 참고)."""
+
+    journal_mode: Literal["simple", "guided"]
+    trigger_event: str | None = None
+    desire: str | None = None
+    message_to_other: str | None = None
+    desired_message: str | None = None
+    self_compassion: str | None = None
+    body: str | None = None
+    mood_emoji: str | None = None
+
+
 class DreamInterpretationRequest(BaseModel):
     date: str | None = None
     emotion: str | None = None
@@ -277,6 +368,7 @@ class DreamInterpretationRequest(BaseModel):
 class QuickDreamInterpretationRequest(BaseModel):
     title: str
     raw_text: str
+    date: str | None = None
 
 
 # --- 비즈니스 로직: 프롬프트 주입 / Claude 호출 -----------------------------
@@ -286,8 +378,112 @@ _LUCID_LEVEL_LABEL = {"none": "일반 꿈(자각 없음)", "momentary": "순간�
 _CONTROL_LEVEL_LABEL = {"director": "감독 모드(적극적 통제)", "observer": "관찰자/참여자 모드", "lost_control": "통제 상실"}
 
 
-def build_system_prompt(survey: DreamSurveyInput) -> tuple[str, str]:
-    """6단계 문답 응답을 (캐시 가능한 STATIC 블록, 매번 바뀌는 DATA 블록) 튜플로 나눠 반환한다."""
+_LINKED_DIARY_BODY_MAX_CHARS = 600
+
+
+def _truncate(text: str, max_chars: int = _LINKED_DIARY_BODY_MAX_CHARS) -> str:
+    """토큰 비용 방어용 하드 캡 - 별도 요약 LLM 호출 없이(LinkedDiaryContext 독스트링 참고),
+    지나치게 긴 자유 서술(주로 간단 모드 본문)만 앞부분 위주로 잘라낸다. 마음 기록장 서술형
+    답변은 원래 질문당 몇 문장 수준이라 이 한도에 거의 걸리지 않는다."""
+    stripped = text.strip()
+    if len(stripped) <= max_chars:
+        return stripped
+    return f"{stripped[:max_chars].rstrip()}…"
+
+
+def _diary_entry_to_context(survey: dict, emotion: str) -> LinkedDiaryContext | None:
+    """감정일기 DreamEntry의 survey(JSON)/emotion 컬럼을 LinkedDiaryContext로 변환하는 순수
+    함수 - DB 세션이 필요 없어 라이브 서버 없이 단위 테스트할 수 있다(실제 조회는
+    _find_linked_diary_entry가 담당). journal_mode가 "guided"면 서술형 5개를, 그 외(간단
+    모드/필드 자체가 없는 옛 기록)는 본문(action_detail)을 쓴다 - 본문마저 비어 있으면
+    (제목만 있고 내용은 없는 등) 이 감정일기는 컨텍스트로서 의미가 없어 None을 돌려준다."""
+    if survey.get("journal_mode") == "guided":
+        return LinkedDiaryContext(
+            journal_mode="guided",
+            trigger_event=survey.get("trigger_event"),
+            desire=survey.get("desire"),
+            message_to_other=survey.get("message_to_other"),
+            desired_message=survey.get("desired_message"),
+            self_compassion=survey.get("self_compassion"),
+        )
+    body = (survey.get("action_detail") or "").strip()
+    if not body:
+        return None
+    return LinkedDiaryContext(journal_mode="simple", body=_truncate(body), mood_emoji=emotion or None)
+
+
+def _find_linked_diary_entry(db: Session, user_id: int, target_date: PyDate) -> DreamEntry | None:
+    """같은 취침일(dream_date)의 감정일기 중 가장 먼저 쓴 편을 찾는다 - 하루에 여러 편을
+    남겨도 항상 첫 편만 근거로 삼는다("최초 감정일기 = 그날의 씨앗" 원칙과 같은 이유,
+    프론트가 예전에 guidedDiaryContextByDate를 만들 때 쓰던 것과 같은 규칙)."""
+    return (
+        db.query(DreamEntry)
+        .filter(
+            DreamEntry.user_id == user_id,
+            DreamEntry.entry_type == EntryType.EMOTION,
+            DreamEntry.dream_date == target_date,
+        )
+        .order_by(DreamEntry.created_at.asc())
+        .first()
+    )
+
+
+def _resolve_linked_diary_context(db: Session, current_user: User | None, date_str: str | None) -> LinkedDiaryContext | None:
+    """AI 해몽 요청 시점에 같은 취침일의 감정일기를 직접 조회해 LinkedDiaryContext로 만든다.
+    비로그인 미리보기(current_user=None)거나 날짜가 없거나(quick 모드에서 프론트가 안 보낸
+    구버전 등) 그 날짜에 감정일기가 없으면 조용히 None을 돌려준다 - 해몽 자체는 항상 기존
+    방식 그대로 진행되고 에러가 나지 않는다(완료 기준의 핵심 요구사항)."""
+    if current_user is None or not date_str:
+        return None
+    try:
+        target_date = PyDate.fromisoformat(date_str)
+    except ValueError:
+        return None
+    entry = _find_linked_diary_entry(db, current_user.id, target_date)
+    if entry is None:
+        return None
+    return _diary_entry_to_context(entry.survey or {}, entry.emotion)
+
+
+def _linked_diary_context_block(context: LinkedDiaryContext | None) -> str:
+    """감정일기 내용을 DATA 블록에 덧붙일 문자열로 만든다. STATIC 블록(캐시 대상)이 아니라
+    DATA 블록에만 얹는다 - 요청마다 있고 없고가 갈리는 내용을 STATIC 쪽에 넣으면 캐시
+    히트율만 떨어뜨릴 뿐 실익이 없다. journal_mode에 따라 두 형태 중 하나로 렌더링하고,
+    채워진 내용이 하나도 없으면(감정일기가 없는 날 등) 빈 문자열을 돌려줘 프롬프트에 아무
+    흔적도 남기지 않는다 - 회귀 없음."""
+    if context is None:
+        return ""
+    if context.journal_mode == "guided":
+        lines = [
+            ("무슨 일이 있었나요", context.trigger_event),
+            ("진짜 바랐던 것", context.desire),
+            ("그때 하고 싶었던 말", context.message_to_other),
+            ("반대로 듣고 싶었던 말", context.desired_message),
+            ("스스로에게 해준 위로", context.self_compassion),
+        ]
+        filled = [(label, value.strip()) for label, value in lines if value and value.strip()]
+        if not filled:
+            return ""
+        body = "\n".join(f"- {label}: {value}" for label, value in filled)
+    else:
+        body_text = (context.body or "").strip()
+        if not body_text:
+            return ""
+        mood_line = f"- 그날의 감정: {context.mood_emoji}\n" if context.mood_emoji else ""
+        body = f"{mood_line}- 자유롭게 적은 하루: {body_text}"
+    return (
+        "\n\n[이 꿈을 꾸기 전, 낮에 남긴 감정일기 기록]\n"
+        f"{body}\n"
+        "※ 위 낮의 감정 기록도 함께 참고해, 밤의 꿈과 낮의 감정이 어떻게 이어지는지 자연스럽게 녹여 해몽하세요."
+    )
+
+
+def build_system_prompt(survey: DreamSurveyInput, linked_diary_context: LinkedDiaryContext | None = None) -> tuple[str, str]:
+    """6단계 문답 응답을 (캐시 가능한 STATIC 블록, 매번 바뀌는 DATA 블록) 튜플로 나눠 반환한다.
+    순수 함수로 유지한다 - linked_diary_context는 이미 조회를 마친 값을 그대로 주입받을 뿐,
+    이 함수 자체는 db/user에 접근하지 않는다(실제 조회는 _resolve_linked_diary_context가
+    라우트 레이어에서 담당). 값이 없으면(비로그인/감정일기 없는 날 등) 이전과 완전히
+    동일하게 동작한다."""
     static_block = SYSTEM_PROMPT_STATIC.format(expert_matrix=EXPERT_MATRIX_BLOCK, counseling_block=COUNSELING_REPORT_BLOCK)
     control_level_note = (
         f", 꿈 통제력 {_CONTROL_LEVEL_LABEL[survey.control_level]}" if survey.control_level is not None else ""
@@ -308,13 +504,16 @@ def build_system_prompt(survey: DreamSurveyInput) -> tuple[str, str]:
         control_level_note=control_level_note,
         final_memo=survey.final_memo or "(없음)",
     )
+    data_block += _linked_diary_context_block(linked_diary_context)
     return static_block, data_block
 
 
-def build_quick_system_prompt(title: str, raw_text: str) -> tuple[str, str]:
-    """⚡ 10초 미니멀 빠른 기록 모드: 6단계 문답 없이 자유 서술 한 편만으로 DATA 블록을 구성한다."""
+def build_quick_system_prompt(title: str, raw_text: str, linked_diary_context: LinkedDiaryContext | None = None) -> tuple[str, str]:
+    """⚡ 10초 미니멀 빠른 기록 모드: 6단계 문답 없이 자유 서술 한 편만으로 DATA 블록을 구성한다.
+    linked_diary_context 처리는 build_system_prompt와 완전히 동일하다."""
     static_block = QUICK_SYSTEM_PROMPT_STATIC.format(expert_matrix=EXPERT_MATRIX_BLOCK, counseling_block=COUNSELING_REPORT_BLOCK)
     data_block = QUICK_SYSTEM_PROMPT_DATA_TEMPLATE.format(title=title, raw_text=raw_text)
+    data_block += _linked_diary_context_block(linked_diary_context)
     return static_block, data_block
 
 
@@ -367,15 +566,35 @@ def request_interpretation(static_block: str, data_block: str) -> dict:
 
 
 # --- 라우트: 얇은 HTTP 어댑터 --------------------------------------------
+# 두 라우트 모두 비로그인 상태에서도 미리보기를 계산할 수 있어야 한다(dreams.py 모듈
+# docstring 참고) - get_current_user가 아니라 get_current_user_optional을 써서, 토큰이
+# 없거나 유효하지 않아도 401 대신 None으로 넘어가게 한다. 그러면 _resolve_linked_diary_context가
+# 조용히 컨텍스트 없이(None) 진행해, 비로그인 미리보기도 기존과 동일하게 계속 동작한다.
 
 
 @router.post("/dream-interpretation")
-def create_dream_interpretation(payload: DreamInterpretationRequest) -> dict:
-    static_block, data_block = build_system_prompt(payload.survey)
+def create_dream_interpretation(
+    payload: DreamInterpretationRequest,
+    request: Request,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+    redis_client: redis_lib.Redis = Depends(get_redis),
+) -> dict:
+    _enforce_ai_interpret_rate_limit(redis_client, current_user, request)
+    linked_diary_context = _resolve_linked_diary_context(db, current_user, payload.date)
+    static_block, data_block = build_system_prompt(payload.survey, linked_diary_context)
     return request_interpretation(static_block, data_block)
 
 
 @router.post("/dream-interpretation-quick")
-def create_quick_dream_interpretation(payload: QuickDreamInterpretationRequest) -> dict:
-    static_block, data_block = build_quick_system_prompt(payload.title, payload.raw_text)
+def create_quick_dream_interpretation(
+    payload: QuickDreamInterpretationRequest,
+    request: Request,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+    redis_client: redis_lib.Redis = Depends(get_redis),
+) -> dict:
+    _enforce_ai_interpret_rate_limit(redis_client, current_user, request)
+    linked_diary_context = _resolve_linked_diary_context(db, current_user, payload.date)
+    static_block, data_block = build_quick_system_prompt(payload.title, payload.raw_text, linked_diary_context)
     return request_interpretation(static_block, data_block)

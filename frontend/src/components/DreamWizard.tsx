@@ -3,7 +3,7 @@
 import { useEffect, useState, type ChangeEvent, type KeyboardEvent } from "react";
 
 import type { ControlLevel, DreamSurvey, LucidLevel } from "@/api/dream";
-import { MOOD_OPTIONS } from "@/lib/moodBucket";
+import MoodTagGrid from "@/components/MoodTagGrid";
 
 interface ChipOption {
   emoji: string;
@@ -119,7 +119,7 @@ interface DreamWizardProps {
   initialData?: DreamSurvey;
   /** 꿈해몽 사전에서 "이 상징을 바탕으로 기록하기"로 넘어온 경우, Step 7 제목만 미리 채운다 (initialData가 있으면 무시됨) */
   initialTitle?: string;
-  /** ⚡ 10초 미니멀 빠른 기록에서 "정밀 분석으로 전환"한 경우, 적어둔 서술을 Step 6의 몰입 서술란에 미리 채운다 (initialData가 있으면 무시됨) */
+  /** ⚡ 30초 미니멀 빠른 기록에서 "정밀 분석으로 전환"한 경우, 적어둔 서술을 Step 6의 몰입 서술란에 미리 채운다 (initialData가 있으면 무시됨) */
   initialActionDetail?: string;
   /** 꿈해몽 사전의 "내 꿈일기에 이 상징 기록하기"에서 넘어온 경우, 상징의 카테고리로 유추한
    * Step 4(대상) 칩을 미리 선택한다. PROJECTION_OPTIONS 라벨과 일치해야 하며, 일치하지 않으면
@@ -217,7 +217,7 @@ function lightChipClass(label: string, selected: boolean, limitReached: boolean)
     return `${CHIP_CARD_BASE} border-purple-500 bg-purple-950/30 text-white font-semibold shadow-[inset_0_0_12px_rgba(168,85,247,0.15)]`;
   }
   if (limitReached) {
-    return `${CHIP_CARD_BASE} cursor-not-allowed border-white/5 bg-white/[0.02] text-slate-600 opacity-50`;
+    return `${CHIP_CARD_BASE} cursor-not-allowed border-white/5 bg-white/[0.02] text-slate-400 opacity-50`;
   }
 
   const theme = LIGHT_THEME[label] ?? "neutral";
@@ -351,12 +351,6 @@ export default function DreamWizard({
   const [step, setStep] = useState(1);
   const [phase, setPhase] = useState<SlidePhase>("idle");
   const [direction, setDirection] = useState<1 | -1>(1);
-
-  // 분위기(Step 1) 커스텀 칩 - mood 자체는 부모가 들고 있는 컨트롤드 값이라, 여기서는 "지금
-  // 그 값이 프리셋에 없는 커스텀인지"만 로컬로 추적한다.
-  const [moodOther, setMoodOther] = useState(() => (mood && !MOOD_OPTIONS.some((option) => option.emoji === mood) ? mood : ""));
-  const [isMoodEntering, setIsMoodEntering] = useState(false);
-  const [moodDraft, setMoodDraft] = useState("");
 
   const lightInit = resolveLightChips(initialData?.brightness ?? "");
   const [light, setLight] = useState<string[]>(lightInit.chips);
@@ -592,37 +586,8 @@ export default function DreamWizard({
           {step === 1 && (
             <div>
               <h3 className="text-base font-medium text-white">이 꿈, 전체적으로 어떤 느낌이 가장 컸나요?</h3>
-              <div className="mt-4 grid grid-cols-4 items-stretch gap-y-3 gap-x-4 overflow-y-hidden">
-                {MOOD_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.emoji}
-                    type="button"
-                    onClick={() => onMoodChange(opt.emoji)}
-                    className={chipClass(mood === opt.emoji && mood !== moodOther)}
-                  >
-                    <span className="mr-3 shrink-0 text-2xl">{opt.emoji}</span>
-                    <span className="line-clamp-2 text-sm font-medium leading-snug">{opt.label}</span>
-                  </button>
-                ))}
-                <CustomChipSlot
-                  committedLabel={moodOther || null}
-                  isSelected={moodOther !== "" && mood === moodOther}
-                  isEntering={isMoodEntering}
-                  draft={moodDraft}
-                  onDraftChange={setMoodDraft}
-                  onStartEntering={() => setIsMoodEntering(true)}
-                  onSelectCommitted={() => onMoodChange(moodOther)}
-                  onCommit={(value) => {
-                    setMoodOther(value);
-                    onMoodChange(value);
-                    setIsMoodEntering(false);
-                    setMoodDraft("");
-                  }}
-                  onCancel={() => {
-                    setIsMoodEntering(false);
-                    setMoodDraft("");
-                  }}
-                />
+              <div className="mt-4">
+                <MoodTagGrid mood={mood} onMoodChange={onMoodChange} />
               </div>
             </div>
           )}

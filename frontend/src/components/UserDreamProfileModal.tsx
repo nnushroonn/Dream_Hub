@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 import { getGalaxyProfile, type GalaxyProfile } from "@/api/dream";
-import { DREAM_SEED_COLOR, type DreamSeed } from "@/lib/dreamSeeds";
+import { getSeedDefinition } from "@/lib/dreamSeeds";
 
 const BADGE_META: Record<string, { emoji: string; label: string }> = {
   FIRST_LUCID: { emoji: "🌌", label: "첫 자각몽 성공" },
@@ -69,14 +70,14 @@ export default function UserDreamProfileModal({ nickname, children }: UserDreamP
                 .map((item) => (
                   <div
                     key={item.seed}
-                    style={{ width: `${item.ratio * 100}%`, backgroundColor: DREAM_SEED_COLOR[item.seed as DreamSeed] }}
+                    style={{ width: `${item.ratio * 100}%`, backgroundColor: getSeedDefinition(item.seed).colors[0] }}
                   />
                 ))}
             </div>
             <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1">
               {(profile.seed_ratios ?? []).map((item) => (
                 <span key={item.seed} className="text-[10px] text-slate-400">
-                  {item.seed.split(" ")[0]} {Math.round(item.ratio * 100)}%
+                  {getSeedDefinition(item.seed).label} {Math.round(item.ratio * 100)}%
                 </span>
               ))}
             </div>
@@ -94,6 +95,18 @@ export default function UserDreamProfileModal({ nickname, children }: UserDreamP
                 })}
               </div>
             )}
+
+            {/* 이 카드는 hover로도 열려 pointer-events-none 상태일 수 있다 - 클릭 가능한 링크가
+                생기는 순간부터는 실제로 클릭할 수 있도록 이 블록만 다시 이벤트를 받게 한다. */}
+            <div className="pointer-events-auto mt-3 border-t border-white/10 pt-3 text-center">
+              <Link
+                href={`/garden?nickname=${encodeURIComponent(nickname)}`}
+                onClick={(event) => event.stopPropagation()}
+                className="text-[11px] text-emerald-300/80 transition-colors hover:text-emerald-200"
+              >
+                🌱 정원 방문하기
+              </Link>
+            </div>
           </div>
         )}
       </div>

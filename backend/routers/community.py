@@ -28,14 +28,17 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from database import get_db, get_redis
+from database import get_db, get_redis, get_settings
+from leveling import AuthorBadge, XpCategory, author_badge_for, award_xp, batch_author_badges
 from models import (
     CommunityComment,
     CommunityPost,
     CommunityPostReaction,
     DreamComment,
     DreamEntry,
+    DreamSeed,
     DreamStatus,
+    EmotionCategory,
     Interaction,
     InteractionType,
     NotificationTargetType,
@@ -43,9 +46,16 @@ from models import (
     User,
 )
 from routers.ai_interpretation import DreamSurveyInput
-from routers.auth import get_current_user, get_current_user_optional
+from routers.auth import (
+    _rate_limit_exceeded,
+    _record_rate_limit_attempt,
+    _too_many_requests,
+    get_current_user,
+    get_current_user_optional,
+)
+from routers.dreams import AttachedFlowerPayload, redact_survey_for_public
 from routers.notifications import create_notification
-from storage import upload_community_image
+from storage import is_valid_community_image_url, read_upload_within_limit, upload_community_image
 from view_tracking import should_count_view
 
 # 글쓰기에서 한 게시글에 첨부할 수 있는 이미지 최대 장수 - 프론트(MAX_COMPOSE_IMAGES)와 동일하게 맞춘다.
@@ -53,14 +63,34 @@ MAX_POST_IMAGES = 3
 
 router = APIRouter(prefix="/api/community", tags=["community"])
 
-DREAM_FEED_LIMIT = 30
 # 자유 광장 게시글 수정 가능 시간 - 게시 후 이 시간이 지나면 삭제만 가능하다.
 POST_EDIT_WINDOW = timedelta(minutes=10)
-POST_LIST_DEFAULT_LIMIT = 20
+POST_LIST_DEFAULT_LIMIT = 10
 POST_LIST_MAX_LIMIT = 50
 # 상단 태그 필터 바 - 최근 이 기간 동안 쓰인 해시태그만 집계해 "지금 뜨는 태그"만 보여준다.
 TOP_TAGS_WINDOW_DAYS = 7
 TOP_TAGS_LIMIT = 8
+
+# --- 커뮤니티 액션 레이트리밋 - 로그인 브루트포스/AI 해몽 방어와 같은 Redis INCR+TTL
+# 패턴을 재사용한다. 액션 종류(글쓰기/댓글/투표/이미지 업로드)마다 독립된 카운터를 쓴다 -
+# 댓글을 많이 단다고 글쓰기 한도가 줄어들면 안 되기 때문이다. 전부 이 라우터의 쓰기
+# 액션은 로그인이 필수라 user_id 기준으로만 잡는다(IP 기준을 쓸 이유가 없다). 임계값은
+# 정상적인 활발한 이용은 막지 않으면서 도배 스크립트는 확실히 막는 수준으로 잡았다 -
+# 투표가 가장 가볍고 빈번한 액션이라 가장 넉넉하고, 글쓰기가 가장 무거워 가장 빡빡하다.
+COMMUNITY_RATE_LIMITS: dict[str, tuple[int, int]] = {
+    "post": (5, 600),  # 글 작성 - 10분당 5개
+    "comment": (15, 600),  # 댓글 작성(자유 광장/꿈 피드 공통) - 10분당 15개
+    "vote": (30, 600),  # 좋아요/싫어요 - 10분당 30회
+    "image": (10, 600),  # 이미지 업로드 - 10분당 10장
+}
+
+
+def _enforce_community_rate_limit(redis_client: redis.Redis, action: str, user_id: int) -> None:
+    limit, window_seconds = COMMUNITY_RATE_LIMITS[action]
+    key = f"community:{action}:{user_id}"
+    if _rate_limit_exceeded(redis_client, key, limit):
+        raise _too_many_requests()
+    _record_rate_limit_attempt(redis_client, key, window_seconds)
 
 
 def _display_name(user: User, is_anonymous: bool) -> str | None:
@@ -95,11 +125,16 @@ class DreamFeedEntry(BaseModel):
     summary: str
     tags: list[str]
     dream_date: str
+    # dream_date는 유저가 고르는 "꿈을 꾼 날짜"라 과거로 소급될 수 있어, 게시 후 10분 수정
+    # 제한(POST_EDIT_WINDOW_MS) 판단에는 쓸 수 없다 - 실제 게시 시각인 이 필드를 따로 내려준다.
+    created_at: str
     upvote_count: int
     downvote_count: int
     my_vote: Literal["up", "down"] | None = None
     is_anonymous: bool
     author_display_name: str | None = None
+    # 익명 글이면 항상 None - 레벨 뱃지도 신원 정보의 일부로 취급해 닉네임과 동일하게 가린다.
+    author_badge: AuthorBadge | None = None
     share_with_ai_analysis: bool
     # 꿈 내용과는 별개로 공유하면서 덧붙인 한마디(질문/자랑거리 등) - 있으면 카드 상단에 노출한다.
     share_caption: str | None = None
@@ -107,6 +142,7 @@ class DreamFeedEntry(BaseModel):
     # 끝까지(펼치기로) 보여주려면 survey 원본이 필요해 함께 내려준다.
     survey: DreamSurveyInput
     ai_report: DreamFeedAiReport | None = None
+    attached_flower: AttachedFlowerPayload | None = None
     comment_count: int
     view_count: int
     # 내가 쓴 꿈인지 - 자유 광장과 동일하게 수정/삭제 버튼 노출 여부를 프론트가 이걸로 판단한다.
@@ -160,6 +196,9 @@ def _my_dream_votes(db: Session, user: User, entries: list[DreamEntry]) -> dict[
 def _build_dream_feed_entries(
     db: Session, entries: list[DreamEntry], my_votes: dict[int, str], current_user_id: int | None = None
 ) -> list[dict]:
+    non_anonymous_author_ids = [entry.user_id for entry in entries if not entry.is_anonymous]
+    author_badges = batch_author_badges(db, non_anonymous_author_ids)
+
     result = []
     for entry in entries:
         interpretation = entry.interpretation if isinstance(entry.interpretation, dict) else {}
@@ -167,21 +206,29 @@ def _build_dream_feed_entries(
         result.append(
             {
                 "id": entry.id,
-                "title": entry.title,
+                # 무의식 광장(공개 피드)에는 항상 공개용 제목만 노출한다 - 커스터마이즈한 적
+                # 없으면(None) 일기장 원본 제목으로 대체.
+                "title": entry.public_title or entry.title,
                 "emotion": entry.emotion,
                 "summary": entry.summary,
                 # 예전엔 AI 해몽(interpretation.tags)이 자동으로 채웠지만, 이제는 글쓰기에서
                 # 유저가 직접 입력한 태그(DreamEntry.tags)만 노출/필터링에 쓴다.
                 "tags": entry.tags,
                 "dream_date": entry.dream_date.isoformat(),
+                "created_at": entry.created_at.isoformat(),
                 "upvote_count": up,
                 "downvote_count": down,
                 "my_vote": my_votes.get(entry.id),
                 "is_anonymous": entry.is_anonymous,
                 "author_display_name": _display_name(entry.user, entry.is_anonymous),
+                "author_badge": None if entry.is_anonymous else author_badges.get(entry.user_id),
                 "share_with_ai_analysis": entry.share_with_ai_analysis,
                 "share_caption": entry.share_caption,
-                "survey": entry.survey,
+                # 무의식 피드는 여러 유저의 공개 글이 섞인 목록이라 dreams.py의 get_public_dream과
+                # 같은 이유로 "마음 기록장" 전용 필드를 항상 걷어낸다(is_mine 여부와 무관하게) -
+                # 꿈일기는 원래 이 필드들이 비어 있어 정상 공개 글에는 영향이 없다.
+                "survey": redact_survey_for_public(entry.survey),
+                "attached_flower": entry.attached_flower,
                 "comment_count": _dream_comment_count(db, entry.id),
                 "view_count": entry.view_count,
                 "is_mine": current_user_id is not None and entry.user_id == current_user_id,
@@ -200,20 +247,78 @@ def _build_dream_feed_entries(
     return result
 
 
-@router.get("/dream-feed", response_model=list[DreamFeedEntry])
+class DreamFeedListResponse(BaseModel):
+    items: list[DreamFeedEntry]
+    total_count: int
+    total_pages: int
+    page: int
+
+
+@router.get("/dream-feed", response_model=DreamFeedListResponse)
 def get_dream_feed(
+    page: int = Query(1, ge=1),
+    limit: int = Query(POST_LIST_DEFAULT_LIMIT, ge=1, le=POST_LIST_MAX_LIMIT),
+    search_type: Literal["all", "title", "hashtag", "author"] | None = None,
+    keyword: str | None = None,
+    sort: Literal["latest", "likes", "views"] = "latest",
+    period: Literal["weekly", "monthly", "all"] = "all",
     current_user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
-) -> list[dict]:
-    entries = (
-        db.query(DreamEntry)
-        .filter(DreamEntry.status == DreamStatus.PUBLIC)
-        .order_by(DreamEntry.created_at.desc())
-        .limit(DREAM_FEED_LIMIT)
-        .all()
-    )
+) -> dict:
+    """무의식 피드 목록 - 자유 광장(list_community_posts)과 동일한 페이지네이션·검색·정렬·기간
+    파라미터를 그대로 지원한다(꿈 게시판/자유 게시판 상단 필터 UI 통일을 위함)."""
+    query = db.query(DreamEntry).filter(DreamEntry.status == DreamStatus.PUBLIC)
+
+    trimmed_keyword = keyword.strip() if keyword else ""
+    if search_type and trimmed_keyword:
+        like_pattern = f"%{trimmed_keyword}%"
+        hashtag_value = trimmed_keyword.lstrip("#")
+        if search_type == "title":
+            query = query.filter(DreamEntry.title.ilike(like_pattern))
+        elif search_type == "hashtag":
+            query = query.filter(DreamEntry.tags.any(hashtag_value))
+        elif search_type == "author":
+            query = query.join(User, DreamEntry.user_id == User.id).filter(
+                DreamEntry.is_anonymous.is_(False), User.nickname.ilike(like_pattern)
+            )
+        else:  # "all" - 제목/해시태그/작성자 중 하나라도 일치하면 포함
+            query = query.outerjoin(User, DreamEntry.user_id == User.id).filter(
+                or_(
+                    DreamEntry.title.ilike(like_pattern),
+                    DreamEntry.tags.any(hashtag_value),
+                    (DreamEntry.is_anonymous.is_(False)) & User.nickname.ilike(like_pattern),
+                )
+            )
+
+    if period == "weekly":
+        query = query.filter(DreamEntry.created_at >= datetime.now(timezone.utc) - timedelta(days=7))
+    elif period == "monthly":
+        query = query.filter(DreamEntry.created_at >= datetime.now(timezone.utc) - timedelta(days=30))
+
+    total_count = query.count()
+    total_pages = max(ceil(total_count / limit), 1)
+
+    if sort == "likes":
+        # upvote_count는 저장된 컬럼이 아니라 Interaction을 집계한 값이라, 정렬을 DB 레벨에서
+        # 하려면 꿈 기록당 좋아요 수를 미리 센 서브쿼리와 조인해야 한다(자유 광장과 동일한 패턴).
+        like_counts = (
+            db.query(Interaction.dream_entry_id, func.count().label("like_count"))
+            .filter(Interaction.type == InteractionType.LIKE)
+            .group_by(Interaction.dream_entry_id)
+            .subquery()
+        )
+        query = query.outerjoin(like_counts, like_counts.c.dream_entry_id == DreamEntry.id).order_by(
+            func.coalesce(like_counts.c.like_count, 0).desc(), DreamEntry.created_at.desc()
+        )
+    elif sort == "views":
+        query = query.order_by(DreamEntry.view_count.desc(), DreamEntry.created_at.desc())
+    else:  # "latest"
+        query = query.order_by(DreamEntry.created_at.desc())
+
+    entries = query.offset((page - 1) * limit).limit(limit).all()
     my_votes = _my_dream_votes(db, current_user, entries) if current_user else {}
-    return _build_dream_feed_entries(db, entries, my_votes, current_user.id if current_user else None)
+    items = _build_dream_feed_entries(db, entries, my_votes, current_user.id if current_user else None)
+    return {"items": items, "total_count": total_count, "total_pages": total_pages, "page": page}
 
 
 @router.get("/my-liked-dreams", response_model=list[DreamFeedEntry])
@@ -244,7 +349,9 @@ def vote_on_dream(
     payload: VoteInput,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
 ) -> dict:
+    _enforce_community_rate_limit(redis_client, "vote", current_user.id)
     entry = (
         db.query(DreamEntry).filter(DreamEntry.id == dream_id, DreamEntry.status == DreamStatus.PUBLIC).first()
     )
@@ -287,8 +394,9 @@ def vote_on_dream(
             type_=NotificationType.LIKE,
             target_type=NotificationTargetType.DREAM,
             target_id=dream_id,
-            preview_text=entry.title,
+            preview_text=entry.public_title or entry.title,
         )
+        award_xp(db, entry.user_id, XpCategory.LIKE_RECEIVED)
 
     up, down = _dream_vote_counts(db, dream_id)
     return {"my_vote": my_vote, "upvote_count": up, "downvote_count": down}
@@ -296,10 +404,6 @@ def vote_on_dream(
 
 # --- 💬 자유 광장: 꿈과 무관한 자유 게시글 -----------------------------------
 
-# ?template=galaxy 글쓰기가 제공하는 4개의 큐레이션 프리셋 - CommunityPostTagSelector가 이
-# 중에서만 고르게 강제하는 건 프론트 UI 몫이고, 여기(백엔드)는 더 이상 이 값들로 제한하지
-# 않는다 - public_tags는 이제 자유 String 배열이라 일반 자유 글도 커스텀 해시태그를 붙일 수 있다.
-GALAXY_FREQUENCY_TAGS = {"rest", "growth", "healing", "adventure"}
 MAX_PUBLIC_TAGS = 5
 MAX_TAG_LENGTH = 20
 
@@ -331,6 +435,11 @@ class CommunityPostInput(BaseModel):
     def _limit_image_count(cls, value: list[str]) -> list[str]:
         if len(value) > MAX_POST_IMAGES:
             raise ValueError(f"이미지는 최대 {MAX_POST_IMAGES}장까지 첨부할 수 있습니다.")
+        # /api/community/images 업로드를 거치지 않고 임의 URL을 직접 끼워넣는 걸 막는다
+        # (익명 서비스에서 추적 픽셀로 열람자 IP를 수집하는 데 악용될 수 있다).
+        for url in value:
+            if not is_valid_community_image_url(url):
+                raise ValueError("이미지는 업로드 기능을 통해서만 첨부할 수 있습니다.")
         return value
 
 
@@ -343,6 +452,7 @@ class CommunityPostResponse(BaseModel):
     my_vote: Literal["up", "down"] | None = None
     is_anonymous: bool
     author_display_name: str | None = None
+    author_badge: AuthorBadge | None = None
     comment_count: int
     created_at: str
     image_urls: list[str] = []
@@ -402,6 +512,9 @@ def _my_post_votes(db: Session, user: User, posts: list[CommunityPost]) -> dict[
 def _build_post_entries(
     db: Session, posts: list[CommunityPost], my_votes: dict[int, str], current_user_id: int | None = None
 ) -> list[dict]:
+    non_anonymous_author_ids = [post.user_id for post in posts if not post.is_anonymous]
+    author_badges = batch_author_badges(db, non_anonymous_author_ids)
+
     result = []
     for post in posts:
         up, down = _post_vote_counts(db, post.id)
@@ -415,6 +528,7 @@ def _build_post_entries(
                 "my_vote": my_votes.get(post.id),
                 "is_anonymous": post.is_anonymous,
                 "author_display_name": _display_name(post.user, post.is_anonymous),
+                "author_badge": None if post.is_anonymous else author_badges.get(post.user_id),
                 "comment_count": _post_comment_count(db, post.id),
                 "created_at": post.created_at.isoformat(),
                 "image_urls": post.image_urls or [],
@@ -501,16 +615,24 @@ def list_community_posts(
 def get_top_community_tags(
     days: int = Query(TOP_TAGS_WINDOW_DAYS, ge=0),
     limit: int = Query(TOP_TAGS_LIMIT, ge=1, le=200),
+    source: Literal["board", "dream"] = "board",
     db: Session = Depends(get_db),
 ) -> list[dict]:
-    """해시태그를 사용 빈도순으로 돌려준다 - 두 화면이 이 엔드포인트 하나를 공유한다.
-    ?days=7&limit=8(기본값)이면 상단 필터 바의 "최근 인기 태그", ?days=0&limit=100처럼 기간
-    제한을 풀면(0 = 전체 기간) "+ 태그 더보기" 모달의 서비스 전체 태그 목록이 된다. 게시물
-    볼륨이 크지 않은 초기 서비스라 DB 집계 함수 대신 파이썬에서 직접 센다."""
-    query = db.query(CommunityPost.public_tags)
+    """해시태그를 사용 빈도순으로 돌려준다 - 자유 광장(board)/꿈 게시판(dream) 두 화면이 각각
+    source로 구분해 이 엔드포인트 하나를 공유한다. ?days=7&limit=4(기본값)이면 상단 필터 바의
+    "최근 인기 태그", ?days=0&limit=100처럼 기간 제한을 풀면(0 = 전체 기간) "+ 태그 더보기"
+    모달의 전체 태그 목록이 된다. 게시물 볼륨이 크지 않은 초기 서비스라 DB 집계 함수 대신
+    파이썬에서 직접 센다."""
+    if source == "dream":
+        query = db.query(DreamEntry.tags).filter(DreamEntry.status == DreamStatus.PUBLIC)
+        date_column = DreamEntry.created_at
+    else:
+        query = db.query(CommunityPost.public_tags)
+        date_column = CommunityPost.created_at
+
     if days > 0:
         since = datetime.now(timezone.utc) - timedelta(days=days)
-        query = query.filter(CommunityPost.created_at >= since)
+        query = query.filter(date_column >= since)
     counts: Counter[str] = Counter()
     for (tags,) in query.all():
         counts.update(tags or [])
@@ -556,10 +678,14 @@ def list_my_posts(current_user: User = Depends(get_current_user), db: Session = 
 async def upload_community_post_image(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
+    redis_client: redis.Redis = Depends(get_redis),
 ) -> dict:
     """글쓰기 화면에서 이미지를 고르는 즉시 호출 - 반환된 url을 모아뒀다가 게시 시점에
     CommunityPostInput.image_urls로 함께 보낸다."""
-    content = await file.read()
+    _enforce_community_rate_limit(redis_client, "image", current_user.id)
+    # read_upload_within_limit이 청크 단위로 읽으며 한도를 넘는 즉시 끊어, 큰 요청이
+    # 전체를 다 메모리에 올린 뒤에야 거절되는 걸 막는다(storage.py 참고).
+    content = await read_upload_within_limit(file)
     url = upload_community_image(content, file.content_type or "")
     return {"url": url}
 
@@ -569,7 +695,9 @@ def create_community_post(
     payload: CommunityPostInput,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
 ) -> dict:
+    _enforce_community_rate_limit(redis_client, "post", current_user.id)
     title = payload.title.strip()
     content = payload.content.strip()
     if not title or not content:
@@ -586,6 +714,7 @@ def create_community_post(
     db.add(post)
     db.commit()
     db.refresh(post)
+    award_xp(db, current_user.id, XpCategory.POST_CREATED)
     return {
         "id": post.id,
         "title": post.title,
@@ -595,6 +724,7 @@ def create_community_post(
         "my_vote": None,
         "is_anonymous": post.is_anonymous,
         "author_display_name": _display_name(current_user, post.is_anonymous),
+        "author_badge": None if post.is_anonymous else author_badge_for(current_user.total_xp),
         "comment_count": 0,
         "created_at": post.created_at.isoformat(),
         "image_urls": post.image_urls or [],
@@ -641,6 +771,7 @@ def update_community_post(
         "my_vote": _my_post_votes(db, current_user, [post]).get(post.id),
         "is_anonymous": post.is_anonymous,
         "author_display_name": _display_name(current_user, post.is_anonymous),
+        "author_badge": None if post.is_anonymous else author_badge_for(current_user.total_xp),
         "comment_count": _post_comment_count(db, post.id),
         "created_at": post.created_at.isoformat(),
         "image_urls": post.image_urls or [],
@@ -669,17 +800,12 @@ def delete_community_post(
 # --- 🌌 무의식 은하 프로필: 커뮤니티 닉네임 호버 카드 -------------------------
 # 유저가 마이페이지에서 직접 공개(is_galaxy_public=True)로 켜야만 값이 채워진다. 원문
 # 텍스트(일기 본문, AI 해몽 설명 등)는 절대 포함하지 않고, 씨앗 비율 숫자와 뱃지 코드만 낸다.
-
-DREAM_SEED_TAGS = [
-    "🌿 비워내기 (차분한 휴식)",
-    "🔥 성장하기 (자신감과 용기)",
-    "💜 치유하기 (위로와 평온)",
-    "✨ 모험하기 (새로운 영감)",
-]
+# 예전엔 DreamEntry.tags에 심어둔 씨앗 문자열을 스캔했지만, 이제 DreamSeed 테이블이 실제
+# 씨앗 라이프사이클(심음/개화/휴식)을 갖고 있어 그쪽을 direct하게 집계한다.
 
 
 class SeedRatio(BaseModel):
-    seed: str
+    seed: EmotionCategory
     ratio: float
 
 
@@ -734,19 +860,14 @@ def get_galaxy_profile(nickname: str, db: Session = Depends(get_db)) -> dict:
     if not user.is_galaxy_public:
         return {"is_public": False}
 
-    diary_entries = (
-        db.query(DreamEntry).filter(DreamEntry.user_id == user.id, DreamEntry.interpretation.is_(None)).all()
-    )
-    total = len(diary_entries)
-    counts = {seed: 0 for seed in DREAM_SEED_TAGS}
-    for entry in diary_entries:
-        for tag in entry.tags or []:
-            if tag in counts:
-                counts[tag] += 1
-                break
+    planted_seeds = db.query(DreamSeed).filter(DreamSeed.user_id == user.id).all()
+    total = len(planted_seeds)
+    counts = {seed_type: 0 for seed_type in EmotionCategory}
+    for seed in planted_seeds:
+        counts[seed.seed_type] += 1
 
     seed_ratios = [
-        {"seed": seed, "ratio": round(count / total, 4) if total else 0.0} for seed, count in counts.items()
+        {"seed": seed_type, "ratio": round(count / total, 4) if total else 0.0} for seed_type, count in counts.items()
     ]
     return {"is_public": True, "seed_ratios": seed_ratios, "badge_ids": _compute_badge_ids(user.id, db)}
 
@@ -757,7 +878,9 @@ def vote_on_post(
     payload: VoteInput,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
 ) -> dict:
+    _enforce_community_rate_limit(redis_client, "vote", current_user.id)
     post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
@@ -796,6 +919,7 @@ def vote_on_post(
             target_id=post_id,
             preview_text=post.title,
         )
+        award_xp(db, post.user_id, XpCategory.LIKE_RECEIVED)
 
     up, down = _post_vote_counts(db, post_id)
     return {"my_vote": my_vote, "upvote_count": up, "downvote_count": down}
@@ -818,6 +942,7 @@ class CommunityCommentResponse(BaseModel):
     content: str
     is_anonymous: bool
     author_display_name: str | None = None
+    author_badge: AuthorBadge | None = None
     created_at: str
     # 내가 쓴 댓글인지 - 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는 서버가 다시 한다.
     is_mine: bool = False
@@ -846,6 +971,7 @@ def _comment_to_response(
     current_user_id: int | None,
     owner_user_id: int,
     anonymous_index_map: dict[int, int],
+    author_badges: dict[int, AuthorBadge] | None = None,
 ) -> dict:
     anonymous_index = None
     if comment.is_anonymous and comment.user_id != owner_user_id:
@@ -855,6 +981,7 @@ def _comment_to_response(
         "content": comment.content,
         "is_anonymous": comment.is_anonymous,
         "author_display_name": _display_name(comment.user, comment.is_anonymous),
+        "author_badge": None if comment.is_anonymous or not author_badges else author_badges.get(comment.user_id),
         "created_at": comment.created_at.isoformat(),
         "is_mine": current_user_id is not None and comment.user_id == current_user_id,
         "parent_id": comment.parent_id,
@@ -885,7 +1012,10 @@ def list_post_comments(
     comments = _all_post_comments(db, post_id)
     current_user_id = current_user.id if current_user else None
     anon_map = _build_anonymous_index_map(comments, post.user_id)
-    return [_comment_to_response(comment, current_user_id, post.user_id, anon_map) for comment in comments]
+    author_badges = batch_author_badges(db, [c.user_id for c in comments if not c.is_anonymous])
+    return [
+        _comment_to_response(comment, current_user_id, post.user_id, anon_map, author_badges) for comment in comments
+    ]
 
 
 @router.post("/posts/{post_id}/comments", response_model=CommunityCommentResponse, status_code=status.HTTP_201_CREATED)
@@ -894,7 +1024,9 @@ def create_post_comment(
     payload: CommunityCommentInput,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
 ) -> dict:
+    _enforce_community_rate_limit(redis_client, "comment", current_user.id)
     post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="게시글을 찾을 수 없습니다.")
@@ -933,9 +1065,17 @@ def create_post_comment(
         comment_id=comment.id,
         preview_text=comment.content,
     )
+    # 자기 글에 자기가 댓글을 다는 경우는 "타인 글에 댓글" XP도, 원글 작성자의 "댓글 받음" XP도
+    # 지급하지 않는다 - 둘 다 타인과의 상호작용을 전제로 한 보상이다.
+    if post.user_id != current_user.id:
+        award_xp(db, current_user.id, XpCategory.COMMENT_CREATED)
+        award_xp(db, post.user_id, XpCategory.COMMENT_RECEIVED)
 
     anon_map = _build_anonymous_index_map(_all_post_comments(db, post_id), post.user_id)
-    return _comment_to_response(comment, current_user.id, post.user_id, anon_map)
+    # award_xp가 방금 total_xp를 올렸을 수 있어(벌크 UPDATE라 파이썬 객체엔 반영되지 않는다),
+    # current_user.total_xp를 그대로 읽지 않고 DB에서 새로 조회해 뱃지를 만든다.
+    author_badges = batch_author_badges(db, [comment.user_id]) if not comment.is_anonymous else {}
+    return _comment_to_response(comment, current_user.id, post.user_id, anon_map, author_badges)
 
 
 @router.put("/posts/{post_id}/comments/{comment_id}", response_model=CommunityCommentResponse)
@@ -968,7 +1108,8 @@ def update_post_comment(
     db.commit()
     db.refresh(comment)
     anon_map = _build_anonymous_index_map(_all_post_comments(db, post_id), post.user_id)
-    return _comment_to_response(comment, current_user.id, post.user_id, anon_map)
+    author_badges = batch_author_badges(db, [comment.user_id]) if not comment.is_anonymous else {}
+    return _comment_to_response(comment, current_user.id, post.user_id, anon_map, author_badges)
 
 
 @router.delete("/posts/{post_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1027,7 +1168,10 @@ def list_dream_comments(
     comments = _all_dream_comments(db, dream_id)
     current_user_id = current_user.id if current_user else None
     anon_map = _build_anonymous_index_map(comments, entry.user_id)
-    return [_comment_to_response(comment, current_user_id, entry.user_id, anon_map) for comment in comments]
+    author_badges = batch_author_badges(db, [c.user_id for c in comments if not c.is_anonymous])
+    return [
+        _comment_to_response(comment, current_user_id, entry.user_id, anon_map, author_badges) for comment in comments
+    ]
 
 
 @router.post(
@@ -1038,7 +1182,9 @@ def create_dream_comment(
     payload: DreamCommentInput,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
 ) -> dict:
+    _enforce_community_rate_limit(redis_client, "comment", current_user.id)
     entry = db.query(DreamEntry).filter(DreamEntry.id == dream_id, DreamEntry.status == DreamStatus.PUBLIC).first()
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공개된 꿈 기록을 찾을 수 없습니다.")
@@ -1081,9 +1227,13 @@ def create_dream_comment(
         comment_id=comment.id,
         preview_text=comment.content,
     )
+    if entry.user_id != current_user.id:
+        award_xp(db, current_user.id, XpCategory.COMMENT_CREATED)
+        award_xp(db, entry.user_id, XpCategory.COMMENT_RECEIVED)
 
     anon_map = _build_anonymous_index_map(_all_dream_comments(db, dream_id), entry.user_id)
-    return _comment_to_response(comment, current_user.id, entry.user_id, anon_map)
+    author_badges = batch_author_badges(db, [comment.user_id]) if not comment.is_anonymous else {}
+    return _comment_to_response(comment, current_user.id, entry.user_id, anon_map, author_badges)
 
 
 @router.put("/dream-feed/{dream_id}/comments/{comment_id}", response_model=CommunityCommentResponse)
@@ -1116,7 +1266,8 @@ def update_dream_comment(
     db.commit()
     db.refresh(comment)
     anon_map = _build_anonymous_index_map(_all_dream_comments(db, dream_id), entry.user_id)
-    return _comment_to_response(comment, current_user.id, entry.user_id, anon_map)
+    author_badges = batch_author_badges(db, [comment.user_id]) if not comment.is_anonymous else {}
+    return _comment_to_response(comment, current_user.id, entry.user_id, anon_map, author_badges)
 
 
 @router.delete("/dream-feed/{dream_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)

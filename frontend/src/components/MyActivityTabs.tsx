@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import {
+  dreamDisplayTitle,
   getMyLikedDreams,
   getMyPosts,
   listDreams,
@@ -95,7 +96,7 @@ export default function MyActivityTabs() {
                   <div key={entry.id} className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="min-w-0 truncate text-sm font-semibold text-white">
-                        {entry.emotion} {entry.title}
+                        {entry.emotion} {dreamDisplayTitle(entry)}
                       </h3>
                       <span className="shrink-0 text-[11px] text-slate-500">{entry.dream_date}</span>
                     </div>

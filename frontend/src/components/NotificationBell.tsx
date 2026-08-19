@@ -10,6 +10,7 @@ import {
   markAllNotificationsRead,
   type AppNotification,
 } from "@/api/notifications";
+import { igaFor } from "@/lib/korean";
 
 const UNREAD_POLL_MS = 30000;
 
@@ -49,7 +50,7 @@ function notificationMessage(notification: AppNotification): string {
     const actor = notification.actor_display_name ?? "익명의 탐험가";
     return `${actor}님이 댓글을 남겼어요: "${notification.preview_text}"`;
   }
-  return `내 ${targetLabel} "${notification.preview_text}"이(가) 베스트에 올랐어요`;
+  return `내 ${targetLabel} "${notification.preview_text}"${igaFor(notification.preview_text)} 베스트에 올랐어요`;
 }
 
 function notificationHref(notification: AppNotification): string {

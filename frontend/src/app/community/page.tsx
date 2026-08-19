@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Eye, MessageCircle, Moon, Pencil, SquarePen, ThumbsUp, Trash2 } from "lucide-react";
 
 import {
   buildDreamOriginalContent,
@@ -21,37 +22,25 @@ import {
   type TagCount,
 } from "@/api/dream";
 import AllTagsModal from "@/components/AllTagsModal";
+import AuthorBadge from "@/components/AuthorBadge";
+import CommunitySearchBar from "@/components/CommunitySearchBar";
+import CommunitySortChips from "@/components/CommunitySortChips";
+import CommunityTagFilterBar from "@/components/CommunityTagFilterBar";
+import FlowerIcon from "@/components/FlowerIcon";
 import NavBar from "@/components/NavBar";
 import Paginator from "@/components/Paginator";
 import SidebarBestList from "@/components/SidebarBestList";
 import UserDreamProfileModal from "@/components/UserDreamProfileModal";
 import { markBackNavOrigin } from "@/lib/communityBackNav";
+import { flowerLanguageFor } from "@/lib/flowerTaxonomy";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useLoginModalStore } from "@/store/useLoginModalStore";
 
 type Tab = "dream" | "board";
 
-const SEARCH_TYPE_OPTIONS: { value: CommunitySearchType; label: string }[] = [
-  { value: "all", label: "전체" },
-  { value: "title", label: "제목" },
-  { value: "hashtag", label: "해시태그" },
-  { value: "author", label: "작성자" },
-];
-
-const SORT_OPTIONS: { value: CommunitySort; label: string }[] = [
-  { value: "latest", label: "최신순" },
-  { value: "likes", label: "공감순" },
-  { value: "views", label: "조회순" },
-];
-
-const PERIOD_OPTIONS: { value: CommunityPeriod; label: string }[] = [
-  { value: "weekly", label: "주간" },
-  { value: "monthly", label: "월간" },
-  { value: "all", label: "역대" },
-];
-
-// 검색/정렬/기간/페이지를 하나로 묶은 쿼리 상태 - 자유 광장 목록 fetch는 이 객체 하나에만
-// 의존한다. searchType/keyword가 없으면 검색 조건 없이 정렬/기간만 적용된 전체 목록이다.
+// 검색/정렬/기간/페이지를 하나로 묶은 쿼리 상태 - 꿈 게시판/자유 광장 목록 fetch 모두 이 객체
+// 하나에만 의존한다(두 탭이 각자의 인스턴스를 갖는다). searchType/keyword가 없으면 검색 조건
+// 없이 정렬/기간만 적용된 전체 목록이다.
 interface PostListQuery {
   page: number;
   sort: CommunitySort;
@@ -61,10 +50,6 @@ interface PostListQuery {
 }
 
 const DEFAULT_POST_QUERY: PostListQuery = { page: 1, sort: "latest", period: "all" };
-
-function toHashtagDisplay(tag: string): string {
-  return tag.startsWith("#") ? tag : `#${tag}`;
-}
 
 function formatPostTime(iso: string): string {
   return new Date(iso).toLocaleString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -83,6 +68,9 @@ function dreamListPreview(dream: DreamFeedEntry): string | null {
   if (caption.length >= 20) return caption;
   if (caption.length > 0) return null; // 사담은 있지만 너무 짧음 - 스포일러 방지로 제목만 노출
 
+  // 꽃 공유 글은 survey가 비어 있는 더미라 원문 대신 꽃말을 미리보기로 쓴다.
+  if (dream.attached_flower) return `🌷 ${flowerLanguageFor(dream.attached_flower)}`;
+
   const fallback = firstLine(buildDreamOriginalContent(dream.survey)).trim();
   return fallback.length > 0 ? `🌙 ${fallback}` : null;
 }
@@ -96,7 +84,13 @@ export default function CommunityPage() {
 
   const [dreams, setDreams] = useState<DreamFeedEntry[]>([]);
   const [isLoadingDreams, setIsLoadingDreams] = useState(true);
-  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [dreamTotalPages, setDreamTotalPages] = useState(1);
+  // 자유 광장과 동일한 쿼리 구조(PostListQuery)를 그대로 쓴다 - 두 탭의 검색/정렬/태그 필터 UI를
+  // 공통 컴포넌트(CommunitySearchBar/CommunitySortChips/CommunityTagFilterBar)로 통일하기 위함.
+  const [dreamQuery, setDreamQuery] = useState<PostListQuery>(DEFAULT_POST_QUERY);
+  const [dreamSearchType, setDreamSearchType] = useState<CommunitySearchType>("all");
+  const [dreamSearchKeyword, setDreamSearchKeyword] = useState("");
+  const [dreamTopTags, setDreamTopTags] = useState<TagCount[]>([]);
   // 리스트에서 바로 삭제할 수 있는 빠른 액션 - 수정은 자유 광장과 동일하게 상세 페이지(edit=1)로 보낸다.
   const [confirmDeleteDreamId, setConfirmDeleteDreamId] = useState<number | null>(null);
   const [isDeletingDream, setIsDeletingDream] = useState(false);
@@ -111,8 +105,9 @@ export default function CommunityPage() {
   const [searchType, setSearchType] = useState<CommunitySearchType>("all");
   const [searchKeyword, setSearchKeyword] = useState("");
   // 상단 태그 필터 바 - 최근 7일간 가장 많이 쓰인 해시태그 Top 8을 서버가 집계해서 내려준다
-  // (바에는 이 중 6개까지만 노출하고, 나머지는 "+ 태그 더보기" 모달에서 검색한다).
+  // (바에는 이 중 4개까지만 노출하고, 나머지는 "+ 태그 더보기" 모달에서 검색한다).
   const [topTags, setTopTags] = useState<TagCount[]>([]);
+  // 어느 탭에서 "+ 태그 더보기"를 눌렀는지는 tab 값으로 그대로 판단한다(한 번에 한 탭만 보이므로).
   const [isAllTagsModalOpen, setIsAllTagsModalOpen] = useState(false);
   // 리스트에서 바로 삭제할 수 있는 빠른 액션 - 수정은 상세 페이지(edit=1)로 보낸다.
   const [confirmDeletePostId, setConfirmDeletePostId] = useState<number | null>(null);
@@ -132,13 +127,11 @@ export default function CommunityPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("tab") === "board") setTab("board");
 
-    getDreamFeed()
-      .then(setDreams)
-      .catch(() => {})
-      .finally(() => setIsLoadingDreams(false));
-
-    getTopCommunityTags()
+    getTopCommunityTags({ source: "board" })
       .then(setTopTags)
+      .catch(() => {});
+    getTopCommunityTags({ source: "dream" })
+      .then(setDreamTopTags)
       .catch(() => {});
   }, []);
 
@@ -153,6 +146,18 @@ export default function CommunityPage() {
       .catch(() => {})
       .finally(() => setIsLoadingPosts(false));
   }, [postQuery]);
+
+  // 꿈 게시판도 자유 광장과 동일하게 쿼리 상태가 바뀔 때마다(최초 진입 포함) 서버에 다시 요청한다.
+  useEffect(() => {
+    setIsLoadingDreams(true);
+    getDreamFeed(dreamQuery)
+      .then((res) => {
+        setDreams(res.items);
+        setDreamTotalPages(res.total_pages);
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingDreams(false));
+  }, [dreamQuery]);
 
   // 새 검색을 실행할 때마다 페이지를 1로 되돌린다 - 이전 페이지에 머문 채 결과셋만 바뀌면
   // "3페이지인데 글이 하나도 없다"처럼 혼란스러운 상태가 될 수 있다.
@@ -200,19 +205,47 @@ export default function CommunityPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // 무의식 피드에 실제로 등장한 상징 태그만 필터 칩으로 보여준다 - 등장 빈도순.
-  const availableTags = useMemo(() => {
-    const counts = new Map<string, number>();
-    dreams.forEach((dream) => dream.tags.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1)));
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([tag]) => tag);
-  }, [dreams]);
+  // 꿈 게시판 쪽 핸들러 - 자유 광장의 handleSearchSubmit/handleClickTopTag/handleClearSearch/
+  // handleSortChange/handlePeriodChange/handlePageChange와 완전히 동일한 패턴이다.
+  const handleDreamSearchSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const trimmed = dreamSearchKeyword.trim();
+    setDreamQuery((prev) => ({
+      ...prev,
+      page: 1,
+      searchType: trimmed ? dreamSearchType : undefined,
+      keyword: trimmed || undefined,
+    }));
+  };
 
-  const filteredDreams = useMemo(() => {
-    if (!activeTag) return dreams;
-    return dreams.filter((dream) => dream.tags.includes(activeTag));
-  }, [dreams, activeTag]);
+  const handleClickDreamTopTag = (tag: string) => {
+    setDreamSearchType("hashtag");
+    setDreamSearchKeyword(tag);
+    setDreamQuery((prev) => ({ ...prev, page: 1, searchType: "hashtag", keyword: tag }));
+  };
+
+  const handleClearDreamSearch = () => {
+    setDreamSearchKeyword("");
+    setDreamQuery((prev) => ({ ...prev, page: 1, searchType: undefined, keyword: undefined }));
+  };
+
+  const handleDreamSortChange = (nextSort: CommunitySort) => {
+    setDreamQuery((prev) => ({
+      ...prev,
+      sort: nextSort,
+      page: 1,
+      period: nextSort === "latest" ? "all" : "weekly",
+    }));
+  };
+
+  const handleDreamPeriodChange = (nextPeriod: CommunityPeriod) => {
+    setDreamQuery((prev) => ({ ...prev, period: nextPeriod, page: 1 }));
+  };
+
+  const handleDreamPageChange = (nextPage: number) => {
+    setDreamQuery((prev) => ({ ...prev, page: nextPage }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const handleDeletePost = async (postId: number) => {
     if (isDeletingPost) return;
@@ -242,7 +275,6 @@ export default function CommunityPage() {
         isAnonymous: fullEntry.is_anonymous,
         shareWithAiAnalysis: fullEntry.share_with_ai_analysis,
         shareCaption: fullEntry.share_caption ?? undefined,
-        title: fullEntry.title,
       });
       setDreams((prev) => prev.filter((dream) => dream.id !== dreamId));
     } catch {
@@ -257,7 +289,8 @@ export default function CommunityPage() {
   // 그 링크를 눌렀을 때만 여기서 미리 막는다.
   const requireLoginThen = (href: string) => {
     if (!isAuthenticated) {
-      openLoginModal({ triggerSource: "community" });
+      // 로그인 성공 시 방금 누르려던 목적지로 그대로 이어간다(펜딩 액션 복귀).
+      openLoginModal({ triggerSource: "community", onSuccess: () => router.push(href) });
       return;
     }
     router.push(href);
@@ -267,7 +300,13 @@ export default function CommunityPage() {
   // 필요하다 - 라우팅 대신 그 자리에서 로그인 모달을 띄운다.
   const goToDetail = (href: string) => {
     if (!isAuthenticated) {
-      openLoginModal({ triggerSource: "community" });
+      openLoginModal({
+        triggerSource: "community",
+        onSuccess: () => {
+          markBackNavOrigin("list");
+          router.push(href);
+        },
+      });
       return;
     }
     markBackNavOrigin("list");
@@ -283,20 +322,22 @@ export default function CommunityPage() {
             <button
               type="button"
               onClick={() => switchTab("dream")}
-              className={`pb-3 text-sm font-semibold transition-colors ${
+              className={`flex items-center justify-center gap-1.5 pb-3 text-sm font-semibold transition-colors ${
                 tab === "dream" ? "text-white" : "text-slate-500 hover:text-slate-300"
               }`}
             >
-              🔮 꿈 게시판
+              <Moon className="h-4 w-4" strokeWidth={1.5} />
+              꿈 게시판
             </button>
             <button
               type="button"
               onClick={() => switchTab("board")}
-              className={`pb-3 text-sm font-semibold transition-colors ${
+              className={`flex items-center justify-center gap-1.5 pb-3 text-sm font-semibold transition-colors ${
                 tab === "board" ? "text-white" : "text-slate-500 hover:text-slate-300"
               }`}
             >
-              💬 자유 게시판
+              <MessageCircle className="h-4 w-4" strokeWidth={1.5} />
+              자유 게시판
             </button>
           </div>
           <div className="h-px w-full bg-white/10" />
@@ -314,44 +355,38 @@ export default function CommunityPage() {
           <div className="lg:col-span-8">
             {tab === "dream" ? (
               <div>
-                <div className="no-scrollbar flex gap-2 overflow-x-auto pb-3">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTag(null)}
-                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                      activeTag === null
-                        ? "border-purple-500 bg-purple-600/30 text-purple-300"
-                        : "border-white/10 bg-white/5 text-slate-400 hover:border-purple-500/50"
-                    }`}
-                  >
-                    #전체
-                  </button>
-                  {availableTags.map((tag) => {
-                    const isActive = activeTag === tag;
-                    return (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => setActiveTag(isActive ? null : tag)}
-                        className={`shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                          isActive
-                            ? "border-purple-500 bg-purple-600/30 text-purple-300"
-                            : "border-white/10 bg-white/5 text-slate-400 hover:border-purple-500/50"
-                        }`}
-                      >
-                        {toHashtagDisplay(tag)}
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* 자유 광장과 동일한 검색 바 - 공통 컴포넌트(CommunitySearchBar)를 그대로 재사용한다. */}
+                <CommunitySearchBar
+                  searchType={dreamSearchType}
+                  onSearchTypeChange={setDreamSearchType}
+                  keyword={dreamSearchKeyword}
+                  onKeywordChange={setDreamSearchKeyword}
+                  onSubmit={handleDreamSearchSubmit}
+                />
+
+                <CommunitySortChips
+                  sort={dreamQuery.sort}
+                  onSortChange={handleDreamSortChange}
+                  period={dreamQuery.period}
+                  onPeriodChange={handleDreamPeriodChange}
+                />
+
+                <CommunityTagFilterBar
+                  topTags={dreamTopTags}
+                  isTagActive={(tag) => dreamQuery.searchType === "hashtag" && dreamQuery.keyword === tag}
+                  isAllActive={dreamQuery.searchType === undefined}
+                  onSelectAll={handleClearDreamSearch}
+                  onSelectTag={handleClickDreamTopTag}
+                  onOpenMore={() => setIsAllTagsModalOpen(true)}
+                />
 
                 <div className="flex flex-col">
                   {isLoadingDreams ? (
                     Array.from({ length: 5 }, (_, index) => (
                       <div key={index} className="h-14 animate-pulse border-b border-white/10 bg-white/[0.02]" />
                     ))
-                  ) : filteredDreams.length > 0 ? (
-                    filteredDreams.map((dream) => {
+                  ) : dreams.length > 0 ? (
+                    dreams.map((dream) => {
                       const preview = dreamListPreview(dream);
                       return confirmDeleteDreamId === dream.id ? (
                         <div
@@ -396,12 +431,31 @@ export default function CommunityPage() {
                             {/* 자유 광장 리스트의 "글 번호" 자리를 대신해, 좌측에 이 꿈의 메인 감정
                                 이모지를 배치한다 - 무의식 피드 행임을 한눈에 구분해 준다. */}
                             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-lg">
-                              {dream.emotion}
+                              {dream.attached_flower ? (
+                                <FlowerIcon
+                                  archetype={dream.attached_flower.archetype}
+                                  genus={dream.attached_flower.genus}
+                                  speciesName={dream.attached_flower.species_name}
+                                  isLegendary={dream.attached_flower.is_legendary}
+                                  sizePx={26}
+                                />
+                              ) : (
+                                dream.emotion
+                              )}
                             </span>
                             <div className="min-w-0 flex-1">
                               <span className="inline-flex min-w-0 flex-wrap items-baseline gap-1.5">
                                 <span className="truncate text-lg font-bold text-slate-100 hover:underline">{dream.title}</span>
-                                <span className="shrink-0 rounded bg-purple-900 px-2 text-xs text-purple-200">🌙 꿈 기록</span>
+                                {dream.attached_flower ? (
+                                  <span className="inline-flex shrink-0 items-center gap-1 rounded bg-emerald-900 px-2 text-xs text-emerald-200">
+                                    🌸 꽃
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex shrink-0 items-center gap-1 rounded bg-purple-900 px-2 text-xs text-purple-200">
+                                    <Moon className="h-3 w-3" strokeWidth={1.5} />
+                                    꿈 기록
+                                  </span>
+                                )}
                                 {dream.comment_count > 0 && (
                                   <span className="shrink-0 text-sm font-semibold text-violet-400">[{dream.comment_count}]</span>
                                 )}
@@ -416,174 +470,110 @@ export default function CommunityPage() {
                                   <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-slate-950 to-transparent" />
                                 </div>
                               )}
-                              <div className="mt-1 text-[11px] text-slate-500">
+                              <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
                                 {dream.is_anonymous ? (
-                                  "🎭 익명의 탐험가"
+                                  <AuthorBadge isAnonymous displayName={null} badge={null} />
                                 ) : (
                                   <UserDreamProfileModal nickname={dream.author_display_name!}>
-                                    <span className="hover:text-purple-300">👤 {dream.author_display_name}</span>
+                                    <AuthorBadge
+                                      isAnonymous={false}
+                                      displayName={dream.author_display_name}
+                                      badge={dream.author_badge}
+                                    />
                                   </UserDreamProfileModal>
-                                )}{" "}
-                                · {dream.dream_date}
+                                )}
+                                <span>· {dream.dream_date}</span>
                               </div>
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-3">
                             {dream.is_mine && (
-                              <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                                <Link
-                                  href={`/community/post?id=${dream.id}&edit=1`}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    markBackNavOrigin("list");
-                                  }}
-                                  className="underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
-                                >
-                                  ✏️ 수정
-                                </Link>
+                              <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                                {/* 자유 게시판과 동일하게(POST_EDIT_WINDOW_MS), 서버(update_dream)가
+                                    게시 10분 후 수정을 403으로 거절하므로 링크 자체를 미리 숨긴다. */}
+                                {Date.now() - new Date(dream.created_at).getTime() < POST_EDIT_WINDOW_MS && (
+                                  <Link
+                                    href={`/community/post?id=${dream.id}&edit=1`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      markBackNavOrigin("list");
+                                    }}
+                                    aria-label="수정"
+                                    className="transition-colors hover:text-violet-300"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
+                                  </Link>
+                                )}
                                 <button
                                   type="button"
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     setConfirmDeleteDreamId(dream.id);
                                   }}
-                                  className="underline-offset-2 transition-colors hover:text-red-300 hover:underline"
+                                  aria-label="삭제"
+                                  className="transition-colors hover:text-red-300"
                                 >
-                                  🗑️ 삭제
+                                  <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                                 </button>
                               </div>
                             )}
                             {/* 좋아요/댓글/조회수를 한 자리에 모아, 어느 글이 지금 활발한지 한눈에 비교할 수 있게 한다. */}
-                            <span className="whitespace-nowrap text-xs text-slate-400">
-                              👍 {dream.upvote_count} 💬 {dream.comment_count} 👀 {dream.view_count}
+                            <span className="flex items-center gap-2 whitespace-nowrap text-xs text-slate-400">
+                              <span className="inline-flex items-center gap-0.5">
+                                <ThumbsUp className="h-3 w-3" strokeWidth={1.5} />
+                                {dream.upvote_count}
+                              </span>
+                              <span className="inline-flex items-center gap-0.5">
+                                <MessageCircle className="h-3 w-3" strokeWidth={1.5} />
+                                {dream.comment_count}
+                              </span>
+                              <span className="inline-flex items-center gap-0.5">
+                                <Eye className="h-3 w-3" strokeWidth={1.5} />
+                                {dream.view_count}
+                              </span>
                             </span>
                           </div>
                         </div>
                       );
                     })
                   ) : (
-                    <p className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-8 text-center text-xs text-slate-500">
-                      {activeTag
-                        ? `${toHashtagDisplay(activeTag)} 태그의 공개된 꿈이 아직 없어요.`
-                        : "아직 공개된 꿈이 없어요. 꿈 기록소에서 첫 공개 기록을 남겨보세요 ✨"}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div>
-                {/* 검색 바 - 드롭다운(전체/제목/해시태그/작성자)과 입력창이 하나로 결합된 형태.
-                    focus-within으로 인풋에 포커스가 가면 바 전체에 보라색 글로우가 뜬다. */}
-                <form
-                  onSubmit={handleSearchSubmit}
-                  className="flex items-stretch overflow-hidden rounded-xl border border-slate-700 bg-slate-900 transition-shadow focus-within:border-purple-500 focus-within:shadow-[0_0_0_3px_rgba(168,85,247,0.15)]"
-                >
-                  <select
-                    value={searchType}
-                    onChange={(event) => setSearchType(event.target.value as CommunitySearchType)}
-                    className="shrink-0 border-r border-slate-700 bg-transparent px-3 text-xs text-slate-300 outline-none"
-                  >
-                    {SEARCH_TYPE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value} className="bg-slate-900">
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    value={searchKeyword}
-                    onChange={(event) => setSearchKeyword(event.target.value)}
-                    placeholder="검색어를 입력하세요"
-                    className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none"
-                  />
-                  <button
-                    type="submit"
-                    className="shrink-0 px-4 text-sm font-medium text-purple-300 transition-colors hover:text-purple-200"
-                  >
-                    검색
-                  </button>
-                </form>
-
-                {/* 정렬 토글(우측 상단) - 공감순/조회순을 고르면 그 아래로 기간 서브 필터가
-                    나타난다(기본값 주간). 최신순으로 돌아가면 기간 필터는 다시 숨겨지고
-                    period도 "all"로 리셋된다(handleSortChange). */}
-                <div className="mt-3 flex flex-col items-end gap-2">
-                  <div className="flex gap-1 rounded-full border border-white/10 bg-white/5 p-1">
-                    {SORT_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => handleSortChange(option.value)}
-                        className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                          postQuery.sort === option.value
-                            ? "bg-purple-600 text-white"
-                            : "text-slate-400 hover:text-slate-200"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                  {postQuery.sort !== "latest" && (
-                    <div className="flex gap-1.5">
-                      {PERIOD_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => handlePeriodChange(option.value)}
-                          className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                            postQuery.period === option.value
-                              ? "border-purple-500 bg-purple-600/30 text-purple-300"
-                              : "border-white/10 bg-white/5 text-slate-500 hover:border-purple-500/40"
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-10 text-center">
+                      <p className="text-xs text-slate-500">
+                        {dreamQuery.keyword
+                          ? "검색 결과가 없어요. 다른 조건으로 찾아보세요."
+                          : "아직 공개된 꿈이 없어요. 꿈 기록소에서 첫 공개 기록을 남겨보세요."}
+                      </p>
                     </div>
                   )}
                 </div>
 
-                {/* 상단 태그 필터 바 - 최근 7일간 가장 많이 쓰인 해시태그 중 Top 6까지만 먼저
-                    보여준다(고정 목록이 아니라 실제 데이터를 따라 매번 달라진다). 그 이상은
-                    칩이 끝없이 늘어나 UI가 지저분해지니 "+ 태그 더보기" 모달로 넘긴다. */}
-                <div className="no-scrollbar mt-3 flex items-center gap-2 overflow-x-auto pb-3">
-                  <button
-                    type="button"
-                    onClick={handleClearSearch}
-                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                      postQuery.searchType === undefined
-                        ? "border-purple-500 bg-purple-600/30 text-purple-300"
-                        : "border-white/10 bg-white/5 text-slate-400 hover:border-purple-500/50"
-                    }`}
-                  >
-                    전체
-                  </button>
-                  {topTags.slice(0, 6).map((item) => {
-                    const isActive = postQuery.searchType === "hashtag" && postQuery.keyword === item.tag;
-                    return (
-                      <button
-                        key={item.tag}
-                        type="button"
-                        onClick={() => handleClickTopTag(item.tag)}
-                        className={`shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                          isActive
-                            ? "border-purple-500 bg-purple-600/30 text-purple-300"
-                            : "border-white/10 bg-white/5 text-slate-400 hover:border-purple-500/50"
-                        }`}
-                      >
-                        {toHashtagDisplay(item.tag)} <span className="text-slate-500">{item.count}</span>
-                      </button>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    onClick={() => setIsAllTagsModalOpen(true)}
-                    className="shrink-0 rounded-full border border-dashed border-white/20 bg-white/[0.02] px-3 py-1.5 text-xs text-slate-400 transition-colors hover:border-purple-500/50 hover:text-purple-300"
-                  >
-                    + 태그 더보기
-                  </button>
-                </div>
+                <Paginator page={dreamQuery.page} totalPages={dreamTotalPages} onChange={handleDreamPageChange} />
+              </div>
+            ) : (
+              <div>
+                <CommunitySearchBar
+                  searchType={searchType}
+                  onSearchTypeChange={setSearchType}
+                  keyword={searchKeyword}
+                  onKeywordChange={setSearchKeyword}
+                  onSubmit={handleSearchSubmit}
+                />
+
+                <CommunitySortChips
+                  sort={postQuery.sort}
+                  onSortChange={handleSortChange}
+                  period={postQuery.period}
+                  onPeriodChange={handlePeriodChange}
+                />
+
+                <CommunityTagFilterBar
+                  topTags={topTags}
+                  isTagActive={(tag) => postQuery.searchType === "hashtag" && postQuery.keyword === tag}
+                  isAllActive={postQuery.searchType === undefined}
+                  onSelectAll={handleClearSearch}
+                  onSelectTag={handleClickTopTag}
+                  onOpenMore={() => setIsAllTagsModalOpen(true)}
+                />
 
               <div className="flex flex-col">
                 {isLoadingPosts ? (
@@ -647,20 +637,24 @@ export default function CommunityPage() {
                               <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-slate-950 to-transparent" />
                             </div>
                           )}
-                          <div className="mt-1 text-[11px] text-slate-500">
+                          <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
                             {post.is_anonymous ? (
-                              "🎭 익명의 탐험가"
+                              <AuthorBadge isAnonymous displayName={null} badge={null} />
                             ) : (
                               <UserDreamProfileModal nickname={post.author_display_name!}>
-                                <span className="hover:text-purple-300">👤 {post.author_display_name}</span>
+                                <AuthorBadge
+                                  isAnonymous={false}
+                                  displayName={post.author_display_name}
+                                  badge={post.author_badge}
+                                />
                               </UserDreamProfileModal>
-                            )}{" "}
-                            · {formatPostTime(post.created_at)}
+                            )}
+                            <span>· {formatPostTime(post.created_at)}</span>
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-3">
                           {post.is_mine && (
-                            <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                            <div className="flex items-center gap-3 text-[11px] text-slate-500">
                               {/* 서버(update_community_post)가 게시 10분 후 수정을 403으로 거절하므로,
                                   프론트도 같은 기준(POST_EDIT_WINDOW_MS)으로 링크 자체를 미리 숨긴다. */}
                               {Date.now() - new Date(post.created_at).getTime() < POST_EDIT_WINDOW_MS && (
@@ -670,9 +664,10 @@ export default function CommunityPage() {
                                     event.stopPropagation();
                                     markBackNavOrigin("list");
                                   }}
-                                  className="underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
+                                  aria-label="수정"
+                                  className="transition-colors hover:text-violet-300"
                                 >
-                                  ✏️ 수정
+                                  <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
                                 </Link>
                               )}
                               <button
@@ -681,15 +676,27 @@ export default function CommunityPage() {
                                   event.stopPropagation();
                                   setConfirmDeletePostId(post.id);
                                 }}
-                                className="underline-offset-2 transition-colors hover:text-red-300 hover:underline"
+                                aria-label="삭제"
+                                className="transition-colors hover:text-red-300"
                               >
-                                🗑️ 삭제
+                                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                               </button>
                             </div>
                           )}
                           {/* 좋아요/댓글/조회수를 한 자리에 모아, 어느 글이 지금 활발한지 한눈에 비교할 수 있게 한다. */}
-                          <span className="whitespace-nowrap text-xs text-slate-400">
-                            👍 {post.upvote_count} 💬 {post.comment_count} 👀 {post.view_count}
+                          <span className="flex items-center gap-2 whitespace-nowrap text-xs text-slate-400">
+                            <span className="inline-flex items-center gap-0.5">
+                              <ThumbsUp className="h-3 w-3" strokeWidth={1.5} />
+                              {post.upvote_count}
+                            </span>
+                            <span className="inline-flex items-center gap-0.5">
+                              <MessageCircle className="h-3 w-3" strokeWidth={1.5} />
+                              {post.comment_count}
+                            </span>
+                            <span className="inline-flex items-center gap-0.5">
+                              <Eye className="h-3 w-3" strokeWidth={1.5} />
+                              {post.view_count}
+                            </span>
                           </span>
                         </div>
                       </div>
@@ -703,9 +710,10 @@ export default function CommunityPage() {
                     <button
                       type="button"
                       onClick={() => requireLoginThen("/community/write?type=board")}
-                      className="mt-4 rounded-full bg-purple-600 px-5 py-2 text-xs font-medium text-white transition-colors hover:bg-purple-500"
+                      className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-purple-600 px-5 py-2 text-xs font-medium text-white transition-colors hover:bg-purple-500"
                     >
-                      ✏️ 첫 이야기 남기기
+                      <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      첫 이야기 남기기
                     </button>
                   </div>
                 )}
@@ -725,17 +733,19 @@ export default function CommunityPage() {
                 <button
                   type="button"
                   onClick={() => requireLoginThen("/community/write?type=dream")}
-                  className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 font-medium text-white shadow-lg transition-all hover:from-purple-700 hover:to-indigo-700"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 font-medium text-white shadow-lg transition-all hover:from-purple-700 hover:to-indigo-700"
                 >
-                  🌙 내 꿈 공유하기
+                  <SquarePen className="h-4 w-4 text-white" strokeWidth={1.75} />
+                  내 꿈 공유하기
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => requireLoginThen("/community/write?type=board")}
-                  className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 font-medium text-white shadow-lg transition-all hover:from-purple-700 hover:to-indigo-700"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 font-medium text-white shadow-lg transition-all hover:from-purple-700 hover:to-indigo-700"
                 >
-                  🖊️ 글쓰기
+                  <SquarePen className="h-4 w-4 text-white" strokeWidth={1.75} />
+                  글쓰기
                 </button>
               )}
 
@@ -751,7 +761,7 @@ export default function CommunityPage() {
       <NavBar />
 
       <main className="mx-auto max-w-7xl px-4 py-12">
-        <h1 className="text-2xl font-semibold text-white">🌌 무의식 광장</h1>
+        <h1 className="text-2xl font-semibold text-white">커뮤니티</h1>
         <p className="mt-1.5 text-sm text-slate-400">다른 탐험가들의 꿈을 둘러보고, 자유롭게 이야기를 나눠보세요.</p>
 
         {/* 리스트(제목/태그/작성일/좋아요)는 비로그인 유저도 자유롭게 볼 수 있다 - 상세 진입과
@@ -759,11 +769,17 @@ export default function CommunityPage() {
         {feedSection}
       </main>
 
+      {/* 어느 탭에서 "+ 태그 더보기"를 열었는지는 tab 값으로 판단한다 - 두 탭이 이 모달 하나를 공유한다. */}
       {isAllTagsModalOpen && (
         <AllTagsModal
+          source={tab === "dream" ? "dream" : "board"}
           onClose={() => setIsAllTagsModalOpen(false)}
           onSelectTag={(tag) => {
-            handleClickTopTag(tag);
+            if (tab === "dream") {
+              handleClickDreamTopTag(tag);
+            } else {
+              handleClickTopTag(tag);
+            }
             setIsAllTagsModalOpen(false);
           }}
         />

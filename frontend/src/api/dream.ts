@@ -1,4 +1,6 @@
 import api from "./axios";
+import type { SeedType } from "@/lib/dreamSeeds";
+import type { AuthorBadge } from "@/lib/levels";
 
 // 아래 타입/함수들은 backend/routers의 더미 엔드포인트 응답 형태를 그대로 반영한 것으로,
 // 실제 기능 구현 시 백엔드 스키마 확정에 맞춰 갱신한다.
@@ -63,6 +65,25 @@ export async function getTrends(): Promise<Trend[]> {
   return data;
 }
 
+// 인기 검색어 일간/주간 랭킹 보드(홈 우측): 위 getTrends와 별개로, 사전 검색 로그만 대상으로
+// KST 자정마다 도는 야간 배치가 daily_keywords 테이블에 순위/변동폭까지 미리 계산해 적재해둔
+// 값을 그대로 읽어온다(routers/trends.py). change/rank_delta는 직전 배치 대비 순위 변동.
+export type SearchTrendChange = "up" | "down" | "new" | "same";
+export type SearchTrendPeriod = "daily" | "weekly";
+
+export interface SearchTrendRankingItem {
+  rank: number;
+  keyword: string;
+  count: number;
+  change: SearchTrendChange;
+  rank_delta: number;
+}
+
+export async function getSearchTrendRanking(period: SearchTrendPeriod = "daily"): Promise<SearchTrendRankingItem[]> {
+  const { data } = await api.get<SearchTrendRankingItem[]>("/api/trends/search-ranking", { params: { period } });
+  return data;
+}
+
 export async function getBestFeed(limit: number): Promise<BestFeedEntry[]> {
   const { data } = await api.get<{ dreams: BestFeedEntry[] }>("/api/home/best-dreams", { params: { limit } });
   return data.dreams;
@@ -77,6 +98,7 @@ export interface BestPostEntry {
   category: "DREAM" | "FREE";
   upvote_count: number;
   view_count: number;
+  comment_count: number;
 }
 
 export async function getBestPosts(limit: number): Promise<BestPostEntry[]> {
@@ -104,6 +126,21 @@ export interface DreamSurvey {
   lucid_level: LucidLevel;
   control_level: ControlLevel | null;
   final_memo: string;
+  // 씨앗 심기(감정일기) "마음 기록장" 깊이 모드 전용 - 간단 모드/꿈일기는 journal_mode가
+  // 항상 "simple"이고 나머지 필드는 비워 둔다. 백엔드 DreamSurveyInput과 필드를 맞춘다.
+  journal_mode?: "simple" | "guided";
+  initial_emotion?: string | null;
+  // 실제로 어느 대분류 아코디언에서 골랐는지 - "고통스러운"/"구역질나는"처럼 같은 단어가
+  // 여러 대분류에 겹칠 때 이 힌트로 정확한 분위기 색/속(genus)을 되살린다. 백엔드
+  // DreamSurveyInput과 필드를 맞춘다.
+  initial_emotion_category?: string | null;
+  trigger_event?: string | null;
+  desire?: string | null;
+  message_to_other?: string | null;
+  desired_message?: string | null;
+  self_compassion?: string | null;
+  closing_emotion?: string | null;
+  closing_emotion_category?: string | null;
 }
 
 export interface DreamEntryInput {
@@ -168,6 +205,8 @@ export interface AiInterpretation {
   lucky_number_reason: string;
   // 이 기능 이전에 저장된 기록은 값이 없을 수 있다 - 렌더링 전 항상 존재를 확인한다.
   counseling_report?: CounselingReport;
+  // 유저가 감정 태그를 직접 고르지 않고 저장할 때 쓰는 AI 추론 폴백 - MOOD_OPTIONS 이모지 중 하나.
+  inferred_mood_emoji?: string;
 }
 
 export async function requestAiInterpretation(payload: DreamEntryInput): Promise<AiInterpretation> {
@@ -175,21 +214,58 @@ export async function requestAiInterpretation(payload: DreamEntryInput): Promise
   return data;
 }
 
-// ⚡ 10초 미니멀 빠른 기록: 7단계 문답 없이 자유 서술 한 편만 보내 AI 해몽을 받는다.
-export async function requestQuickAiInterpretation(title: string, rawText: string): Promise<AiInterpretation> {
-  const { data } = await api.post<AiInterpretation>("/api/dream-interpretation-quick", {
-    title,
-    raw_text: rawText,
-  });
+// ⚡ 30초 미니멀 빠른 기록: 7단계 문답 없이 자유 서술 한 편만 보내 AI 해몽을 받는다. date를
+// 함께 보내면(취침일 기준) 서버가 같은 날짜의 감정일기를 직접 조회해 해몽 맥락에 반영한다 -
+// 정밀 모드(requestAiInterpretation)와 같은 서버 조회 방식이라 프론트는 조회 로직 없이
+// 날짜만 실어 보내면 된다.
+export async function requestQuickAiInterpretation(
+  title: string,
+  rawText: string,
+  date?: string,
+  signal?: AbortSignal
+): Promise<AiInterpretation> {
+  const { data } = await api.post<AiInterpretation>(
+    "/api/dream-interpretation-quick",
+    { title, raw_text: rawText, date },
+    { signal }
+  );
   return data;
 }
 
 // 아래는 로그인한 유저 소유의 꿈 기록 CRUD. 미리보기용 해몽 요청(위)과 달리 로그인이 필요하다.
 
+// 무의식 광장 "꽃" 콘텐츠 타입 - 공유 시점에 정원 꽃(DreamSeed)의 이름/희귀도/도감 번호를
+// 스냅샷으로 굳혀 둔 것. rarity가 이후 다른 유저들의 개화 빈도에 따라 계속 바뀌는 값이라,
+// 실시간 조인 대신 공유 당시 값을 그대로 고정한다 - genus/archetype/is_legendary는 프론트의
+// FlowerIcon(@/components/FlowerIcon)/flowerLanguageFor(flowerTaxonomy.ts)에 그대로 넘길 수 있는 모양이다.
+export interface AttachedFlower {
+  seed_id: number;
+  species_name: string;
+  flower_name: string;
+  genus: string | null;
+  // 파라메트릭 SVG 아이콘(FlowerIcon)이 원형(모양) 결정에 쓴다 - 이 필드 도입 전에 공유된
+  // 스냅샷은 없을 수 있어 optional이다(그때는 기본 실루엣으로 대체된다).
+  archetype: string | null;
+  is_legendary: boolean;
+  legendary_key: string | null;
+  rarity: 1 | 2 | 3;
+  dex_number: number;
+}
+
+// 감정일기/꿈일기 실제 타입 - AI 해몽(interpretation) 유무로 유추하지 않는다. 꿈해몽 사전
+// 연계 저장처럼 해몽 없이 저장되는 진짜 꿈일기가 있어, 기록을 만드는 화면이 항상 명시적으로
+// 정해 보낸다. 커뮤니티 글쓰기 탭 필터링/꿈 통계 집계 모두 이 필드만 본다.
+export type DreamEntryType = "emotion" | "dream";
+
 export interface DreamEntryRecord {
   id: number;
   dream_date: string;
   title: string;
+  entry_type: DreamEntryType;
+  // 커뮤니티(무의식 광장)에서만 쓰는 별도 제목 - 공유 화면/공개 글 수정에서 고친 제목이 여기
+  // 담긴다. title(나만의 일기장/정원 원본 제목)은 절대 건드리지 않는다. 커스터마이즈한 적
+  // 없으면 null - 이때 커뮤니티 화면도 title을 그대로 보여준다. dreamDisplayTitle()로 읽는다.
+  public_title: string | null;
   emotion: string;
   summary: string;
   is_public: boolean;
@@ -206,6 +282,8 @@ export interface DreamEntryRecord {
   survey: DreamSurvey;
   // 무의식 광장 "직접 쓰기" 모드에서 AI 해몽을 건너뛰고 게시했으면 null.
   interpretation: AiInterpretation | null;
+  // "꽃" 콘텐츠 타입일 때만 채워진다 - 있으면 이 행은 실제 꿈 기록이 아니라 정원 꽃 공유 글이다.
+  attached_flower: AttachedFlower | null;
   // 글쓰기 화면에서 유저가 직접 입력한 태그(최대 5개) - AI가 interpretation 안에 자동으로
   // 붙여주던 태그를 대신해, 커뮤니티 노출/필터링은 이제 이 필드만 쓴다.
   tags: string[];
@@ -213,6 +291,7 @@ export interface DreamEntryRecord {
   updated_at: string;
   // 익명이면 null(프론트가 "익명의 탐험가"로 표시).
   author_display_name: string | null;
+  author_badge: AuthorBadge | null;
   // 내가 쓴 꿈인지 - 자유 광장과 동일하게 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는
   // 서버(PUT/DELETE /api/dreams/{id})가 다시 한다. 소유자 전용 CRUD 응답은 항상 true.
   is_mine: boolean;
@@ -223,11 +302,19 @@ export interface DreamEntryRecord {
   my_vote: "up" | "down" | null;
   // 공개 상세 조회(getPublicDream)에서만 실제 값이 채워진다.
   view_count: number;
+  // 이 기록의 생성으로 어젯밤 심어둔 씨앗이 개화했다면 그 씨앗 종류(createDream 응답에서만
+  // 실제로 채워진다 - 목록 조회/수정 응답은 항상 null). 저널 타임라인이 이 값으로 "방금 이
+  // 카드가 개화했다"는 걸 판단한다.
+  bloomed_seed_type: SeedType | null;
 }
 
 export interface DreamEntryPayload {
   dream_date: string;
   title: string;
+  entry_type: DreamEntryType;
+  // 커뮤니티 전용 제목 오버라이드 - 공유/공개 글 수정 화면에서만 보낸다. 일반 일기 저장은 이
+  // 필드를 아예 넣지 않아야 기존 커스텀 공개 제목이 조용히 지워지지 않는다.
+  public_title?: string | null;
   emotion: string;
   summary: string;
   is_public: boolean;
@@ -238,6 +325,20 @@ export interface DreamEntryPayload {
   survey: DreamSurvey;
   interpretation?: AiInterpretation | null;
   tags?: string[];
+  // "꽃" 콘텐츠 타입 전용 - 공유할 내 정원 꽃(GardenBloomEntry.id, 곧 DreamSeed.id)을 지정하면
+  // 서버가 이름/희귀도/도감 번호 스냅샷을 만들어 attached_flower에 저장한다. createDream에서만
+  // 의미가 있다.
+  attached_flower_seed_id?: number | null;
+  // "quick_interpret"이면 감정일기->수면->꿈일기(4단계 정식 루틴) 없이 상단 "AI 해몽" 버튼으로
+  // 곧장 받은 결과라는 뜻 - 서버가 정원의 꽃 대신 "표본"으로 남긴다. 일기장의 꿈 기록 모달은
+  // 정식 루틴이라 생략하면 서버 기본값("normal")이 적용된다.
+  origin?: "normal" | "quick_interpret";
+}
+
+// 커뮤니티(무의식 광장) 화면에서 보여줄 제목. public_title을 커스터마이즈했으면 그걸, 아니면
+// 원본 title을 그대로 쓴다. 일기장/정원 등 사적인 화면에서는 절대 쓰지 말고 entry.title을 직접 읽을 것.
+export function dreamDisplayTitle(entry: Pick<DreamEntryRecord, "title" | "public_title">): string {
+  return entry.public_title?.trim() || entry.title;
 }
 
 export async function listDreams(): Promise<DreamEntryRecord[]> {
@@ -283,15 +384,19 @@ export async function setDreamVisibility(
     isAnonymous: boolean;
     shareWithAiAnalysis: boolean;
     shareCaption?: string;
-    // 커뮤니티 리스트 뷰에 노출되는 제목을 공유 시점에 바꿀 수 있게 한다 - 생략하면 기존 제목 유지.
-    title?: string;
+    // 커뮤니티 화면에만 노출되는 제목을 공유 시점에 바꿀 수 있게 한다 - 생략하면 기존 public_title
+    // 유지. title(일기장 원본)은 이 함수가 절대 건드리지 않는다.
+    publicTitle?: string;
     // 글쓰기 화면에서 직접 입력한 태그를 함께 바꿀 때만 넘긴다 - 생략하면 기존 태그를 그대로 유지한다.
     tags?: string[];
   }
 ): Promise<DreamEntryRecord> {
   return updateDream(entry.id, {
     dream_date: entry.dream_date,
-    title: options.title?.trim() || entry.title,
+    title: entry.title,
+    entry_type: entry.entry_type,
+    public_title:
+      options.publicTitle !== undefined ? options.publicTitle.trim() || null : entry.public_title,
     emotion: entry.emotion,
     summary: entry.summary,
     is_public: options.isPublic,
@@ -320,11 +425,15 @@ export interface DreamFeedEntry {
   summary: string;
   tags: string[];
   dream_date: string;
+  // dream_date는 유저가 고르는 "꿈을 꾼 날짜"라 과거로 소급될 수 있어, 게시 후 10분 수정
+  // 제한(POST_EDIT_WINDOW_MS) 판단에는 실제 게시 시각인 이 필드를 대신 쓴다.
+  created_at: string;
   upvote_count: number;
   downvote_count: number;
   my_vote: "up" | "down" | null;
   is_anonymous: boolean;
   author_display_name: string | null;
+  author_badge: AuthorBadge | null;
   share_with_ai_analysis: boolean;
   share_caption: string | null;
   // summary는 목록용 90자 요약이라 "…"로 잘려 있다 - 카드에서 원문을 끝까지(펼치기로) 보여주려면
@@ -336,6 +445,7 @@ export interface DreamFeedEntry {
   // 서버(PUT/DELETE /api/dreams/{id})가 다시 한다.
   is_mine: boolean;
   ai_report: DreamFeedAiReport | null;
+  attached_flower: AttachedFlower | null;
 }
 
 export interface VoteResult {
@@ -344,8 +454,36 @@ export interface VoteResult {
   downvote_count: number;
 }
 
-export async function getDreamFeed(): Promise<DreamFeedEntry[]> {
-  const { data } = await api.get<DreamFeedEntry[]>("/api/community/dream-feed");
+// 무의식 피드 목록 - 자유 광장(getCommunityPosts)과 동일한 페이지네이션/검색/정렬/기간
+// 파라미터를 그대로 지원한다(꿈 게시판/자유 게시판 상단 필터 UI 통일).
+export interface DreamFeedListResponse {
+  items: DreamFeedEntry[];
+  total_count: number;
+  total_pages: number;
+  page: number;
+}
+
+export interface DreamFeedListParams {
+  page?: number;
+  limit?: number;
+  searchType?: CommunitySearchType;
+  keyword?: string;
+  sort?: CommunitySort;
+  period?: CommunityPeriod;
+}
+
+export async function getDreamFeed(params: DreamFeedListParams = {}): Promise<DreamFeedListResponse> {
+  const { page = 1, limit = 10, searchType, keyword, sort, period } = params;
+  const { data } = await api.get<DreamFeedListResponse>("/api/community/dream-feed", {
+    params: {
+      page,
+      limit,
+      search_type: searchType,
+      keyword: keyword?.trim() ? keyword.trim() : undefined,
+      sort,
+      period,
+    },
+  });
   return data;
 }
 
@@ -370,6 +508,7 @@ export interface CommunityPost {
   my_vote: "up" | "down" | null;
   is_anonymous: boolean;
   author_display_name: string | null;
+  author_badge: AuthorBadge | null;
   comment_count: number;
   created_at: string;
   // 글쓰기에서 첨부한 이미지들의 R2 공개 URL 목록(최대 3장, 순서대로 노출).
@@ -404,7 +543,7 @@ export interface CommunityPostListParams {
 }
 
 export async function getCommunityPosts(params: CommunityPostListParams = {}): Promise<CommunityPostListResponse> {
-  const { page = 1, limit = 20, searchType, keyword, sort, period } = params;
+  const { page = 1, limit = 10, searchType, keyword, sort, period } = params;
   const { data } = await api.get<CommunityPostListResponse>("/api/community/posts", {
     params: {
       page,
@@ -428,6 +567,8 @@ export interface TopCommunityTagsParams {
   // 0이면 기간 제한 없이(전체 기간) 집계한다 - "+ 태그 더보기" 전체 목록 모달이 쓴다.
   days?: number;
   limit?: number;
+  // 자유 광장(board, 기본값)/꿈 게시판(dream) 중 어느 태그를 집계할지 - 서로 다른 컬럼(source)이다.
+  source?: "board" | "dream";
 }
 
 export async function getTopCommunityTags(params: TopCommunityTagsParams = {}): Promise<TagCount[]> {
@@ -491,7 +632,7 @@ export async function updateCommunityPost(
 // 🌌 무의식 은하 프로필 - 커뮤니티 닉네임 호버 카드용. is_public이 false면 다른 필드는
 // 항상 null(원문/개수 등 어떤 개인 데이터도 응답에 섞이지 않는다).
 export interface GalaxySeedRatio {
-  seed: string;
+  seed: SeedType;
   ratio: number;
 }
 
@@ -528,6 +669,7 @@ export interface CommunityComment {
   content: string;
   is_anonymous: boolean;
   author_display_name: string | null;
+  author_badge: AuthorBadge | null;
   created_at: string;
   // 내가 쓴 댓글인지 - 수정/삭제 버튼 노출 여부 판단용. 실제 권한 체크는 서버가 다시 한다.
   is_mine: boolean;
@@ -644,5 +786,126 @@ export async function getUnconsciousStats(): Promise<UnconsciousStats> {
 export async function getScrapbook(): Promise<ScrapEntry[]> {
   const { data } = await api.get<{ entries: ScrapEntry[] }>("/mypage/scrapbook");
   return data.entries;
+}
+
+// 🌱 무의식의 정원 - 개화까지 끝난 씨앗(식물) 컬렉션 + 소셜 방문/이슬 주기.
+export interface GardenBloomEntry {
+  id: number;
+  seed_type: SeedType;
+  // 이 개화가 귀속되는 날짜 - 씨앗을 심은 날(=정원 카드의 날짜)이지, 꿈을 기록한 날이 아니다.
+  bloomed_at: string;
+  dream_entry_id: number | null;
+  dream_title: string | null;
+  // 그날 꿈 일기의 감정 기록 - 꽃 색상을 여기서 정한다. 아직 개화 전(seed 단계)이면 null.
+  emotion: string | null;
+  // "seed"(심었지만 아직 개화 전 - 새싹) / "bloom"(개화 완료 - 만개) / "forgotten"("꿈이
+  // 기억나지 않아요"를 명시적으로 선택 - 정식 꽃 대신 새싹 표본으로 표시)
+  stage: "seed" | "bloom" | "forgotten";
+  // AI가 붙인 원본 태그("#전연인" 등) - 상세 관찰 모달의 태그 표시/희귀도 산정에 쓴다.
+  tags: string[];
+  // --- 꽃 도감 분류(속x종x변종) - 개화 단계에서만 채워진다. 이 필드가 도입되기 전에
+  // 개화한 옛 기록은 전부 null일 수 있다(프론트가 seed_type 기반으로 대체 표시한다). ---
+  genus: string | null;
+  archetype: string | null;
+  species_name: string | null;
+  flower_name: string | null;
+  is_legendary: boolean;
+  legendary_key: string | null;
+  rarity: 1 | 2 | 3 | null;
+  is_first_discovery: boolean;
+  // "성장의 반짝임" 배지 - 마음 기록장(깊이 모드)에서 부정 감정으로 시작해 긍정 감정으로
+  // 마무리한 날에만 true. species_name/rarity와는 무관한 별도 표시라 종/희귀도 판정에는
+  // 전혀 영향을 주지 않는다.
+  growth_badge: boolean;
+}
+
+// "떠돌이 표본" - AI 해몽 빠른 진입(정식 루틴 미완료)의 산출물. 30종 꽃 분류를 따르지 않고
+// 유저별 순번만 매긴 "표본 No.X"로 남는다. 도감 완성률 집계와 완전히 분리된 컬렉션이다.
+export interface GardenSpecimen {
+  id: number;
+  sequence_number: number;
+  name: string;
+  emotion: string | null;
+  tags: string[];
+  dream_entry_id: number | null;
+  dream_title: string | null;
+  created_at: string;
+}
+
+export interface GardenProfile {
+  is_public: boolean;
+  nickname: string | null;
+  badge: AuthorBadge | null;
+  total_bloom_count: number;
+  blooms: GardenBloomEntry[];
+  is_owner: boolean;
+  already_gave_dew_today: boolean;
+  // 이 정원 주인이 대표로 고정한 꽃(GardenBloomEntry.id) - 없으면 null.
+  pinned_seed_id: number | null;
+  // 소유자 본인에게만 채워진다(타인 정원 조회 시 항상 빈 배열/0).
+  specimens: GardenSpecimen[];
+  specimen_count: number;
+}
+
+export async function getMyGarden(): Promise<GardenProfile> {
+  const { data } = await api.get<GardenProfile>("/api/garden/me");
+  return data;
+}
+
+// 비공개 정원이면 is_public:false만 채워진 응답이 온다 - 나머지 필드는 프론트에서도
+// 절대 신뢰하지 말고 "비공개된 무의식 은하입니다" 안내만 보여줘야 한다.
+export async function getPublicGarden(nickname: string): Promise<GardenProfile> {
+  const { data } = await api.get<GardenProfile>(`/api/garden/${encodeURIComponent(nickname)}`);
+  return data;
+}
+
+// 하루 한 번, (나, 상대) 조합으로만 성공한다 - 이미 줬으면 서버가 409를 던진다.
+export async function giveDew(nickname: string): Promise<void> {
+  await api.post(`/api/garden/${encodeURIComponent(nickname)}/dew`);
+}
+
+// 정원 대표 꽃 고정/해제 - 내 소유의 이미 개화한 씨앗만 고정할 수 있다.
+export async function pinGardenFlower(seedId: number): Promise<GardenProfile> {
+  const { data } = await api.post<GardenProfile>(`/api/garden/pin/${seedId}`);
+  return data;
+}
+
+export async function unpinGardenFlower(): Promise<GardenProfile> {
+  const { data } = await api.delete<GardenProfile>("/api/garden/pin");
+  return data;
+}
+
+// 🌸 꽃 도감 - 일반 24종(8원형 x 3종) + 전설 6종 = 30종. 미발견 항목은 species_name/
+// example_name이 항상 null(실루엣) - 절대 이름을 미리 알 수 없다.
+export interface CompendiumEntry {
+  slot_id: string;
+  category: "general" | "legendary";
+  archetype: string | null;
+  discovered: boolean;
+  species_name: string | null;
+  example_name: string | null;
+  // 파라메트릭 SVG 아이콘(FlowerIcon)의 색상 결정에 쓴다 - 대표 개체(가장 먼저 발견한 것)의
+  // 속. discovered=false면 항상 null.
+  genus: string | null;
+  rarity: 1 | 2 | 3 | null;
+  first_bloomed_at: string | null;
+  count: number;
+  hint: string | null;
+  // 대표 개체가 개화할 때 연결된 실제 꿈 기록의 감정 - moodBucketForEmoji로 길몽/보통/흉몽
+  // 아우라 색을 정하는 데 쓴다. 연결된 꿈 기록이 없으면 null(프론트는 "보통" 톤으로 대체).
+  emotion: string | null;
+}
+
+export interface CompendiumResponse {
+  general_discovered: number;
+  general_total: number;
+  legendary_discovered: number;
+  legendary_total: number;
+  entries: CompendiumEntry[];
+}
+
+export async function getMyCompendium(): Promise<CompendiumResponse> {
+  const { data } = await api.get<CompendiumResponse>("/api/garden/compendium");
+  return data;
 }
 

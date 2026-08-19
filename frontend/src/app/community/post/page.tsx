@@ -8,20 +8,27 @@ import { getAuthErrorMessage } from "@/api/auth";
 import {
   createDreamComment,
   deleteDreamComment,
+  dreamDisplayTitle,
   getDreamComments,
   getPublicDream,
+  POST_EDIT_WINDOW_MS,
   setDreamVisibility,
   updateDreamComment,
   voteOnDream,
   type DreamEntryRecord,
 } from "@/api/dream";
 import AttachedDreamViewer from "@/components/AttachedDreamViewer";
+import AuthorBadge from "@/components/AuthorBadge";
 import CommentSection from "@/components/CommentSection";
+import FlowerIcon from "@/components/FlowerIcon";
 import IdentitySwitch from "@/components/IdentitySwitch";
 import NavBar from "@/components/NavBar";
 import VoteButtons from "@/components/VoteButtons";
 import { consumeBackNavOrigin } from "@/lib/communityBackNav";
+import { rarityStars } from "@/lib/flowerRarity";
+import { flowerLanguageFor } from "@/lib/flowerTaxonomy";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useLoginModalStore } from "@/store/useLoginModalStore";
 
 // 홈 화면 우측 하단 실시간 토스트(LiveTicker)를 클릭했을 때 도착하는 익명 공개 상세 페이지.
 // 이 프로젝트는 Cloudflare Pages 정적 export(next.config.mjs output: "export")라 [id] 같은
@@ -35,6 +42,7 @@ export default function CommunityPostPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const authUser = useAuthStore((state) => state.user);
   const nickname = authUser?.nickname ?? "탐험가";
+  const openLoginModal = useLoginModalStore((state) => state.open);
 
   const [entry, setEntry] = useState<DreamEntryRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,8 +81,8 @@ export default function CommunityPostPage() {
     getPublicDream(id)
       .then((data) => {
         setEntry(data);
-        if (wantsEdit && data.is_mine) {
-          setEditTitle(data.title);
+        if (wantsEdit && data.is_mine && Date.now() - new Date(data.created_at).getTime() < POST_EDIT_WINDOW_MS) {
+          setEditTitle(dreamDisplayTitle(data));
           setEditCaption(data.share_caption ?? "");
           setEditIsAnonymous(data.is_anonymous);
           setIsEditing(true);
@@ -96,12 +104,11 @@ export default function CommunityPostPage() {
     }
   };
 
-  const handleVote = async (voteType: "up" | "down") => {
+  // 인증 확인 없이 곧장 투표를 실행하는 부분 - handleVote(게이트)와 로그인 모달의 onSuccess
+  // 복귀 콜백이 공유한다. onSuccess 시점엔 handleVote의 예전 클로저를 다시 부르면 isAuthenticated가
+  // 그 순간의 stale 값(false)에 갇혀 다시 로그인 모달을 띄우는 문제가 생기므로 분리해 둔다.
+  const performVote = async (voteType: "up" | "down") => {
     if (!entry || entry.is_mine) return;
-    if (!isAuthenticated) {
-      router.push("/login");
-      return;
-    }
     const previous = entry;
     setEntry((prev) => {
       if (!prev) return prev;
@@ -122,9 +129,18 @@ export default function CommunityPostPage() {
     }
   };
 
+  const handleVote = (voteType: "up" | "down") => {
+    if (!entry || entry.is_mine) return;
+    if (!isAuthenticated) {
+      openLoginModal({ triggerSource: "community", onSuccess: () => performVote(voteType) });
+      return;
+    }
+    void performVote(voteType);
+  };
+
   const startEdit = () => {
     if (!entry) return;
-    setEditTitle(entry.title);
+    setEditTitle(dreamDisplayTitle(entry));
     setEditCaption(entry.share_caption ?? "");
     setEditIsAnonymous(entry.is_anonymous);
     setEditError(null);
@@ -146,7 +162,7 @@ export default function CommunityPostPage() {
         isAnonymous: editIsAnonymous,
         shareWithAiAnalysis: entry.share_with_ai_analysis,
         shareCaption: editCaption.trim(),
-        title,
+        publicTitle: title,
       });
       setEntry(updated);
       setIsEditing(false);
@@ -168,7 +184,6 @@ export default function CommunityPostPage() {
         isAnonymous: entry.is_anonymous,
         shareWithAiAnalysis: entry.share_with_ai_analysis,
         shareCaption: entry.share_caption ?? undefined,
-        title: entry.title,
       });
       router.push("/community?tab=dream");
     } catch {
@@ -261,22 +276,26 @@ export default function CommunityPostPage() {
                     원본 그대로 보존해, 자유 광장 글쓰기와 동일한 "낚시글" 표현도 여기서 그대로 동작한다. */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-xs tracking-widest text-indigo-300/70">
-                      {entry.is_anonymous ? "🎭 익명의 탐험가" : `👤 ${entry.author_display_name}`}
-                    </p>
+                    <div className="text-xs tracking-widest text-indigo-300/70">
+                      <AuthorBadge isAnonymous={entry.is_anonymous} displayName={entry.author_display_name} badge={entry.author_badge} />
+                    </div>
                     <h1 className="mt-1 text-2xl font-semibold text-white">
-                      {entry.emotion} {entry.title}
+                      {entry.emotion} {dreamDisplayTitle(entry)}
                     </h1>
                   </div>
                   {entry.is_mine && !confirmDelete && (
                     <div className="flex shrink-0 items-center gap-2 pt-1 text-[11px]">
-                      <button
-                        type="button"
-                        onClick={startEdit}
-                        className="text-slate-500 underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
-                      >
-                        ✏️ 수정
-                      </button>
+                      {/* 자유 게시판과 동일하게(POST_EDIT_WINDOW_MS), 게시 후 10분이 지나면
+                          서버(update_dream)가 403으로 거절하므로 프론트도 버튼 자체를 미리 숨긴다. */}
+                      {Date.now() - new Date(entry.created_at).getTime() < POST_EDIT_WINDOW_MS && (
+                        <button
+                          type="button"
+                          onClick={startEdit}
+                          className="text-slate-500 underline-offset-2 transition-colors hover:text-violet-300 hover:underline"
+                        >
+                          ✏️ 수정
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setConfirmDelete(true)}
@@ -285,6 +304,16 @@ export default function CommunityPostPage() {
                         🗑️ 삭제
                       </button>
                     </div>
+                  )}
+                  {/* 부적절한 콘텐츠 신고 - 실제 처리 로직은 아직 없고, 우선 UI만 배치한다. */}
+                  {!entry.is_mine && (
+                    <button
+                      type="button"
+                      onClick={() => window.alert("신고가 접수되었습니다. 빠르게 검토할게요.")}
+                      className="shrink-0 pt-1 text-[11px] text-slate-500 underline-offset-2 transition-colors hover:text-red-300 hover:underline"
+                    >
+                      🚨 신고하기
+                    </button>
                   )}
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
@@ -323,14 +352,44 @@ export default function CommunityPostPage() {
                   <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{entry.share_caption}</p>
                 )}
 
-                {/* Middle: 첨부된 꿈 데이터(원문/태그/AI 해몽/행운/상담 리포트) - 위 본문과 뚜렷이
-                    구분되는 카드 안에 담아 "첨부 파일"처럼 보이게 한다. */}
-                <AttachedDreamViewer
-                  id={entry.id}
-                  survey={entry.survey}
-                  summary={entry.summary}
-                  tags={entry.tags}
-                />
+                {/* Middle: "꽃" 콘텐츠 타입이면 정원 꽃 카드를, 아니면 기존처럼 첨부된 꿈 데이터
+                    (원문/태그/AI 해몽/행운/상담 리포트)를 "첨부 파일"처럼 보이는 카드에 담는다.
+                    꽃 공유 글은 survey가 스키마를 채우기 위한 빈 더미라 AttachedDreamViewer로
+                    보여줄 실질 내용이 없다. */}
+                {entry.attached_flower ? (
+                  <div
+                    className={`mt-4 flex flex-col items-center gap-2 rounded-2xl border p-6 text-center ${
+                      entry.attached_flower.is_legendary
+                        ? "border-amber-400/50 bg-amber-500/[0.04]"
+                        : "border-white/10 bg-white/[0.03]"
+                    }`}
+                  >
+                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[10px] text-slate-400">
+                      도감 No.{String(entry.attached_flower.dex_number).padStart(3, "0")}
+                    </span>
+                    <span className="mt-1 flex h-20 w-20 items-center justify-center rounded-full bg-white/5">
+                      <FlowerIcon
+                        archetype={entry.attached_flower.archetype}
+                        genus={entry.attached_flower.genus}
+                        speciesName={entry.attached_flower.species_name}
+                        isLegendary={entry.attached_flower.is_legendary}
+                        sizePx={56}
+                      />
+                    </span>
+                    <p className="mt-1 text-base font-semibold text-white">{entry.attached_flower.flower_name}</p>
+                    <p className="text-xs text-amber-300">{rarityStars(entry.attached_flower.rarity)}</p>
+                    <p className="mt-2 max-w-xs font-serif text-sm leading-relaxed text-slate-300">
+                      {flowerLanguageFor(entry.attached_flower)}
+                    </p>
+                  </div>
+                ) : (
+                  <AttachedDreamViewer
+                    id={entry.id}
+                    survey={entry.survey}
+                    summary={entry.summary}
+                    tags={entry.tags}
+                  />
+                )}
               </>
             )}
 
@@ -357,7 +416,7 @@ export default function CommunityPostPage() {
                     defaultAnonymous={entry.is_anonymous}
                     nickname={nickname}
                     isAuthenticated={isAuthenticated}
-                    onRequireLogin={() => router.push("/login")}
+                    onRequireLogin={() => openLoginModal({ triggerSource: "community" })}
                     fetchComments={getDreamComments}
                     submitComment={createDreamComment}
                     updateComment={updateDreamComment}

@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import type { CommunityComment } from "@/api/dream";
+import AuthorBadge from "@/components/AuthorBadge";
+import UserDreamProfileModal from "@/components/UserDreamProfileModal";
 
 function formatRelativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -74,6 +76,8 @@ export default function CommentSection({
   // null로 꺼진 뒤에도 댓글 목록이 갱신될 때마다 재실행되는 걸 막는다.
   const hasScrolledToHighlightRef = useRef(false);
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
+  // 로그인 모달을 띄운 뒤 로그인에 성공하면 방금 시도했던 등록을 자동으로 이어가기 위한 플래그.
+  const pendingSubmitAfterLoginRef = useRef(false);
 
   const [commentText, setCommentText] = useState("");
   const [isCommentAnonymous, setIsCommentAnonymous] = useState(defaultAnonymous);
@@ -98,7 +102,6 @@ export default function CommentSection({
     fetchComments(targetId)
       .then((result) => {
         setComments(result);
-        onCommentCountChange?.(result.length);
       })
       .catch(() => {})
       .finally(() => {
@@ -107,6 +110,17 @@ export default function CommentSection({
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, hasLoaded, targetId]);
+
+  // 댓글 수가 바뀔 때마다 부모에게 알린다 - setComments 업데이터 함수 안에서 직접 호출하면
+  // 렌더링 도중 다른 컴포넌트(부모)의 setState를 트리거하게 되어 리액트 경고/에러가 난다
+  // ("Cannot update a component while rendering a different component"). 그래서 등록/삭제
+  // 지점마다 흩어져 있던 호출을 이 effect 하나로 모았다. onCommentCountChange는 부모가 매
+  // 렌더마다 새로 만드는 인라인 함수라 deps에 넣으면 무한 루프가 생겨 의도적으로 뺐다.
+  useEffect(() => {
+    if (!hasLoaded) return;
+    onCommentCountChange?.(comments.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasLoaded, comments.length]);
 
   // 댓글이 로드되면 알림에서 지정한 댓글로 스크롤 이동 + 잠깐 하이라이트한다. 한 번 실행되면
   // ref 가드가 다시 실행을 막아, 이후 새 댓글이 달려 목록이 갱신돼도 재스크롤되지 않는다.
@@ -121,22 +135,15 @@ export default function CommentSection({
     return () => clearTimeout(timer);
   }, [hasLoaded, highlightCommentId]);
 
-  const handleSubmit = async () => {
+  // 인증 확인 없이 곧장 등록하는 부분 - handleSubmit(게이트)과 로그인 후 자동 복귀 효과가 공유한다.
+  const postComment = async () => {
     const content = commentText.trim();
     if (!content || isSubmitting) return;
-    if (!isAuthenticated) {
-      onRequireLogin();
-      return;
-    }
     setError(null);
     setIsSubmitting(true);
     try {
       const created = await submitComment(targetId, content, isCommentAnonymous, replyingTo?.id ?? null);
-      setComments((prev) => {
-        const next = [...prev, created];
-        onCommentCountChange?.(next.length);
-        return next;
-      });
+      setComments((prev) => [...prev, created]);
       setCommentText("");
       setReplyingTo(null);
     } catch {
@@ -144,6 +151,28 @@ export default function CommentSection({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // 로그인 모달이 떠 있는 동안에도 이 컴포넌트는 그대로 마운트돼 있어 commentText가 남아있다 -
+  // 로그인에 성공해 isAuthenticated가 true로 바뀌는 순간, 방금 시도했던 댓글 등록을 자동으로
+  // 이어간다(pendingSubmitAfterLoginRef가 실제로 등록을 시도했던 경우에만 켜진다).
+  useEffect(() => {
+    if (isAuthenticated && pendingSubmitAfterLoginRef.current) {
+      pendingSubmitAfterLoginRef.current = false;
+      void postComment();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
+
+  const handleSubmit = () => {
+    const content = commentText.trim();
+    if (!content || isSubmitting) return;
+    if (!isAuthenticated) {
+      pendingSubmitAfterLoginRef.current = true;
+      onRequireLogin();
+      return;
+    }
+    void postComment();
   };
 
   const startReply = (comment: CommunityComment) => {
@@ -185,13 +214,9 @@ export default function CommentSection({
     setIsDeletingComment(true);
     try {
       await deleteComment(targetId, commentId);
-      setComments((prev) => {
-        // 원댓글을 지우면 그 답글들도 함께 사라진다 - 백엔드가 CASCADE로 이미 지웠으므로
-        // 프론트 상태도 원댓글 + 그 답글들을 한 번에 걸러낸다.
-        const next = prev.filter((comment) => comment.id !== commentId && comment.parent_id !== commentId);
-        onCommentCountChange?.(next.length);
-        return next;
-      });
+      // 원댓글을 지우면 그 답글들도 함께 사라진다 - 백엔드가 CASCADE로 이미 지웠으므로
+      // 프론트 상태도 원댓글 + 그 답글들을 한 번에 걸러낸다.
+      setComments((prev) => prev.filter((comment) => comment.id !== commentId && comment.parent_id !== commentId));
       if (replyingTo?.id === commentId) setReplyingTo(null);
     } catch {
       // 간단한 액션이라 별도 에러 배너 없이, 확인 상태만 닫고 목록은 그대로 둔다.
@@ -278,22 +303,16 @@ export default function CommentSection({
           }`}
         >
           <div className="flex items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
               {comment.is_post_author ? (
                 // 글쓴이 최우선 판별: 익명 체크 여부와 무관하게 항상 "글쓴이" 뱃지만 보여준다.
                 <span className="rounded bg-purple-600 px-1.5 py-0.5 text-xs text-white">글쓴이</span>
               ) : comment.is_anonymous ? (
-                <>
-                  <span className="text-xs">🎭</span>
-                  <span className="text-xs text-violet-300/80">
-                    익명{comment.anonymous_index ?? ""}
-                  </span>
-                </>
+                <AuthorBadge isAnonymous displayName={`익명${comment.anonymous_index ?? ""}`} badge={null} size="sm" />
               ) : (
-                <>
-                  <span className="text-xs text-slate-500">👤</span>
-                  <span className="text-xs text-slate-400">{comment.author_display_name}</span>
-                </>
+                <UserDreamProfileModal nickname={comment.author_display_name!}>
+                  <AuthorBadge isAnonymous={false} displayName={comment.author_display_name} badge={comment.author_badge} size="sm" />
+                </UserDreamProfileModal>
               )}
               <span className="text-xs text-slate-500">· {formatRelativeTime(comment.created_at)}</span>
             </div>

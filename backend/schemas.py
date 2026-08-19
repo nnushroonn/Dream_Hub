@@ -5,6 +5,16 @@ NICKNAME_MAX_LENGTH = 20
 AURA_OPTIONS = {"good", "lucid", "calm"}
 
 
+def _validate_password_strength(value: str) -> str:
+    """가입/비밀번호 재설정 양쪽이 공유하는 비밀번호 강도 규칙 - 한쪽만 고쳐서 두 경로의
+    기준이 갈라지는 일이 없도록 로직을 한 곳에 둔다."""
+    if len(value) < 8:
+        raise ValueError("비밀번호는 최소 8자 이상이어야 합니다.")
+    if not any(char.isalpha() for char in value) or not any(char.isdigit() for char in value):
+        raise ValueError("비밀번호는 영문과 숫자를 모두 포함해야 합니다.")
+    return value
+
+
 class UserCreate(BaseModel):
     email: EmailStr
     nickname: str
@@ -22,11 +32,7 @@ class UserCreate(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password_strength(cls, value: str) -> str:
-        if len(value) < 8:
-            raise ValueError("비밀번호는 최소 8자 이상이어야 합니다.")
-        if not any(char.isalpha() for char in value) or not any(char.isdigit() for char in value):
-            raise ValueError("비밀번호는 영문과 숫자를 모두 포함해야 합니다.")
-        return value
+        return _validate_password_strength(value)
 
     @model_validator(mode="after")
     def validate_passwords_match(self) -> "UserCreate":
@@ -44,6 +50,27 @@ class VerifyEmailRequest(BaseModel):
     token: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+    new_password_confirm: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password_strength(cls, value: str) -> str:
+        return _validate_password_strength(value)
+
+    @model_validator(mode="after")
+    def validate_new_passwords_match(self) -> "ResetPasswordRequest":
+        if self.new_password != self.new_password_confirm:
+            raise ValueError("비밀번호가 일치하지 않습니다.")
+        return self
+
+
 class UserResponse(BaseModel):
     id: int
     email: str
@@ -53,12 +80,6 @@ class UserResponse(BaseModel):
     is_galaxy_public: bool = False
 
     model_config = {"from_attributes": True}
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserResponse
 
 
 class MessageResponse(BaseModel):
@@ -110,21 +131,20 @@ class UserStatsResponse(BaseModel):
     post_count: int
     comment_count: int
     empathy_received: int
+    # 9단계 우주 티어 시스템(leveling.py) - level은 total_xp에서 항상 파생되는 세밀한 진행도이고,
+    # tier_index(1~9)/tier_title/tier_color는 level을 10개씩 묶은 굵은 단계다.
     level: int
-    level_title: str
-    # 마이페이지 레벨 게이지가 "2,450 / 3,000 XP"처럼 실제 수치를 보여줄 수 있도록 노출한다.
-    # next_level_threshold가 None이면 이미 최고 레벨(만렙) 상태.
-    points: int
-    next_level_threshold: int | None
+    tier_index: int
+    tier_title: str
+    tier_color: str
+    total_xp: int
+    xp_into_level: int
+    xp_for_next_level: int
     badges: list[BadgeInfo]
-    # Daily XP Cap - 오늘(KST) 활동으로 번 포인트가 daily_xp_cap에 도달하면 그 이상은 points에
-    # 반영되지 않는다. daily_cap_reached가 true면 프론트가 "오늘의 탐험을 충분히 마쳤어요" 안내를 띄운다.
+    # Daily XP Cap - 게시글/댓글 "작성"으로 번 XP만 하루 합산 상한이 있다(도배 방지). 좋아요/댓글을
+    # "받는" XP는 상한이 없어 여기 집계되지 않는다. daily_cap_reached가 true면 오늘 작성 활동으로는
+    # 더 이상 XP가 붙지 않는다는 뜻.
     daily_xp_cap: int
-    daily_points_earned: int
+    daily_capped_xp_earned: int
     daily_cap_reached: bool
-    # Milestone Lock - 포인트는 다음 레벨 문턱을 넘었지만 승급 조건(연속 기록 등)을 채우지 못해
-    # 레벨이 그 앞 단계에서 멈춰 있는 상태. next_level_requirement는 그 조건을 설명하는 안내 문구.
-    next_level_locked: bool
-    next_level_requirement: str | None
-    next_level_streak_goal: int | None
     diary_streak: int

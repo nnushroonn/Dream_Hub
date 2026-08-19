@@ -1,5 +1,7 @@
 "use client";
 
+import { createPortal } from "react-dom";
+
 interface UnsavedChangesGuardModalProps {
   open: boolean;
   message: string;
@@ -12,14 +14,17 @@ interface UnsavedChangesGuardModalProps {
 export default function UnsavedChangesGuardModal({ open, message, onStay, onLeave }: UnsavedChangesGuardModalProps) {
   if (!open) return null;
 
-  return (
+  // NavBar 안에서 렌더링되는데, NavBar가 sticky + z-index로 자체 스태킹 컨텍스트를 만들어서
+  // 그 안의 fixed 모달은 z-index를 아무리 올려도 다른 요소에 가리거나 잘릴 수 있다(LoginModal과
+  // 동일한 이유) - document.body에 직접 포탈로 꽂아 그 제약을 완전히 벗어난다.
+  return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex h-screen w-screen items-center justify-center bg-black/70 backdrop-blur-md"
       onClick={onStay}
     >
       <div
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-purple-500/20 bg-[#0d0e12] p-6 text-center shadow-[0_0_60px_rgba(139,92,246,0.25)]"
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-purple-500/20 bg-[#0d0e12] p-6 text-center shadow-[0_0_60px_rgba(139,92,246,0.25)]"
       >
         <p className="text-lg font-semibold text-white">⚠️ 작성 중인 내용이 있습니다</p>
         <p className="mt-2 text-sm leading-relaxed text-slate-300">{message}</p>
@@ -42,6 +47,7 @@ export default function UnsavedChangesGuardModal({ open, message, onStay, onLeav
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

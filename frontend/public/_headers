@@ -1,0 +1,22 @@
+# Cloudflare Pages가 배포 결과물 루트에서 이 파일을 그대로 읽어 응답 헤더에 적용한다.
+# (이 프로젝트는 output: "export" 정적 배포라 next.config.mjs의 headers() 옵션 자체가
+# 지원되지 않는다 - Next.js 공식 문서에 static export의 미지원 기능으로 명시돼 있다.)
+#
+# CSP script-src에 'unsafe-inline'을 넣지 않고도 통과하도록, 유일했던 인라인 스크립트
+# (애드센스 NPA 플래그 초기화)를 public/adsense-npa-init.js 정적 파일로 옮겼다 - 외부
+# 스크립트(src=)는 'self'만으로 이미 허용된다.
+#
+# TODO(배포 시 확인): 아직 프로덕션 배포 전이라 connect-src에는 로컬 개발 주소만 넣어뒀다.
+# 실제로 프론트가 호출할 백엔드 API 도메인이 정해지면(예: https://api.dreamhub.com) 아래
+# connect-src 줄에 그 출처를 반드시 추가해야 API 호출이 CSP에 막히지 않는다.
+#
+# 이미지(img-src)는 커뮤니티 사진 첨부(Cloudflare R2, 배포마다 버킷 도메인이 다를 수 있음)와
+# base64 data URL(사진 미리보기)을 폭넓게 허용해야 해서 https: 전체 + data:/blob:를 열어
+# 뒀다 - img-src는 스크립트 실행 권한이 없는 리소스 타입이라 script-src만큼 엄격할 필요가
+# 적고, 여기를 좁히면 R2 도메인이 바뀔 때마다 이 파일을 계속 고쳐야 한다.
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' http://localhost:8000 https://*.googlesyndication.com https://*.doubleclick.net; frame-src https://*.googlesyndication.com https://*.doubleclick.net https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests

@@ -9,6 +9,8 @@ import CounselingStoryView from "@/components/CounselingStoryView";
 import DreamOriginalQuote from "@/components/DreamOriginalQuote";
 import NavBar from "@/components/NavBar";
 import { consumeBackNavOrigin } from "@/lib/communityBackNav";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useLoginModalStore } from "@/store/useLoginModalStore";
 
 // AI 해몽 본문(description)은 빈 줄(\n\n)로 문단이 구분된 산문이다 - 문단마다 mb-4 여백을 줘
 // 통글로 뭉쳐 보이지 않게 하고, 혹시 문단이 "**소제목**"처럼 마크다운 굵게 표시된 짧은 줄이면
@@ -46,6 +48,8 @@ function FormattedDreamText({ text }: { text: string }) {
 // ?id= 쿼리 파라미터로 대상 꿈을 넘긴다.
 export default function DreamArchivePage() {
   const router = useRouter();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const openLoginModal = useLoginModalStore((state) => state.open);
   const [entry, setEntry] = useState<DreamEntryRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -157,8 +161,26 @@ export default function DreamArchivePage() {
 
                 {/* 이 기능 이전에 저장된 기록은 counseling_report가 없을 수 있어 있을 때만 렌더링한다. */}
                 {entry.interpretation.counseling_report && (
-                  <div className="mt-6">
-                    <CounselingStoryView report={entry.interpretation.counseling_report} tags={entry.interpretation.tags} />
+                  <div className="relative mt-6">
+                    <p className="mb-2 text-xs font-semibold tracking-wide text-indigo-300/70">🧠 AI 맞춤 심리 분석</p>
+                    <div
+                      className={isAuthenticated ? "" : "pointer-events-none select-none blur-[5px]"}
+                      aria-hidden={!isAuthenticated}
+                    >
+                      <CounselingStoryView report={entry.interpretation.counseling_report} tags={entry.interpretation.tags} />
+                    </div>
+
+                    {!isAuthenticated && (
+                      <div className="absolute inset-0 top-6 flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => openLoginModal({ triggerSource: "result" })}
+                          className="rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-500 to-purple-600 px-6 py-3 text-sm font-semibold text-white shadow-[0_0_30px_rgba(168,85,247,0.5)] transition-transform hover:-translate-y-0.5"
+                        >
+                          🔒 10초 만에 로그인하고 맞춤 해몽 보기
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </>

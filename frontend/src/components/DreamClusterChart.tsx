@@ -1,9 +1,9 @@
 "use client";
 
-import { DREAM_SEED_COLOR, type DreamSeed } from "@/lib/dreamSeeds";
+import { getSeedDefinition, type SeedType } from "@/lib/dreamSeeds";
 
 interface SeedStat {
-  seed: DreamSeed;
+  seed: SeedType;
   count: number;
 }
 
@@ -15,14 +15,16 @@ export default function DreamClusterChart({ seedStats }: { seedStats: SeedStat[]
   const strokeWidth = 18;
   const circumference = 2 * Math.PI * radius;
 
-  let cumulative = 0;
-  const segments = seedStats.map((stat) => {
+  // reduce로 누적 오프셋을 파생한다 - map 도중 외부 변수를 재대입하면 렌더 도중 캡처된 변수를
+  // 변경하는 셈이라 react-hooks/immutability에 걸린다.
+  const segments = seedStats.reduce<Array<SeedStat & { dash: number; offset: number; ratio: number }>>((acc, stat) => {
     const ratio = total > 0 ? stat.count / total : 0;
     const dash = ratio * circumference;
-    const offset = -cumulative;
-    cumulative += dash;
-    return { ...stat, dash, offset, ratio };
-  });
+    const previous = acc[acc.length - 1];
+    const offset = previous ? previous.offset - previous.dash : 0;
+    acc.push({ ...stat, dash, offset, ratio });
+    return acc;
+  }, []);
 
   return (
     // 이 카드가 항상 좁은 컬럼(lg:col-span-1) 안에 놓이게 되면서, 도넛과 범례를 가로로
@@ -44,7 +46,7 @@ export default function DreamClusterChart({ seedStats }: { seedStats: SeedStat[]
                     cy="100"
                     r={radius}
                     fill="none"
-                    stroke={DREAM_SEED_COLOR[seg.seed]}
+                    stroke={getSeedDefinition(seg.seed).colors[0]}
                     strokeWidth={strokeWidth}
                     strokeDasharray={`${seg.dash} ${circumference - seg.dash}`}
                     strokeDashoffset={seg.offset}
@@ -66,7 +68,7 @@ export default function DreamClusterChart({ seedStats }: { seedStats: SeedStat[]
                   cy="100"
                   r={radius}
                   fill="none"
-                  stroke={DREAM_SEED_COLOR[seg.seed]}
+                  stroke={getSeedDefinition(seg.seed).colors[0]}
                   strokeWidth={strokeWidth}
                   strokeLinecap="round"
                   strokeDasharray={`${Math.max(seg.dash - 3, 0)} ${circumference - seg.dash + 3}`}
@@ -88,9 +90,12 @@ export default function DreamClusterChart({ seedStats }: { seedStats: SeedStat[]
           <li key={seg.seed} className="flex items-center gap-2.5 text-xs text-slate-300">
             <span
               className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: DREAM_SEED_COLOR[seg.seed], boxShadow: `0 0 8px ${DREAM_SEED_COLOR[seg.seed]}` }}
+              style={{
+                backgroundColor: getSeedDefinition(seg.seed).colors[0],
+                boxShadow: `0 0 8px ${getSeedDefinition(seg.seed).colors[0]}`,
+              }}
             />
-            <span className="flex-1 truncate">{seg.seed}</span>
+            <span className="flex-1 truncate">{getSeedDefinition(seg.seed).label}</span>
             <span className="shrink-0 whitespace-nowrap text-slate-500">
               {seg.count}회{total > 0 ? ` · ${Math.round(seg.ratio * 100)}%` : ""}
             </span>

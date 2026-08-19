@@ -1,6 +1,14 @@
 import { create } from "zustand";
 
-export type LoginModalTriggerSource = "diary" | "calendar" | "result" | "community" | "mypage" | "journal" | "save";
+export type LoginModalTriggerSource =
+  | "diary"
+  | "calendar"
+  | "result"
+  | "community"
+  | "mypage"
+  | "journal"
+  | "save"
+  | "garden";
 
 interface LoginModalState {
   isOpen: boolean;

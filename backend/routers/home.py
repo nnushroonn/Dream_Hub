@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import CommunityPost, CommunityPostReaction, DreamEntry, DreamStatus, Interaction, InteractionType
+from routers.community import _dream_comment_count, _post_comment_count
 
 router = APIRouter(prefix="/api/home", tags=["home"])
 
@@ -367,7 +368,7 @@ def get_best_dreams(limit: int = 3, db: Session = Depends(get_db)):
 
     return {
         "dreams": [
-            {"id": entry.id, "title": entry.title, "emotion": entry.emotion, "upvote_count": count}
+            {"id": entry.id, "title": entry.public_title or entry.title, "emotion": entry.emotion, "upvote_count": count}
             for entry, count in rows
         ]
     }
@@ -413,10 +414,11 @@ def get_best_posts(limit: int = 5, db: Session = Depends(get_db)):
     combined = [
         {
             "id": entry.id,
-            "title": entry.title,
+            "title": entry.public_title or entry.title,
             "category": "DREAM",
             "upvote_count": count,
             "view_count": entry.view_count,
+            "comment_count": _dream_comment_count(db, entry.id),
             "_score": score(entry.view_count, count),
         }
         for entry, count in dream_rows
@@ -427,6 +429,7 @@ def get_best_posts(limit: int = 5, db: Session = Depends(get_db)):
             "category": "FREE",
             "upvote_count": count,
             "view_count": post.view_count,
+            "comment_count": _post_comment_count(db, post.id),
             "_score": score(post.view_count, count),
         }
         for post, count in post_rows
@@ -454,7 +457,9 @@ def get_live_ticker(db: Session = Depends(get_db)):
         .scalars()
         .all()
     )
-    return {"entries": [{"id": row.id, "keyword": row.title} for row in rows]}
+    # 원본(title)이 아니라 공개용 제목(public_title or title) - 바로 위 get_best_posts가
+    # 이미 쓰는 것과 같은 규칙이다.
+    return {"entries": [{"id": row.id, "keyword": row.public_title or row.title} for row in rows]}
 
 
 _EXPLORER_BASE_COUNT = 3421

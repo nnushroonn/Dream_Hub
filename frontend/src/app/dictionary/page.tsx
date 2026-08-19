@@ -16,6 +16,7 @@ import type { DictionaryEntry, DreamScenario, RecentDreamTitle, ScenarioDetail, 
 import NavBar from "@/components/NavBar";
 import { ALL_DICTIONARY_WORDS, BASIC_CHOSEONG, DICTIONARY_CATEGORIES } from "@/lib/dictionaryCategories";
 import { getChoseong } from "@/lib/hangul";
+import { igaFor } from "@/lib/korean";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useLoginModalStore } from "@/store/useLoginModalStore";
 
@@ -526,7 +527,9 @@ export default function DictionaryPage() {
 
                 {/* 글래스모피즘 세부 시나리오 테이블 - 검색 문맥과 가장 가까운 시나리오를 최상단에 하이라이트 */}
                 <div className="mt-6">
-                  <p className="px-1 text-xs text-slate-500">‘{selectedKeyword}’이(가) 등장하는 상황별 꿈 {scenarios.length}가지</p>
+                  <p className="px-1 text-xs text-slate-500">
+                    ‘{selectedKeyword}’{selectedKeyword ? igaFor(selectedKeyword) : "이"} 등장하는 상황별 꿈 {scenarios.length}가지
+                  </p>
                   <div className="mt-2 divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md">
                     {[...scenarios]
                       .sort((a, b) => Number(b.is_best_match) - Number(a.is_best_match))
@@ -575,7 +578,7 @@ export default function DictionaryPage() {
 
       {/* 최종 상세 해몽 모달: 시나리오 한 줄을 클릭하면 뜬다 */}
       {(isLoadingScenario || scenarioModal) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => !isLoadingScenario && setScenarioModal(null)}
@@ -648,12 +651,12 @@ export default function DictionaryPage() {
                       targetChip: target.chip,
                     });
                     if (target.other) params.set("targetOther", target.other);
-                    const destination = `/diary?${params.toString()}`;
+                    const destination = `/journal?${params.toString()}`;
 
                     if (!isAuthenticated) {
                       // 로그인만 끝나면(이메일/비밀번호는 그 자리에서, 구글 OAuth는 홈을 거쳐)
-                      // 지금 고른 상징 데이터를 그대로 들고 일기 작성 폼으로 이어서 이동한다.
-                      openLoginModal({ onSuccess: () => router.push(destination), redirectPath: destination, triggerSource: "diary" });
+                      // 지금 고른 상징 데이터를 그대로 들고 일기장의 AI 해몽 기록 모달로 이어서 이동한다.
+                      openLoginModal({ onSuccess: () => router.push(destination), redirectPath: destination, triggerSource: "journal" });
                       return;
                     }
                     router.push(destination);

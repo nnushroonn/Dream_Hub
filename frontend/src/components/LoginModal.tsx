@@ -4,13 +4,16 @@ import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { API_BASE_URL } from "@/api/axios";
-import { checkNicknameAvailability, getAuthErrorMessage, loginUser, registerUser } from "@/api/auth";
+import { checkNicknameAvailability, forgotPassword, getAuthErrorMessage, loginUser, registerUser } from "@/api/auth";
 import { setPendingRedirect } from "@/lib/pendingRedirect";
 import { randomPersonaNickname } from "@/lib/personaNickname";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useLoginModalStore, type LoginModalTriggerSource } from "@/store/useLoginModalStore";
 
-type AuthMode = "login" | "register";
+// "forgot"은 탭이 아니라 로그인 폼 안의 링크로만 진입한다 - 아래 결과 화면은 회원가입
+// 성공 화면(notice)과 같은 셸을 재사용한다(둘 다 "메일함을 확인해 주세요" 패턴이라
+// 화면을 새로 만들 이유가 없다).
+type AuthMode = "login" | "register" | "forgot";
 type NicknameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
 
 const NICKNAME_MIN_LENGTH = 2;
@@ -47,6 +50,10 @@ const TRIGGER_COPY: Record<LoginModalTriggerSource, { title: string; subtitle: s
   save: {
     title: "이 소중한 꿈, 안전하게 저장할까요?",
     subtitle: "소중한 꿈 해몽 결과를 잃지 않도록, 로그인하고 안전하게 저장하세요.",
+  },
+  garden: {
+    title: "당신만의 정원을 가꿔보세요",
+    subtitle: "로그인하면 밤마다 심은 씨앗이 피워낸 식물들을 모아보고, 다른 이의 정원에도 방문할 수 있어요.",
   },
 };
 const DEFAULT_TRIGGER_COPY = { title: "🌌 Dream Hub", subtitle: "로그인하고 이어서 진행해 주세요." };
@@ -173,12 +180,15 @@ export default function LoginModal() {
     setIsSubmitting(true);
     try {
       if (mode === "login") {
-        const auth = await loginUser(email, password);
-        login(auth.user, auth.access_token);
+        const user = await loginUser(email, password);
+        login(user);
         // 페이지 이동이 없으므로 원래 하려던 동작을 이 자리에서 곧장 이어간다.
         const resume = onSuccess;
         close();
         resume?.();
+      } else if (mode === "forgot") {
+        const res = await forgotPassword(email);
+        setNotice(res.message);
       } else {
         const res = await registerUser(email, nickname.trim(), password, confirmPassword);
         setNotice(res.message);
@@ -273,26 +283,33 @@ export default function LoginModal() {
               ))}
             </ul>
 
-            <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-white/5 p-1.5">
-              <button
-                type="button"
-                onClick={() => switchMode("login")}
-                className={`rounded-xl py-2 text-sm font-medium transition-all duration-200 ${
-                  mode === "login" ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                로그인
-              </button>
-              <button
-                type="button"
-                onClick={() => switchMode("register")}
-                className={`rounded-xl py-2 text-sm font-medium transition-all duration-200 ${
-                  mode === "register" ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                회원가입
-              </button>
-            </div>
+            {mode === "forgot" ? (
+              <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-sm font-medium text-white">비밀번호를 잊으셨나요?</p>
+                <p className="mt-1 text-xs text-slate-400">가입하신 이메일을 입력하시면 비밀번호 재설정 링크를 보내드려요.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-white/5 p-1.5">
+                <button
+                  type="button"
+                  onClick={() => switchMode("login")}
+                  className={`rounded-xl py-2 text-sm font-medium transition-all duration-200 ${
+                    mode === "login" ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  로그인
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchMode("register")}
+                  className={`rounded-xl py-2 text-sm font-medium transition-all duration-200 ${
+                    mode === "register" ? "bg-violet-500/30 text-white shadow-[0_0_12px_rgba(167,139,250,0.3)]" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  회원가입
+                </button>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
               <div>
@@ -342,20 +359,31 @@ export default function LoginModal() {
                 </div>
               )}
 
-              <div>
-                <label htmlFor="login-modal-password" className="text-xs text-indigo-300/70">
-                  비밀번호
-                </label>
-                <input
-                  id="login-modal-password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder={mode === "register" ? "영문+숫자 포함 8자 이상" : "••••••••"}
-                  className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/60 focus:outline-none"
-                />
-              </div>
+              {mode !== "forgot" && (
+                <div>
+                  <label htmlFor="login-modal-password" className="text-xs text-indigo-300/70">
+                    비밀번호
+                  </label>
+                  <input
+                    id="login-modal-password"
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder={mode === "register" ? "영문+숫자 포함 8자 이상" : "••••••••"}
+                    className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-violet-400/60 focus:outline-none"
+                  />
+                  {mode === "login" && (
+                    <button
+                      type="button"
+                      onClick={() => switchMode("forgot")}
+                      className="mt-1.5 text-xs text-slate-400 underline underline-offset-4 transition-colors hover:text-slate-200"
+                    >
+                      비밀번호를 잊으셨나요?
+                    </button>
+                  )}
+                </div>
+              )}
 
               {mode === "register" && (
                 <div>
@@ -381,32 +409,44 @@ export default function LoginModal() {
                 disabled={isSubmitting}
                 className="mt-2 w-full rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-4 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isSubmitting ? "처리 중..." : mode === "login" ? "로그인" : "회원가입"}
+                {isSubmitting ? "처리 중..." : mode === "login" ? "로그인" : mode === "forgot" ? "재설정 메일 보내기" : "회원가입"}
               </button>
             </form>
 
-            <div className="mt-4 flex items-center gap-3">
-              <div className="h-px flex-1 bg-white/10" />
-              <span className="text-xs text-slate-500">또는</span>
-              <div className="h-px flex-1 bg-white/10" />
-            </div>
+            {mode === "forgot" ? (
+              <button
+                type="button"
+                onClick={() => switchMode("login")}
+                className="mt-6 w-full cursor-pointer text-center text-sm text-slate-400 underline underline-offset-4 transition-colors hover:text-slate-200"
+              >
+                로그인 화면으로 돌아가기
+              </button>
+            ) : (
+              <>
+                <div className="mt-4 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-white/10" />
+                  <span className="text-xs text-slate-500">또는</span>
+                  <div className="h-px flex-1 bg-white/10" />
+                </div>
 
-            <a
-              href={`${API_BASE_URL}/auth/login/google`}
-              onClick={handleGoogleClick}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/20"
-            >
-              <GoogleIcon />
-              Google 계정으로 시작하기
-            </a>
+                <a
+                  href={`${API_BASE_URL}/auth/login/google`}
+                  onClick={handleGoogleClick}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+                >
+                  <GoogleIcon />
+                  Google 계정으로 시작하기
+                </a>
 
-            <button
-              type="button"
-              onClick={close}
-              className="mt-6 w-full cursor-pointer text-center text-sm text-slate-400 underline underline-offset-4 transition-colors hover:text-slate-200"
-            >
-              이전 화면으로 돌아가기
-            </button>
+                <button
+                  type="button"
+                  onClick={close}
+                  className="mt-6 w-full cursor-pointer text-center text-sm text-slate-400 underline underline-offset-4 transition-colors hover:text-slate-200"
+                >
+                  이전 화면으로 돌아가기
+                </button>
+              </>
+            )}
           </>
         )}
       </div>

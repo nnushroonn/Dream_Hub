@@ -14,12 +14,6 @@ export interface AuthUser {
   is_galaxy_public?: boolean;
 }
 
-export interface AuthResponse {
-  access_token: string;
-  token_type: string;
-  user: AuthUser;
-}
-
 export interface MessageResponse {
   message: string;
 }
@@ -83,23 +77,21 @@ export interface UserStats {
   post_count: number;
   comment_count: number;
   empathy_received: number;
+  // 9단계 우주 티어 시스템(lib/levels.ts) - level은 total_xp에서 파생되는 세밀한 진행도,
+  // tier_index(1~9)/tier_title/tier_color는 level을 10개씩 묶은 굵은 단계다.
   level: number;
-  level_title: string;
-  // 레벨 게이지에 "2,450 / 3,000 XP"처럼 실제 수치를 보여주기 위한 값. next_level_threshold가
-  // null이면 이미 최고 레벨(만렙)이라 게이지는 항상 꽉 찬 상태로 그린다.
-  points: number;
-  next_level_threshold: number | null;
+  tier_index: number;
+  tier_title: string;
+  tier_color: string;
+  total_xp: number;
+  xp_into_level: number;
+  xp_for_next_level: number;
   badges: BadgeInfo[];
-  // Daily XP Cap - 오늘(KST) 활동으로 번 포인트가 daily_xp_cap에 도달하면 그 이상은 points에
-  // 반영되지 않는다. daily_cap_reached가 true면 "오늘의 탐험을 충분히 마쳤어요" 안내를 띄운다.
+  // Daily XP Cap - 게시글/댓글 "작성"으로 번 XP만 하루 합산 상한이 있다(도배 방지). 좋아요/댓글을
+  // "받는" XP는 상한이 없어 여기 집계되지 않는다.
   daily_xp_cap: number;
-  daily_points_earned: number;
+  daily_capped_xp_earned: number;
   daily_cap_reached: boolean;
-  // Milestone Lock - 포인트는 다음 레벨 문턱을 넘었지만 승급 조건(연속 기록 등)을 채우지 못해
-  // 레벨이 그 앞 단계에서 멈춰 있는 상태. next_level_requirement는 그 조건을 설명하는 안내 문구.
-  next_level_locked: boolean;
-  next_level_requirement: string | null;
-  next_level_streak_goal: number | null;
   diary_streak: number;
 }
 
@@ -108,8 +100,27 @@ export async function getUserStats(): Promise<UserStats> {
   return data;
 }
 
-export async function loginUser(email: string, password: string): Promise<AuthResponse> {
-  const { data } = await api.post<AuthResponse>("/auth/login", { email, password });
+// 로그인 성공 시 서버가 httpOnly 쿠키(access_token)를 Set-Cookie로 내려준다 - 토큰 자체는
+// 응답 바디에 실리지 않는다(JS가 읽을 이유도, 읽을 수단도 없다). 바디에는 화면 표시용
+// 사용자 정보만 담겨 온다.
+export async function loginUser(email: string, password: string): Promise<AuthUser> {
+  const { data } = await api.post<AuthUser>("/auth/login", { email, password });
+  return data;
+}
+
+// 서버에 Set-Cookie(만료된 값)를 요청해 httpOnly 쿠키를 실제로 지운다 - JS는 httpOnly
+// 쿠키를 직접 삭제할 수 없으므로, "로그아웃"은 이제 반드시 이 API 호출을 거쳐야 한다.
+export async function logoutUser(): Promise<MessageResponse> {
+  const { data } = await api.post<MessageResponse>("/auth/logout");
+  return data;
+}
+
+// 로그인 상태를 확인하는 유일한 방법 - httpOnly 쿠키는 JS로 직접 읽을 수 없어서, "지금
+// 로그인돼 있는지"는 항상 이 엔드포인트에 물어봐야 한다(앱 로드/새로고침마다 호출됨,
+// components/AuthHydrator.tsx 참고). 인증 안 된 상태면 401이 떨어진다 - 호출부가 캐치해서
+// "비로그인"으로 처리한다.
+export async function getCurrentUser(): Promise<AuthUser> {
+  const { data } = await api.get<AuthUser>("/auth/me");
   return data;
 }
 
@@ -118,19 +129,24 @@ export async function verifyEmail(token: string): Promise<MessageResponse> {
   return data;
 }
 
-/**
- * JWT의 payload는 서명 검증 없이도 base64 디코딩만으로 읽을 수 있다.
- * 여기서는 서버가 이미 서명한 access_token에서 화면 표시용 사용자 정보만 꺼내 쓰는 용도로,
- * 실제 인가(authorization)는 항상 백엔드가 서명을 검증해 처리한다.
- */
-export function decodeAccessToken(token: string): { sub: string; email?: string; nickname?: string } | null {
-  try {
-    const payloadSegment = token.split(".")[1];
-    const normalized = payloadSegment.replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(atob(normalized));
-  } catch {
-    return null;
-  }
+// 가입 여부와 무관하게 항상 같은 메시지를 돌려준다(백엔드 auth.py의 의도적 설계) - 화면은
+// 이 응답을 그대로 보여주기만 하면 된다.
+export async function forgotPassword(email: string): Promise<MessageResponse> {
+  const { data } = await api.post<MessageResponse>("/auth/forgot-password", { email });
+  return data;
+}
+
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+  newPasswordConfirm: string
+): Promise<MessageResponse> {
+  const { data } = await api.post<MessageResponse>("/auth/reset-password", {
+    token,
+    new_password: newPassword,
+    new_password_confirm: newPasswordConfirm,
+  });
+  return data;
 }
 
 /**
