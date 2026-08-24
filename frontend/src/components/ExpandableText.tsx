@@ -49,7 +49,7 @@ export default function ExpandableText({ children, className, fadeFromClassName 
               return next;
             })
           }
-          className="relative mt-1.5 text-xs font-medium text-violet-300/80 transition-colors hover:text-violet-200"
+          className="relative -my-3.5 mt-1.5 py-3.5 text-xs font-medium text-violet-300/80 transition-colors hover:text-violet-200"
         >
           {isExpanded ? "접기 ▴" : "더보기 ▾"}
         </button>

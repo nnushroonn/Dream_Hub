@@ -167,14 +167,14 @@ export default function DreamRecordModal({
   // 하므로, 결과 모달이 열리는 즉시(AI 응답을 기다리지 않고) 조회해 둔다.
   const [pendingSeedForBloom, setPendingSeedForBloom] = useState<DreamSeedRecord | null>(null);
   useEffect(() => {
-    if (!isResultOpen) {
-      setPendingSeedForBloom(null);
-      return;
-    }
+    if (!isResultOpen) return;
     getPendingSeedCheck()
       .then((seed) => setPendingSeedForBloom(seed))
       .catch(() => {});
   }, [isResultOpen]);
+  // 결과 화면이 닫히면 이전에 조회해둔 씨앗 정보를 더 이상 쓰지 않는다 - effect 안에서
+  // 별도로 null 리셋할 필요 없이, 렌더에 쓰는 값 자체를 isResultOpen으로 파생시킨다.
+  const effectivePendingSeedForBloom = isResultOpen ? pendingSeedForBloom : null;
 
   const [recordMode, setRecordMode] = useState<"quick" | "precise">("quick");
 
@@ -213,19 +213,24 @@ export default function DreamRecordModal({
   const hasUnsavedReport = interpretation !== null && lastSurvey !== null;
 
   // 사전/홈 히어로에서 넘어온 프리필이 targetChip/dynamicsChip을 동반하면(=사전 연계), 미니멀/정밀
-  // 모드 둘 다 프리필해 어느 모드로 진입해도 이어서 쓸 수 있게 한다.
+  // 모드 둘 다 프리필해 어느 모드로 진입해도 이어서 쓸 수 있게 한다 - 렌더 중 ref 접근/수정은
+  // 이 프로젝트의 react-hooks/refs 규칙이 막아서(React 문서의 "렌더 중 조정" 패턴을 못 쓴다),
+  // prefill 참조 변경에 반응하는 effect로 처리한다.
   useEffect(() => {
     if (!prefill?.targetChip && !prefill?.dynamicsChip) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- prefill(외부 이벤트) 변경에 반응, ref 사용이 금지돼 effect로 처리
     setWizardKey((key) => key + 1);
   }, [prefill]);
 
   useEffect(() => {
     if (!resumeFromCache) return;
+    // localStorage는 브라우저 전용 외부 시스템이라 마운트 이후 effect에서만 읽을 수 있다.
     try {
       const raw = localStorage.getItem(DREAM_RECORD_CACHED_ANALYSIS_KEY);
       if (!raw) return;
       const cached = JSON.parse(raw) as CachedAnalysis;
       if (!cached.interpretation || !cached.lastSurvey) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage(외부 시스템) 조회 결과에 반응
       setSelectedDate(cached.selectedDate || defaultDreamDateInputValue());
       setMood(cached.mood || "");
       setLastSurvey(cached.lastSurvey);
@@ -253,6 +258,7 @@ export default function DreamRecordModal({
   // 복원되는 흐름이면 초안 복구 모달과 겹치지 않도록 건너뛴다.
   useEffect(() => {
     if (resumeFromCache) return;
+    // localStorage는 브라우저 전용 외부 시스템이라 마운트 이후 effect에서만 읽을 수 있다.
     try {
       const raw = localStorage.getItem(DREAM_RECORD_DRAFT_KEY);
       if (!raw) return;
@@ -260,6 +266,7 @@ export default function DreamRecordModal({
       const hasContent = Boolean(draft.quickTitle?.trim() || draft.quickText?.trim()) || isWizardDraftDirty(draft.precise);
       if (!hasContent) return;
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage(외부 시스템) 조회 결과에 반응
       setHasDraftAvailable(true);
       const isQuick = draft.recordMode === "quick";
       const title = (isQuick ? draft.quickTitle : draft.precise?.title)?.trim() || "제목 없는 꿈";
@@ -528,7 +535,7 @@ export default function DreamRecordModal({
           type="button"
           onClick={requestClose}
           aria-label="닫기"
-          className="absolute right-5 top-5 text-slate-400 transition-colors hover:text-white"
+          className="absolute right-1 top-1 p-4 text-slate-400 transition-colors hover:text-white"
         >
           ✕
         </button>
@@ -800,7 +807,7 @@ export default function DreamRecordModal({
                   </div>
                 </div>
 
-                {pendingSeedForBloom && <SeedBloomResult seedType={pendingSeedForBloom.seed_type} />}
+                {effectivePendingSeedForBloom && <SeedBloomResult seedType={effectivePendingSeedForBloom.seed_type} />}
 
                 {interpretation.counseling_report ? (
                   <>

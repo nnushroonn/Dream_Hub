@@ -230,8 +230,23 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     user = db.query(User).filter(User.id == int(decoded["sub"])).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="사용자를 찾을 수 없습니다.")
+    if user.is_suspended:
+        # 이미 유효한 쿠키를 들고 있던 세션도(로그인은 지난 뒤 관리자가 방금 정지시킨 경우)
+        # 다음 요청부터 여기서 바로 막힌다 - 정지가 "다음 로그인부터"가 아니라 즉시 걸린다.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정입니다.")
 
     return user
+
+
+def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    """관리자 전용 라우터(routers/admin.py)가 공통으로 거는 의존성 - is_admin이 아니면 403.
+
+    get_current_user를 그대로 감싸므로 로그인 자체가 안 됐으면 401을, 로그인은 됐지만
+    관리자가 아니면 403을 돌려준다(둘을 구분해야 프론트가 "로그인해 주세요"와 "권한이
+    없습니다"를 다르게 안내할 수 있다)."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="관리자만 접근할 수 있습니다.")
+    return current_user
 
 
 def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -> User | None:
@@ -372,6 +387,8 @@ def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="이메일 인증이 필요합니다. 메일함을 확인해 주세요.",
         )
+    if user.is_suspended:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정입니다.")
 
     token = create_access_token(user.id)
     _set_auth_cookies(response, token)

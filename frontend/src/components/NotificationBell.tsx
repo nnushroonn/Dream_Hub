@@ -122,7 +122,7 @@ export default function NotificationBell() {
         type="button"
         onClick={handleToggle}
         aria-label="알림"
-        className="relative rounded-full p-2 text-indigo-300/70 transition-colors hover:bg-indigo-900/40 hover:text-indigo-100"
+        className="relative rounded-full p-3 text-indigo-300/70 transition-colors hover:bg-indigo-900/40 hover:text-indigo-100"
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (

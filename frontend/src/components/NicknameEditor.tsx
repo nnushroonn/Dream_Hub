@@ -20,38 +20,51 @@ export default function NicknameEditor() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const [status, setStatus] = useState<NicknameStatus>("idle");
+  // 어떤 값에 대한 원격 확인이 끝났는지(value)와 그 결과만 상태로 들고, "idle"/"invalid"/
+  // "checking"은 전부 draft/user.nickname/이 결과에서 바로 계산되는 파생 값이라(아래 status
+  // 참고) 별도 state로 두지 않는다 - "checking"을 effect 안에서 직접 setState할 필요가 없어진다.
+  const [remoteCheck, setRemoteCheck] = useState<{ value: string; result: "idle" | "available" | "taken" } | null>(
+    null
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const trimmedDraft = draft.trim();
+  // 원래 닉네임을 그대로 다시 입력했거나 비어있으면 애초에 중복 비교 자체가 필요 없다.
+  const needsRemoteCheck =
+    isEditing &&
+    !!user &&
+    trimmedDraft !== "" &&
+    trimmedDraft !== user.nickname &&
+    trimmedDraft.length >= NICKNAME_MIN_LENGTH &&
+    trimmedDraft.length <= NICKNAME_MAX_LENGTH;
+
+  const status: NicknameStatus =
+    !isEditing || !user || trimmedDraft === "" || trimmedDraft === user.nickname
+      ? "idle"
+      : trimmedDraft.length < NICKNAME_MIN_LENGTH || trimmedDraft.length > NICKNAME_MAX_LENGTH
+        ? "invalid"
+        : remoteCheck?.value === trimmedDraft
+          ? remoteCheck.result
+          : "checking";
+
   useEffect(() => {
-    if (!isEditing || !user) return;
-    const trimmed = draft.trim();
-    // 원래 닉네임을 그대로 다시 입력한 경우 자기 자신과 중복 비교를 할 필요가 없다.
-    if (!trimmed || trimmed === user.nickname) {
-      setStatus("idle");
-      return;
-    }
-    if (trimmed.length < NICKNAME_MIN_LENGTH || trimmed.length > NICKNAME_MAX_LENGTH) {
-      setStatus("invalid");
-      return;
-    }
-    setStatus("checking");
+    if (!needsRemoteCheck) return;
     const timer = window.setTimeout(() => {
-      checkNicknameAvailability(trimmed)
-        .then((available) => setStatus(available ? "available" : "taken"))
-        .catch(() => setStatus("idle"));
+      checkNicknameAvailability(trimmedDraft)
+        .then((available) => setRemoteCheck({ value: trimmedDraft, result: available ? "available" : "taken" }))
+        .catch(() => setRemoteCheck({ value: trimmedDraft, result: "idle" }));
     }, NICKNAME_CHECK_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [draft, isEditing, user]);
+  }, [needsRemoteCheck, trimmedDraft]);
 
   if (!user) {
     return <p className="text-center text-xs text-slate-400">로그인이 필요해요.</p>;
   }
 
   const startEditing = () => {
+    // draft를 user.nickname과 같게 두면 status는 위 파생 계산에서 자동으로 "idle"이 된다.
     setDraft(user.nickname);
-    setStatus("idle");
     setError(null);
     setIsEditing(true);
   };
@@ -59,7 +72,6 @@ export default function NicknameEditor() {
   const cancelEditing = () => {
     setIsEditing(false);
     setDraft(user.nickname);
-    setStatus("idle");
     setError(null);
   };
 
@@ -112,7 +124,7 @@ export default function NicknameEditor() {
           <button
             type="button"
             onClick={startEditing}
-            className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200"
+            className="rounded-full border border-white/10 px-3 py-3.5 text-xs text-slate-300 transition-colors hover:border-violet-400/40 hover:text-violet-200"
           >
             ✏️ 수정
           </button>

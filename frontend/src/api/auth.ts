@@ -12,6 +12,9 @@ export interface AuthUser {
   aura_preference?: AuraPreference | null;
   // 커뮤니티 닉네임 호버 카드(무의식 은하 프로필) 공개 여부 - 기본은 비공개.
   is_galaxy_public?: boolean;
+  // true면 /admin 내비게이션 링크를 보여준다 - 실제 접근 권한은 항상 백엔드가 다시
+  // 검증하므로(get_current_admin_user) 이 값은 순수 UI 분기용이다.
+  is_admin?: boolean;
 }
 
 export interface MessageResponse {
@@ -177,4 +180,13 @@ export function getAuthErrorMessage(error: unknown): string {
   }
 
   return "알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
+// AI 해몽 레이트리밋(429) 판별 - 비로그인 유저가 이걸 만났다면 항상 하루 무료 한도(현재 1회)를
+// 다 쓴 경우다(routers/ai_interpretation.py의 일일 한도가 10분 버스트 한도보다 항상 낮게
+// 잡혀 있어, 버스트가 먼저 걸릴 일이 없다). 호출부가 이 신호로 일반 에러 문구 대신 로그인/
+// 회원가입 유도 모달(LoginModal의 ai_limit trigger - 로그인하면 하루 3회로 늘어난다는 안내)을
+// 띄운다.
+export function isAiInterpretRateLimited(error: unknown): boolean {
+  return isAxiosError(error) && error.response?.status === 429;
 }

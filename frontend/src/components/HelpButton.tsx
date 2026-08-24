@@ -19,8 +19,11 @@ export default function HelpButton({ onClick, label, firstVisitStorageKey }: Hel
   const [isHinting, setIsHinting] = useState(false);
 
   useEffect(() => {
+    // localStorage는 렌더 중에 읽으면 서버(빌드 시점)와 브라우저 값이 달라 하이드레이션
+    // 불일치를 일으키는 외부 시스템이라, 마운트 이후 effect에서만 접근해야 한다.
     if (localStorage.getItem(firstVisitStorageKey) === "1") return;
     localStorage.setItem(firstVisitStorageKey, "1");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage(외부 시스템) 조회 결과에 반응
     setIsHinting(true);
     const timer = setTimeout(() => setIsHinting(false), 4000);
     return () => clearTimeout(timer);
@@ -37,7 +40,7 @@ export default function HelpButton({ onClick, label, firstVisitStorageKey }: Hel
       }}
       aria-label={label}
       title={label}
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-medium text-slate-400 transition-colors hover:border-emerald-400/30 hover:bg-white/[0.08] hover:text-emerald-200 ${
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-3 text-xs font-medium text-slate-400 transition-colors hover:border-emerald-400/30 hover:bg-white/[0.08] hover:text-emerald-200 ${
         isHinting ? "animate-help-hint border-emerald-400/40 bg-emerald-500/10 motion-reduce:animate-none" : "border-white/10 bg-white/5"
       }`}
     >

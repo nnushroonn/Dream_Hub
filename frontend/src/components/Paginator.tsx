@@ -43,7 +43,7 @@ export default function Paginator({ page, totalPages, onChange }: PaginatorProps
           disabled={!canJumpBack}
           aria-label={`이전 ${JUMP_SIZE}페이지`}
           title={`이전 ${JUMP_SIZE}페이지`}
-          className="rounded-full px-2.5 py-1.5 text-sm text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-30"
+          className="min-w-11 rounded-full px-2.5 py-3 text-sm text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-30"
         >
           «
         </button>
@@ -54,7 +54,7 @@ export default function Paginator({ page, totalPages, onChange }: PaginatorProps
         onClick={() => onChange(Math.max(page - 1, 1))}
         disabled={page === 1}
         aria-label="이전 페이지"
-        className="rounded-full px-2.5 py-1.5 text-sm text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-30"
+        className="min-w-11 rounded-full px-2.5 py-3 text-sm text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-30"
       >
         ‹
       </button>
@@ -70,7 +70,7 @@ export default function Paginator({ page, totalPages, onChange }: PaginatorProps
             type="button"
             onClick={() => onChange(token)}
             aria-current={token === page ? "page" : undefined}
-            className={`min-w-[2.25rem] rounded-full px-2.5 py-1.5 text-sm font-medium transition-colors ${
+            className={`min-w-11 rounded-full px-2.5 py-3 text-sm font-medium transition-colors ${
               token === page ? "bg-purple-600 text-white" : "text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -84,7 +84,7 @@ export default function Paginator({ page, totalPages, onChange }: PaginatorProps
         onClick={() => onChange(Math.min(page + 1, totalPages))}
         disabled={page === totalPages}
         aria-label="다음 페이지"
-        className="rounded-full px-2.5 py-1.5 text-sm text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-30"
+        className="min-w-11 rounded-full px-2.5 py-3 text-sm text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-30"
       >
         ›
       </button>
@@ -96,7 +96,7 @@ export default function Paginator({ page, totalPages, onChange }: PaginatorProps
           disabled={!canJumpForward}
           aria-label={`다음 ${JUMP_SIZE}페이지`}
           title={`다음 ${JUMP_SIZE}페이지`}
-          className="rounded-full px-2.5 py-1.5 text-sm text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-30"
+          className="min-w-11 rounded-full px-2.5 py-3 text-sm text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-30"
         >
           »
         </button>

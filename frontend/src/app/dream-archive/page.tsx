@@ -66,9 +66,13 @@ export default function DreamArchivePage() {
   };
 
   useEffect(() => {
+    // window.location은 정적 export 빌드(prerender) 시점엔 존재하지 않는 브라우저 전용
+    // 값이라 렌더 중에는 읽을 수 없다 - id 파싱과 그 결과에 따른 상태 결정 모두 마운트
+    // 이후 effect에서만 가능하다(id를 렌더 시점에 알 방법이 없어 파생 상태로 못 바꾼다).
     const params = new URLSearchParams(window.location.search);
     const id = Number(params.get("id"));
     if (!Number.isFinite(id) || id <= 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- window.location(외부 시스템) 파싱 결과에 반응
       setNotFound(true);
       setIsLoading(false);
       return;

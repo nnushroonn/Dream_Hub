@@ -367,16 +367,22 @@ interface DiaryCarouselProps {
 // 가로 슬라이더로 묶는다 - 현실 영역은 언제나 이 카드 한 장(또는 캐러셀)만 최상단에 뜬다.
 // 순수 기록 보관용 뷰어라 AI 해몽 관련 액션은 전혀 갖지 않는다(무의식 영역과의 기능적 위계 분리).
 function DiaryCarousel({ entries, onEdit, onDeleteRequest, onShare, focusEntryId }: DiaryCarouselProps) {
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [rawActiveIndex, setActiveIndex] = useState(0);
+  // entries가 삭제 등으로 줄어들면 이전 activeIndex가 범위를 벗어날 수 있어, 저장된 값을
+  // 매번 다시 clamp하는 대신 읽는 시점에 바로 안전한 범위로 잘라서 쓴다(effect로 상태를
+  // 되돌릴 필요가 없다).
+  const activeIndex = entries.length === 0 ? 0 : Math.min(rawActiveIndex, entries.length - 1);
 
-  useEffect(() => {
-    if (activeIndex > entries.length - 1) setActiveIndex(Math.max(0, entries.length - 1));
-  }, [entries.length, activeIndex]);
-
+  // focusEntryId(부모가 "방금 저장된 편으로 이동해줘"라고 보내는 외부 신호)가 바뀌면 그
+  // 편으로 점프한다 - 렌더 중 ref 접근/수정은 이 프로젝트의 react-hooks/refs 규칙이 막아서
+  // (React 문서의 "렌더 중 조정" 패턴을 못 쓴다), effect로 처리한다.
   useEffect(() => {
     if (focusEntryId == null) return;
     const idx = entries.findIndex((entry) => entry.id === focusEntryId);
-    if (idx >= 0) setActiveIndex(idx);
+    if (idx >= 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 부모의 "방금 저장된 편" 신호(외부 이벤트)에 반응, ref 사용이 금지돼 effect로 처리
+      setActiveIndex(idx);
+    }
   }, [focusEntryId, entries]);
 
   const goTo = (next: number) => {
@@ -852,7 +858,10 @@ function useStageLineMetrics(
   const [line, setLine] = useState<{ left: number; top: number; height: number } | null>(null);
 
   useEffect(() => {
+    // 실제 DOM 요소의 화면 좌표(getBoundingClientRect)를 재는 훅이라 렌더 중 계산이
+    // 불가능하다 - 페인트 이후 effect에서만 측정할 수 있다.
     if (!isVisible) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 접힘/언마운트 시 낡은 DOM 좌표를 정리(외부 시스템 동기화)
       setLine(null);
       return;
     }
@@ -1350,6 +1359,10 @@ interface CalendarPanelProps {
   // 데이터가 있는 날짜는 그 날짜를 펼쳐 보여주고(hasData=true), 아직 기록이 없는 날짜는 그
   // 자리에서 바로 새 기록을 시작한다(hasData=false) - 실제 분기는 호출부(journal 본문)가 한다.
   onPickDate: (date: string, hasData: boolean) => void;
+  // lg: 미만에서 이 패널의 어느 하위 섹션(달력/최근 기록)이 활성 탭인지 - 패널 전체 표시
+  // 여부와 그 안의 두 섹션 각각의 표시 여부를 정한다. lg: 이상에서는 참조되지 않는다(항상
+  // 둘 다 펼쳐짐).
+  mobileActiveTab: "summary" | "calendar" | "recent";
 }
 
 // 날짜 탐색을 이 패널 하나로 통합했다 - 예전에는 상단 가로 스크롤 날짜 목록과 이 오른쪽
@@ -1365,6 +1378,7 @@ function CalendarPanel({
   gardenBlooms,
   selectedDate,
   onPickDate,
+  mobileActiveTab,
 }: CalendarPanelProps) {
   const initialMonth = selectedDate ?? todayDateInputValue();
   const [viewYear, setViewYear] = useState(Number(initialMonth.slice(0, 4)));
@@ -1435,7 +1449,19 @@ function CalendarPanel({
   };
 
   return (
-    <div className="sticky top-24 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4 backdrop-blur-xl">
+    <div
+      // top-24(96px)는 헤더가 항상 한 줄(약 77px)이라고 가정한 고정값이었다 - NavBar의
+      // 데스크톱 메인 nav가 이제 폭이 모자라면 줄바꿈되어(1024~1280px 로그인 상태에서
+      // 흔함) 헤더 높이가 달라지므로, NavBar가 내보내는 실측 높이(--nav-height)에 원래와
+      // 같은 여백(96-77≈19px)을 더해 항상 헤더 바로 아래에 붙게 한다.
+      style={{ top: "calc(var(--nav-height, 77px) + 19px)" }}
+      className={`sticky w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4 backdrop-blur-xl ${
+        mobileActiveTab === "summary" ? "hidden lg:block" : ""
+      }`}
+    >
+      {/* lg: 미만에서는 이 안의 두 섹션(달력/최근 기록) 중 활성 탭 쪽만 보인다 - 각 섹션
+          자체에 hidden lg:block을 개별로 건다(모바일 대시보드 탭). */}
+      <div className={mobileActiveTab === "calendar" ? "" : "hidden lg:block"}>
       {/* 달력과 "최근 기록"이 하나의 패널이라는 걸 알려주는 작은 헤더 - 날짜 탐색 기능이
           이 사이드바 한 곳에만 있다는 걸 시각적으로도 분명히 한다. */}
       <p className="text-[11px] font-medium tracking-wide text-slate-500">📅 날짜 탐색</p>
@@ -1445,7 +1471,7 @@ function CalendarPanel({
           type="button"
           onClick={goPrevMonth}
           aria-label="이전 달"
-          className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+          className="rounded-full p-3.5 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -1456,7 +1482,7 @@ function CalendarPanel({
           type="button"
           onClick={goNextMonth}
           aria-label="다음 달"
-          className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+          className="rounded-full p-3.5 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -1526,11 +1552,15 @@ function CalendarPanel({
           <span className="h-1.5 w-1.5 rounded-full bg-slate-400" /> 일부만 진행
         </span>
       </div>
+      </div>
+      {/* 달력 섹션 끝 */}
 
       {/* 최근 기록 - 예전엔 상단 가로 스크롤 목록이 담당하던 "빠르게 훑어보며 날짜 이동"
           역할을 그대로 이어받는다. 기록이 있는 날짜만 최신순으로, 내부 스크롤로 패널
           전체 높이가 뷰포트를 넘지 않게 한다. */}
-      <div className="mt-3 border-t border-white/[0.06] pt-3">
+      <div
+        className={`mt-3 border-t border-white/[0.06] pt-3 ${mobileActiveTab === "recent" ? "" : "hidden lg:block"}`}
+      >
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] font-medium tracking-wide text-slate-500">최근 기록</p>
           {activeTagFilter && (
@@ -1609,6 +1639,10 @@ function CalendarPanel({
   );
 }
 
+// 로그아웃 상태의 seeds 파생값으로 매번 새 배열을 만들면 참조가 매 렌더 달라져 이걸 의존성으로
+// 쓰는 useMemo들이 계속 재계산된다 - 컴포넌트 바깥의 고정 참조 하나를 공유해서 막는다.
+const EMPTY_SEEDS: DreamSeedRecord[] = [];
+
 // 나만의 일기장 - 꿈 기록소(/diary)와 완전히 독립된 라우트지만, 같은 DreamEntry 데이터를
 // 공유해 날짜별로 꿈(해몽 완료) + 일기(해몽 전) 기록을 한 화면에서 오갈 수 있게 한다.
 export default function DailyJournalPage() {
@@ -1619,13 +1653,13 @@ export default function DailyJournalPage() {
 
   // 무의식 씨앗 전체 이력 - "밤에 심기 -> 아침에 확인" 카드의 [Mid] 상태와, 꿈 기록의 날짜 이동
   // 귀속(cardDateFor)에 함께 쓰인다. 일기 작성 폼과는 독립적이라 별도로 불러온다.
-  const [seeds, setSeeds] = useState<DreamSeedRecord[]>([]);
+  // 로그아웃 이후에도 rawSeeds에 이전 세션 값이 남아있을 수 있어, 실제로 쓰는 seeds는
+  // isAuthenticated로 한 번 더 걸러 파생시킨다(effect 안에서 별도로 []/null로 되돌릴 필요가 없다).
+  const [rawSeeds, setSeeds] = useState<DreamSeedRecord[]>([]);
+  const seeds = isAuthenticated ? rawSeeds : EMPTY_SEEDS;
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setSeeds([]);
-      return;
-    }
+    if (!isAuthenticated) return;
     getMySeeds()
       .then(setSeeds)
       .catch(() => {});
@@ -1634,12 +1668,10 @@ export default function DailyJournalPage() {
   // "꽃" 섹션 미리보기 + 이 페이지 안에서 바로 여는 꽃 상세 관찰 모달, 둘 다 정원 도감과
   // 완전히 같은 데이터(genus/종/아우라/도감 번호/고정 상태)가 필요하다 - DreamSeedRecord에는
   // 그 정보가 없어 정원 API 응답 전체(GardenProfile)를 그대로 들고 있는다.
-  const [gardenProfile, setGardenProfile] = useState<GardenProfile | null>(null);
+  const [rawGardenProfile, setGardenProfile] = useState<GardenProfile | null>(null);
+  const gardenProfile = isAuthenticated ? rawGardenProfile : null;
   useEffect(() => {
-    if (!isAuthenticated) {
-      setGardenProfile(null);
-      return;
-    }
+    if (!isAuthenticated) return;
     getMyGarden()
       .then(setGardenProfile)
       .catch(() => {});
@@ -1783,12 +1815,18 @@ export default function DailyJournalPage() {
   // 카드만으로 하루를 훑을 수 있으므로 기본은 접힘이다. 위 세 토글과 별개로, 이건 "4단계
   // 전체가 보이는지"만 켜고 끈다.
   const [isStageListExpanded, setIsStageListExpanded] = useState(false);
+  // 모바일 전용 대시보드 탭 - 오늘의 요약/날짜 탐색/최근 기록이 세로로 전부 쌓이면 스크롤이
+  // 과도하게 길어져서, lg: 미만에서는 한 번에 한 탭만 보여준다(lg: 이상은 지금처럼 전부
+  // 펼쳐진 레이아웃 그대로 - 이 상태값 자체를 참조하지 않는다). 기본은 "오늘의 요약".
+  const [mobileDashboardTab, setMobileDashboardTab] = useState<"summary" | "calendar" | "recent">("summary");
   // 펼침/접힘 애니메이션 중에만 overflow-hidden을 걸어둔다 - height:0->auto 트랜지션이
   // 자연스러워 보이려면 그 순간엔 내용을 잘라내야 하지만, 다 펼쳐진 뒤에도 계속 clip해
   // 두면 마커/카드의 은은한 글로우(box-shadow)가 이 컨테이너의 사각형 경계에서 잘려
   // 보인다 - 애니메이션이 끝나면 overflow를 visible로 풀어 글로우가 자유롭게 퍼지게 한다.
   const [isStageListAnimating, setIsStageListAnimating] = useState(false);
+  // sessionStorage는 브라우저 전용 외부 시스템이라 마운트 이후 effect에서만 읽을 수 있다.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage(외부 시스템) 조회 결과에 반응
     setIsDiaryCardExpanded(sessionStorage.getItem(DIARY_CARD_EXPANDED_KEY) === "1");
     setIsBloomSectionExpanded(sessionStorage.getItem(BLOOM_SECTION_EXPANDED_KEY) === "1");
     setIsFlowerSectionExpanded(sessionStorage.getItem(FLOWER_SECTION_EXPANDED_KEY) === "1");
@@ -1821,10 +1859,10 @@ export default function DailyJournalPage() {
 
   // 개화/꽃 두 섹션이 같은 편을 가리키도록 캐러셀 인덱스를 여기(부모)에서 들고 있는다 -
   // 개화 섹션의 좌우 화살표로 페이지를 넘기면 꽃 섹션도 같은 편의 해몽으로 따라간다.
-  const [dreamActiveIndex, setDreamActiveIndex] = useState(0);
-  useEffect(() => {
-    if (dreamActiveIndex > dreamEntries.length - 1) setDreamActiveIndex(Math.max(0, dreamEntries.length - 1));
-  }, [dreamEntries.length, dreamActiveIndex]);
+  const [rawDreamActiveIndex, setDreamActiveIndex] = useState(0);
+  // dreamEntries가 줄어들면 이전 인덱스가 범위를 벗어날 수 있어, 저장된 값을 effect로
+  // 되돌리는 대신 읽는 시점에 바로 안전한 범위로 잘라서 쓴다.
+  const dreamActiveIndex = dreamEntries.length === 0 ? 0 : Math.min(rawDreamActiveIndex, dreamEntries.length - 1);
   const dreamActiveEntry = dreamEntries[dreamActiveIndex] ?? null;
   const bloomSectionSummary = dreamActiveEntry ? dreamActiveEntry.title : null;
   const flowerSectionSummary = dreamActiveEntry?.interpretation?.description?.trim().slice(0, 40) ?? null;
@@ -1923,14 +1961,14 @@ export default function DailyJournalPage() {
   // 대분류(guidedData.initialEmotionCategory)가 그대로 오늘 밤 심는 씨앗이 된다. 실제
   // plantSeed 호출은 handleSave가 일기 저장과 함께 한 번에 처리한다 - 팝업 없이 인라인으로
   // "기록 저장 + 씨앗 심기"가 하나의 제출로 끝나야 하기 때문이다.
-  const [tonightSeed, setTonightSeed] = useState<DreamSeedRecord | null>(null);
+  // 로그아웃 이후에도 rawTonightSeed에 이전 세션 값이 남아있을 수 있어, 실제로 쓰는
+  // tonightSeed는 isAuthenticated로 한 번 더 걸러 파생시킨다.
+  const [rawTonightSeed, setTonightSeed] = useState<DreamSeedRecord | null>(null);
+  const tonightSeed = isAuthenticated ? rawTonightSeed : null;
   const emotionForSeed: SeedType | null = guidedData.initialEmotionCategory ?? null;
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setTonightSeed(null);
-      return;
-    }
+    if (!isAuthenticated) return;
     getTonightSeed()
       .then(setTonightSeed)
       .catch(() => {});
@@ -2069,6 +2107,8 @@ export default function DailyJournalPage() {
 
   // 사전("이 상징으로 꿈 기록하기")/홈 히어로("이 꿈 일기장에 보관하고 첫 씨앗 심기")/아침 웰컴
   // 모달("오늘의 꿈 기록하기")에서 넘어온 쿼리 파라미터를 확인해, 있으면 이 모달을 곧장 연다.
+  // window.location은 정적 export 빌드(prerender) 시점엔 존재하지 않아 렌더 중에는 읽을
+  // 수 없다 - 아래 모든 setState는 마운트 이후 이 쿼리스트링 파싱 결과에 반응하는 것들이다.
   useEffect(() => {
     if (!isAuthenticated) return;
     const params = new URLSearchParams(window.location.search);
@@ -2087,6 +2127,7 @@ export default function DailyJournalPage() {
       const targetOtherParam = params.get("targetOther");
       const dynamicsChipParam = params.get("dynamicsChip");
       const isValidMoodBucket = moodParam === "good" || moodParam === "neutral" || moodParam === "nightmare";
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- window.location(외부 시스템) 파싱 결과에 반응
       openRecordModal({
         title: titleParam,
         quickText: `[사전 기반 기록] ${titleParam}`,
@@ -2139,6 +2180,7 @@ export default function DailyJournalPage() {
   }, [isAuthenticated]);
 
   useEffect(() => {
+    // localStorage는 브라우저 전용 외부 시스템이라 마운트 이후 effect에서만 읽을 수 있다.
     try {
       const raw = localStorage.getItem(JOURNAL_DRAFT_KEY);
       if (!raw) return;
@@ -2147,6 +2189,7 @@ export default function DailyJournalPage() {
       const hasContent = Boolean(draft.title?.trim() || draft.body?.trim() || guidedPreviewContent);
       if (!hasContent) return;
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage(외부 시스템) 조회 결과에 반응
       setHasDraftAvailable(true);
       setDraftPreview({
         savedAt: draft.savedAt,
@@ -2164,6 +2207,8 @@ export default function DailyJournalPage() {
   }, []);
 
   useEffect(() => {
+    // localStorage는 브라우저 전용 외부 시스템이라 마운트 이후 effect에서만 읽을 수 있다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage(외부 시스템) 조회 결과에 반응
     setHasCachedAnalysis(localStorage.getItem(DREAM_RECORD_CACHED_ANALYSIS_KEY) !== null);
   }, []);
 
@@ -2181,7 +2226,9 @@ export default function DailyJournalPage() {
   }, [selectedDate, isComposingNew, hasSavedDraft]);
 
   // 저장/해석이 끝나 개화 섹션으로 새 편이 자리 잡으면, 그 영역까지 화면을 부드럽게 스크롤한다.
-  // 현실(일기) 캐러셀은 항상 최상단이라 별도 스크롤 없이 캐러셀 인덱스만 넘긴다.
+  // 현실(일기) 캐러셀은 항상 최상단이라 별도 스크롤 없이 캐러셀 인덱스만 넘긴다 - 실제 DOM
+  // 스크롤(revealStageListAndScrollTo)이 페인트 이후에만 가능해 effect가 필요하고, 함께
+  // 묶인 상태 갱신들도 그 스크롤과 한 덩어리로 일어나야 자연스럽다.
   useEffect(() => {
     if (justSavedEntryId === null) return;
     const dreamIdx = dreamEntries.findIndex((entry) => entry.id === justSavedEntryId);
@@ -2189,6 +2236,7 @@ export default function DailyJournalPage() {
       // 방금 저장한 편이 기본 접힘 상태에 가려지지 않도록 개화/꽃 섹션을 함께 펼치고, 두
       // 섹션이 공유하는 캐러셀 인덱스도 이 편으로 맞춘다. 이 두 섹션 자체가 "단계별로 자세히
       // 보기" 토글 뒤에 숨어 있을 수 있으니, 그 토글부터 열고 스크롤한다.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- DOM 스크롤과 함께 일어나는 1회성 동작(외부 시스템 동기화)
       setDreamActiveIndex(dreamIdx);
       setIsBloomSectionExpanded(true);
       sessionStorage.setItem(BLOOM_SECTION_EXPANDED_KEY, "1");
@@ -3025,7 +3073,13 @@ export default function DailyJournalPage() {
       {/* lg 컨테이너 좌우 패딩을 아래 그리드의 gap-8과 정확히 같은 값(2rem)으로 맞춰야 "본문
           좌측 여백"과 "본문-사이드바 사이 여백"이 픽셀 단위로 일치한다 - lg:px-10(2.5rem)이면
           둘이 어긋난다. */}
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      {/* 하단 고정 CTA(lg: 미만)가 마지막 콘텐츠를 가리지 않도록, 그 버튼이 떠 있는 동안만
+          모바일 하단 여백을 넉넉히 늘린다 - lg:는 항상 원래 값(py-10)으로 되돌아간다. */}
+      <div
+        className={`mx-auto max-w-7xl px-4 pt-10 sm:px-6 lg:px-8 lg:pb-10 ${
+          primaryCta && !isDayComplete ? "pb-28" : "pb-10"
+        }`}
+      >
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px] lg:items-start">
         <div>
         <div className="text-center">
@@ -3105,14 +3159,34 @@ export default function DailyJournalPage() {
                         {primaryCta.label}
                       </button>
                     ) : (
+                      // lg: 미만에서는 이 버튼 대신 아래 하단 고정(sticky) 버튼을 쓴다 - 스크롤을
+                      // 내려도 항상 눌리는 자리에 두기 위함(모바일 대시보드 탭 작업). 완료된 날의
+                      // 조용한 보조 버튼(위 isDayComplete 분기)은 중요도가 낮아 하단 고정을 두지
+                      // 않고 지금처럼 인라인으로만 둔다.
                       <button
                         type="button"
                         onClick={primaryCta.onClick}
-                        className="rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 px-8 py-3.5 text-base font-semibold text-white shadow-[0_6px_28px_rgba(139,92,246,0.4)] transition-all hover:-translate-y-0.5 hover:from-purple-500 hover:to-indigo-500 hover:shadow-[0_10px_34px_rgba(139,92,246,0.55)] hover:scale-[1.03] active:scale-[0.98]"
+                        className="hidden rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 px-8 py-3.5 text-base font-semibold text-white shadow-[0_6px_28px_rgba(139,92,246,0.4)] transition-all hover:-translate-y-0.5 hover:from-purple-500 hover:to-indigo-500 hover:shadow-[0_10px_34px_rgba(139,92,246,0.55)] hover:scale-[1.03] active:scale-[0.98] lg:block"
                       >
                         {primaryCta.label}
                       </button>
                     )}
+                  </div>
+                )}
+
+                {/* 하단 고정(sticky) CTA - lg: 미만 전용. 위 인라인 버튼은 스크롤하면 화면
+                    밖으로 사라지므로, "오늘의 현실 기록하기"만은 모바일에서 항상 한 번의
+                    탭으로 닿을 수 있게 화면 하단에 고정한다. 모달(z-100+)/집중 모드
+                    포털(z-[120])보다 낮은 z-30이라 그 위에 열리는 다른 화면들에는 가려진다. */}
+                {primaryCta && !isDayComplete && (
+                  <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[#030712]/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md lg:hidden">
+                    <button
+                      type="button"
+                      onClick={primaryCta.onClick}
+                      className="block w-full rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 px-8 py-3.5 text-base font-semibold text-white shadow-[0_6px_28px_rgba(139,92,246,0.4)] transition-all active:scale-[0.98]"
+                    >
+                      {primaryCta.label}
+                    </button>
                   </div>
                 )}
 
@@ -3136,6 +3210,36 @@ export default function DailyJournalPage() {
                   </div>
                 )}
 
+                {/* 모바일 전용 대시보드 탭 스위처 - lg: 이상에서는 아래 세 섹션(오늘의 요약/
+                    날짜 탐색/최근 기록)이 전부 펼쳐지므로 탭 자체가 필요 없다(lg:hidden).
+                    CalendarPanel에도 같은 mobileDashboardTab을 넘겨, 그 안의 달력/최근 기록
+                    두 하위 섹션이 이 탭과 맞춰 각각 보이거나 숨는다. */}
+                <div className="mt-8 flex justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] p-1 lg:hidden">
+                  {(
+                    [
+                      { key: "summary", label: "📋 오늘의 요약" },
+                      { key: "calendar", label: "📅 날짜 탐색" },
+                      { key: "recent", label: "최근 기록" },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setMobileDashboardTab(tab.key)}
+                      className={`flex-1 rounded-full px-3 py-2.5 text-xs font-medium transition-colors ${
+                        mobileDashboardTab === tab.key
+                          ? "bg-purple-600 text-white"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* "오늘의 요약" 탭 콘텐츠 - lg: 미만에서는 위 탭이 "summary"일 때만 보이고,
+                    lg: 이상에서는 탭 상태와 무관하게 항상 펼쳐진다(hidden lg:block 패턴). */}
+                <div className={mobileDashboardTab === "summary" ? "" : "hidden lg:block"}>
                 {/* 오늘의 요약 - 압축 타임라인 바로 아래. 아래로 스크롤하지 않고도 그날 전체를
                     한눈에 훑고, 각 줄을 눌러 해당 정거장으로 곧장 이동할 수 있게 한다(토글이
                     꺼져 있어도 이 카드의 "꽃 피었어요" 줄 등은 항상 유효하다 - onScrollToDream이
@@ -3489,6 +3593,8 @@ export default function DailyJournalPage() {
                     </motion.div>
                   )}
                 </AnimatePresence>
+                </div>
+                {/* "오늘의 요약" 탭 콘텐츠 끝 */}
               </div>
             )}
           </motion.div>
@@ -3505,6 +3611,7 @@ export default function DailyJournalPage() {
           gardenBlooms={gardenBlooms}
           selectedDate={selectedDate}
           onPickDate={handleCalendarPick}
+          mobileActiveTab={mobileDashboardTab}
         />
         </div>
       </div>

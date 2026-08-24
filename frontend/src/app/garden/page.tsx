@@ -377,7 +377,10 @@ export default function GardenPage() {
   const hasAutoOpenedBloomRef = useRef(false);
 
   useEffect(() => {
+    // window.location은 정적 export 빌드(prerender) 시점엔 존재하지 않아 렌더 중에는
+    // 읽을 수 없다 - 마운트 이후 effect에서만 쿼리스트링을 파싱할 수 있다.
     const params = new URLSearchParams(window.location.search);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- window.location(외부 시스템) 파싱 결과에 반응
     setTargetNickname(params.get("nickname"));
     const bloomParam = params.get("bloom");
     setOpenBloomId(bloomParam ? Number(bloomParam) : null);
@@ -385,7 +388,10 @@ export default function GardenPage() {
   }, []);
 
   const [profile, setProfile] = useState<GardenProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // 실제로 조회가 필요한 조합(targetNickname이 있거나, 내 정원이면 로그인 상태)일 때만
+  // "로딩 중"이고, 그 조합을 이미 불러왔는지는 loadedKey로 추적한다 - loadGarden 안에서
+  // 별도로 isLoading을 동기 setState할 필요가 없어진다.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [dewMessage, setDewMessage] = useState<string | null>(null);
   const [isGivingDew, setIsGivingDew] = useState(false);
@@ -413,35 +419,39 @@ export default function GardenPage() {
   // 펼쳐보게 한다.
   const [isSpecimenSectionOpen, setIsSpecimenSectionOpen] = useState(false);
 
+  const loadKey = `${hasParsedQuery}:${targetNickname ?? ""}:${isAuthenticated}`;
+  // targetNickname이 있으면 항상 조회하고, 없으면(내 정원) 로그인 상태에서만 조회한다 -
+  // 조회 자체가 필요 없는 조합에서는 loadedKey를 신경 쓸 필요 없이 바로 false다.
+  const isLoading = hasParsedQuery && (!!targetNickname || isAuthenticated) && loadedKey !== loadKey;
+
   const loadGarden = useCallback(() => {
     if (!hasParsedQuery) return;
     if (targetNickname) {
-      setIsLoading(true);
       getPublicGarden(targetNickname)
         .then(setProfile)
         .catch((error) => setLoadError(getAuthErrorMessage(error)))
-        .finally(() => setIsLoading(false));
+        .finally(() => setLoadedKey(loadKey));
       return;
     }
-    if (!isAuthenticated) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
+    if (!isAuthenticated) return;
     getMyGarden()
       .then(setProfile)
       .catch((error) => setLoadError(getAuthErrorMessage(error)))
-      .finally(() => setIsLoading(false));
-  }, [hasParsedQuery, targetNickname, isAuthenticated]);
+      .finally(() => setLoadedKey(loadKey));
+  }, [hasParsedQuery, targetNickname, isAuthenticated, loadKey]);
 
   useEffect(() => {
     loadGarden();
   }, [loadGarden]);
 
+  // profile이 도착한 뒤 "최초 1회만" 모달을 자동으로 여는 명령형 동작이라(ref로 재오픈을
+  // 막는 것 자체가 "이번 세션에서 이미 열었는가"라는 순수 함수로 표현할 수 없는 이력),
+  // 파생 상태로 대체할 수 없다.
   useEffect(() => {
     if (hasAutoOpenedBloomRef.current || !profile || !profile.is_owner || openBloomId === null) return;
     const bloom = profile.blooms.find((entry) => entry.id === openBloomId && entry.stage === "bloom");
     if (bloom) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- profile 도착 후 1회성 자동 오픈(ref로 재실행 방지), 파생 불가
       setObservedBloom(bloom);
       hasAutoOpenedBloomRef.current = true;
     }
@@ -626,7 +636,7 @@ export default function GardenPage() {
               <button
                 type="button"
                 onClick={() => setIsCompendiumOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/15"
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-3.5 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/15"
               >
                 <BookOpen className="h-3.5 w-3.5" />
                 도감 보기 · 일반 {myGeneralSpeciesCount}/{GENERAL_SPECIES_TOTAL} · 전설 {myLegendaryCount}/{LEGENDARY_TOTAL}
@@ -634,7 +644,7 @@ export default function GardenPage() {
               <button
                 type="button"
                 onClick={() => setIsSeedCompendiumOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-purple-400/30 bg-purple-500/10 px-4 py-1.5 text-xs font-medium text-purple-200 transition-colors hover:bg-purple-500/15"
+                className="inline-flex items-center gap-1.5 rounded-full border border-purple-400/30 bg-purple-500/10 px-4 py-3.5 text-xs font-medium text-purple-200 transition-colors hover:bg-purple-500/15"
               >
                 🌱 씨앗 도감 보기
               </button>

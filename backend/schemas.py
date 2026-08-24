@@ -78,6 +78,9 @@ class UserResponse(BaseModel):
     is_verified: bool
     aura_preference: str | None = None
     is_galaxy_public: bool = False
+    # 프론트가 이 값 하나로 "관리자" 내비게이션 링크/​/admin 접근 여부를 결정한다 - 실제 권한
+    # 검증은 항상 백엔드(get_current_admin_user)가 다시 하므로, 이건 순수 UI 분기용이다.
+    is_admin: bool = False
 
     model_config = {"from_attributes": True}
 

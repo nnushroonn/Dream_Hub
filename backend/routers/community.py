@@ -43,6 +43,9 @@ from models import (
     InteractionType,
     NotificationTargetType,
     NotificationType,
+    Report,
+    ReportStatus,
+    ReportTargetType,
     User,
 )
 from routers.ai_interpretation import DreamSurveyInput
@@ -55,6 +58,7 @@ from routers.auth import (
 )
 from routers.dreams import AttachedFlowerPayload, redact_survey_for_public
 from routers.notifications import create_notification
+from schemas import MessageResponse
 from storage import is_valid_community_image_url, read_upload_within_limit, upload_community_image
 from view_tracking import should_count_view
 
@@ -1289,3 +1293,54 @@ def delete_dream_comment(
 
     db.delete(comment)
     db.commit()
+
+
+# --- 🚨 신고 ------------------------------------------------------------------
+
+
+class ReportInput(BaseModel):
+    # POST = 자유 광장 글(CommunityPost.id), DREAM = 무의식 피드 꿈 기록(DreamEntry.id).
+    target_type: ReportTargetType
+    target_id: int
+    reason: str | None = Field(default=None, max_length=300)
+
+
+@router.post("/report", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+def report_content(
+    payload: ReportInput,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """커뮤니티 상세 화면의 "🚨 신고하기" 버튼이 부르는 엔드포인트 - 실제 처리는 관리자
+    화면(/admin/reports, routers/admin.py)이 담당하고, 여기서는 접수만 한다."""
+    if payload.target_type == ReportTargetType.POST:
+        exists = db.query(CommunityPost.id).filter(CommunityPost.id == payload.target_id).first() is not None
+    else:
+        exists = db.query(DreamEntry.id).filter(DreamEntry.id == payload.target_id).first() is not None
+    if not exists:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="신고할 대상을 찾을 수 없습니다.")
+
+    # 같은 유저가 같은 대상을 이미 미검토 상태로 신고해 뒀으면 중복 접수하지 않는다(연타 방지) -
+    # 버튼 쪽에서도 성공 메시지는 그대로 보여주므로 유저 입장에서는 매끄럽게 "또 접수됨"처럼 보인다.
+    duplicate = (
+        db.query(Report.id)
+        .filter(
+            Report.reporter_id == current_user.id,
+            Report.target_type == payload.target_type,
+            Report.target_id == payload.target_id,
+            Report.status == ReportStatus.PENDING,
+        )
+        .first()
+    )
+    if duplicate is None:
+        db.add(
+            Report(
+                target_type=payload.target_type,
+                target_id=payload.target_id,
+                reporter_id=current_user.id,
+                reason=payload.reason,
+            )
+        )
+        db.commit()
+
+    return {"message": "신고가 접수되었습니다. 빠르게 검토할게요."}

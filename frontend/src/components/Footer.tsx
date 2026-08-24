@@ -18,9 +18,16 @@ export default function Footer() {
           <span className="text-gray-400">🌙 Dream Hub</span> · © 2026 Dream Hub.
         </p>
 
-        <nav className="flex items-center gap-5 text-sm text-gray-400">
+        {/* word-break: keep-all(전역)이 어절 중간 줄바꿈은 막아주지만, 그 대신 한 줄에 억지로
+            욱여넣으면 뷰포트 밖으로 넘칠 수 있다 - flex-wrap으로 안 맞으면 항목째로(단어를
+            끊지 않고) 다음 줄로 넘어가게 한다. */}
+        <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-gray-400">
           {FOOTER_LINKS.map((link) => (
-            <Link key={link.href} href={link.href} className="transition-colors hover:text-gray-200">
+            <Link
+              key={link.href}
+              href={link.href}
+              className="-mx-2 -my-3.5 px-2 py-3.5 transition-colors hover:text-gray-200"
+            >
               {link.label}
             </Link>
           ))}

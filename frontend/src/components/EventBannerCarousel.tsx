@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 export interface CarouselSlide {
@@ -28,6 +28,9 @@ export default function EventBannerCarousel({
 }: EventBannerCarouselProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  // 터치로는 hover가 아예 발생하지 않아 자동재생을 멈출 방법도, 넘길 방법도 없던 문제
+  // (모바일 반응형 감사 🟡 항목) - 스와이프 제스처로 직접 넘길 수 있게 한다.
+  const touchStartXRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (isPaused || slides.length <= 1) return;
@@ -39,6 +42,27 @@ export default function EventBannerCarousel({
 
   if (slides.length === 0) return null;
 
+  const goToRelative = (delta: number) => {
+    setActiveIndex((prev) => (prev + delta + slides.length) % slides.length);
+  };
+
+  const SWIPE_THRESHOLD_PX = 40;
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    touchStartXRef.current = event.touches[0].clientX;
+    setIsPaused(true);
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const startX = touchStartXRef.current;
+    touchStartXRef.current = null;
+    setIsPaused(false);
+    if (startX === null || slides.length <= 1) return;
+    const deltaX = event.changedTouches[0].clientX - startX;
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD_PX) return;
+    goToRelative(deltaX < 0 ? 1 : -1);
+  };
+
   return (
     <div
       role="complementary"
@@ -46,6 +70,8 @@ export default function EventBannerCarousel({
       className="relative h-[90px] w-full overflow-hidden rounded-2xl border border-white/[0.08]"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {slides.map((slide, index) => (
         <Link
@@ -66,17 +92,23 @@ export default function EventBannerCarousel({
       ))}
 
       {slides.length > 1 && (
-        <div className="absolute bottom-2 right-3 flex gap-1.5">
+        <div className="absolute bottom-0 right-1 flex">
+          {/* 점 자체는 여전히 작지만(배너 톤과의 균형), 버튼의 실제 터치 영역은 패딩으로
+              넓혀 둔다(모바일 반응형 감사 🟡 항목: 6×6px라 손가락으로 사실상 못 눌렀음). */}
           {slides.map((slide, index) => (
             <button
               key={slide.id}
               type="button"
               aria-label={`${index + 1}번째 배너로 이동`}
               onClick={() => setActiveIndex(index)}
-              className={`h-1.5 rounded-full transition-all ${
-                index === activeIndex ? "w-4 bg-white" : "w-1.5 bg-white/40"
-              }`}
-            />
+              className="flex items-center justify-center p-2.5"
+            >
+              <span
+                className={`h-2 rounded-full transition-all ${
+                  index === activeIndex ? "w-5 bg-white" : "w-2 bg-white/40"
+                }`}
+              />
+            </button>
           ))}
         </div>
       )}

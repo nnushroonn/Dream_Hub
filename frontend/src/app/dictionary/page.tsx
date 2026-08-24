@@ -134,10 +134,13 @@ export default function DictionaryPage() {
   useEffect(() => {
     getTrendingKeywords().then(setTrending).catch(() => {});
     getRecentPublicDreams().then(setRecentDreams).catch(() => {});
-    // 날짜 기반 계산이라 서버/클라이언트 렌더 불일치를 피하려고 마운트 이후에만 채운다.
+    // 날짜 기반 계산이라 서버/클라이언트 렌더 불일치를 피하려고 마운트 이후에만 채운다 -
+    // 정적 export 빌드 시점의 날짜가 방문자의 실제 "오늘"과 다를 수 있어, 렌더 중 바로
+    // 계산하면 하이드레이션 시점에 값이 어긋난다.
     const dayOfYear = Math.floor(
       (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000
     );
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 하이드레이션 불일치 방지용, 렌더 중 계산 불가
     setDailyPicks(pickDailyWords(ALL_DICTIONARY_WORDS, 3, dayOfYear));
   }, []);
 
@@ -146,6 +149,8 @@ export default function DictionaryPage() {
   // 홈의 '카테고리 퀵 숏컷'에서 ?category=자연/장소 형태로 넘어온 경우엔
   // 브라우즈 화면을 그 카테고리 하나만 보이는 필터 상태로 연다.
   useEffect(() => {
+    // window.location은 정적 export 빌드(prerender) 시점엔 존재하지 않아 렌더 중에는
+    // 읽을 수 없다 - 마운트 이후 effect에서만 쿼리스트링을 파싱할 수 있다.
     const params = new URLSearchParams(window.location.search);
     const searchParam = params.get("search");
     const categoryParam = params.get("category");
@@ -157,14 +162,19 @@ export default function DictionaryPage() {
       return;
     }
     if (categoryParam && DICTIONARY_CATEGORIES.some((category) => category.label === categoryParam)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- window.location(외부 시스템) 파싱 결과에 반응
       setCategoryFilter(categoryParam);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // selectedKeyword가 바뀔 때마다 살짝 아래에서 떠오르듯 페이드인 시킨다.
+  // selectedKeyword가 바뀔 때마다 살짝 아래에서 떠오르듯 페이드인 시킨다 - CSS 트랜지션을
+  // 다시 트리거하려면 브라우저가 "false로 리렌더된 프레임"을 실제로 한 번 그리고 나서
+  // true로 바꿔야 해서(requestAnimationFrame으로 페인트 타이밍을 맞추는 외부 시스템 동기화),
+  // 렌더 중 계산으로는 대체할 수 없다.
   useEffect(() => {
     if (!selectedKeyword) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 트랜지션 재시작을 위해 매 프레임 실제 리렌더가 필요
     setDetailVisible(false);
     const raf1 = requestAnimationFrame(() => {
       requestAnimationFrame(() => setDetailVisible(true));

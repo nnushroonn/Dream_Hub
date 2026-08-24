@@ -81,7 +81,7 @@ export default function AllTagsModal({ onClose, onSelectTag, source = "board" }:
                   onClick={() => onSelectTag(item.tag)}
                   className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:border-purple-500/50 hover:bg-purple-600/20 hover:text-purple-200"
                 >
-                  #{item.tag} <span className="text-slate-500">{item.count}</span>
+                  {item.tag.startsWith("#") ? item.tag : `#${item.tag}`} <span className="text-slate-500">{item.count}</span>
                 </button>
               ))}
             </div>

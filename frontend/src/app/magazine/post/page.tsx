@@ -25,19 +25,31 @@ function MagazinePostContent() {
   const slug = searchParams.get("slug");
 
   const [article, setArticle] = useState<MagazineArticleDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  const [fetchFailed, setFetchFailed] = useState(false);
+  // "지금 article이 현재 slug의 결과인가"로 로딩 상태를 파생시킨다 - slug가 없는 경우는
+  // 애초에 effect가 할 일이 없으므로(원격 조회 자체가 불필요) 렌더 중 바로 판정된다.
+  const [loadedSlug, setLoadedSlug] = useState<string | null>(null);
+  const isLoading = !!slug && loadedSlug !== slug;
+  const notFound = !slug || fetchFailed;
 
   useEffect(() => {
-    if (!slug) {
-      setNotFound(true);
-      setIsLoading(false);
-      return;
-    }
+    if (!slug) return;
+    let ignore = false;
     getMagazineArticle(slug)
-      .then(setArticle)
-      .catch(() => setNotFound(true))
-      .finally(() => setIsLoading(false));
+      .then((data) => {
+        if (ignore) return;
+        setArticle(data);
+        setFetchFailed(false);
+      })
+      .catch(() => {
+        if (!ignore) setFetchFailed(true);
+      })
+      .finally(() => {
+        if (!ignore) setLoadedSlug(slug);
+      });
+    return () => {
+      ignore = true;
+    };
   }, [slug]);
 
   if (isLoading) {

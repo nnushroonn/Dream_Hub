@@ -9,19 +9,29 @@ import Paginator from "@/components/Paginator";
 
 export default function MagazinePage() {
   const [items, setItems] = useState<MagazineArticleSummary[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  // "로딩 중"을 별도 불리언으로 들지 않고, items가 지금 page의 결과인지로 파생시킨다 -
+  // page가 바뀌면 loadedPage와 어긋나 자동으로 로딩 상태가 되고, fetch가 끝나면(성공/실패
+  // 상관없이) loadedPage가 page를 따라잡아 자동으로 풀린다.
+  const [loadedPage, setLoadedPage] = useState<number | null>(null);
+  const isLoading = loadedPage !== page;
 
   useEffect(() => {
-    setIsLoading(true);
+    let ignore = false;
     getMagazineArticles({ page })
       .then((res) => {
+        if (ignore) return;
         setItems(res.items);
         setTotalPages(res.total_pages);
       })
       .catch(() => {})
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        if (!ignore) setLoadedPage(page);
+      });
+    return () => {
+      ignore = true;
+    };
   }, [page]);
 
   return (

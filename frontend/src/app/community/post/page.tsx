@@ -12,6 +12,7 @@ import {
   getDreamComments,
   getPublicDream,
   POST_EDIT_WINDOW_MS,
+  reportContent,
   setDreamVisibility,
   updateDreamComment,
   voteOnDream,
@@ -64,6 +65,8 @@ export default function CommunityPostPage() {
   const [highlightCommentId, setHighlightCommentId] = useState<number | null>(null);
 
   useEffect(() => {
+    // window.location은 정적 export 빌드(prerender) 시점엔 존재하지 않아 렌더 중에는
+    // 읽을 수 없다 - 마운트 이후 effect에서만 쿼리스트링을 파싱할 수 있다.
     const params = new URLSearchParams(window.location.search);
     const id = Number(params.get("id"));
     // 리스트의 "✏️ 수정" 링크가 ?edit=1을 붙여 보내면, 상세를 읽기 모드로 먼저 보여주지 않고
@@ -71,6 +74,7 @@ export default function CommunityPostPage() {
     const wantsEdit = params.get("edit") === "1";
     const highlightComment = Number(params.get("highlightComment"));
     if (Number.isFinite(highlightComment) && highlightComment > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- window.location(외부 시스템) 파싱 결과에 반응
       setHighlightCommentId(highlightComment);
     }
     if (!Number.isFinite(id) || id <= 0) {
@@ -200,7 +204,7 @@ export default function CommunityPostPage() {
         <button
           type="button"
           onClick={handleBack}
-          className="text-xs text-violet-300/70 underline-offset-2 hover:text-violet-200 hover:underline"
+          className="-my-3.5 py-3.5 text-xs text-violet-300/70 underline-offset-2 hover:text-violet-200 hover:underline"
         >
           ← 꿈 게시판으로 돌아가기
         </button>
@@ -305,11 +309,18 @@ export default function CommunityPostPage() {
                       </button>
                     </div>
                   )}
-                  {/* 부적절한 콘텐츠 신고 - 실제 처리 로직은 아직 없고, 우선 UI만 배치한다. */}
+                  {/* 부적절한 콘텐츠 신고 - 관리자 화면(/admin/reports)의 검토 큐로 들어간다. */}
                   {!entry.is_mine && (
                     <button
                       type="button"
-                      onClick={() => window.alert("신고가 접수되었습니다. 빠르게 검토할게요.")}
+                      onClick={async () => {
+                        try {
+                          const res = await reportContent("DREAM", entry.id);
+                          window.alert(res.message);
+                        } catch (err) {
+                          window.alert(getAuthErrorMessage(err));
+                        }
+                      }}
                       className="shrink-0 pt-1 text-[11px] text-slate-500 underline-offset-2 transition-colors hover:text-red-300 hover:underline"
                     >
                       🚨 신고하기

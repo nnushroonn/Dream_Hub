@@ -32,7 +32,7 @@ export default function CommunitySortChips({ sort, onSortChange, period, onPerio
             key={option.value}
             type="button"
             onClick={() => onSortChange(option.value)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+            className={`rounded-full px-3.5 py-3.5 text-xs font-medium transition-colors ${
               sort === option.value ? "bg-purple-600 text-white" : "text-slate-400 hover:text-slate-200"
             }`}
           >

@@ -23,7 +23,7 @@ export default function VoteButtons({ myVote, upvoteCount, downvoteCount, onVote
           type="button"
           onClick={() => onVote("up")}
           disabled={disabled}
-          className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+          className={`flex items-center gap-1.5 rounded-full border px-4 py-3 text-sm font-medium transition-colors ${
             disabled
               ? "cursor-not-allowed border-white/5 bg-white/[0.02] text-slate-500"
               : myVote === "up"
@@ -45,7 +45,7 @@ export default function VoteButtons({ myVote, upvoteCount, downvoteCount, onVote
           type="button"
           onClick={() => onVote("down")}
           disabled={disabled}
-          className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+          className={`flex items-center gap-1.5 rounded-full border px-4 py-3 text-sm font-medium transition-colors ${
             disabled
               ? "cursor-not-allowed border-white/5 bg-white/[0.02] text-slate-500"
               : myVote === "down"

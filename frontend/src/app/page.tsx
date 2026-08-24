@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 
-import { getAuthErrorMessage } from "@/api/auth";
+import { getAuthErrorMessage, isAiInterpretRateLimited } from "@/api/auth";
 import {
   buildDreamOriginalContent,
   getExplorerCount,
@@ -115,6 +115,9 @@ export default function HomePage() {
       // 세션 스토리지를 못 읽으면 그냥 평소처럼 밝은 화면으로 시작한다.
     }
     if (!flagged) return;
+    // sessionStorage는 브라우저 전용 외부 시스템이라 마운트 이후 effect에서만 읽을 수 있고,
+    // 그 결과(flagged)에 반응하는 setState도 자연히 여기서만 가능하다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage(외부 시스템) 조회 결과에 반응
     setNightSkyRevealing(true);
     setIsNightSkyVisible(true);
     const revealTimer = window.setTimeout(() => setIsNightSkyVisible(false), 30);
@@ -175,8 +178,11 @@ export default function HomePage() {
     };
   }, []);
 
-  // 별 입자는 서버/클라이언트 렌더 결과가 달라지는 걸 피하려고 마운트 이후에만 생성한다.
+  // 별 입자는 서버/클라이언트 렌더 결과가 달라지는 걸 피하려고 마운트 이후에만 생성한다 -
+  // Math.random()도 Date와 마찬가지로 빌드 시점과 하이드레이션 시점에 서로 다른 값이 나와,
+  // 렌더 중 바로 계산하면 정적 export HTML과 어긋난다.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 하이드레이션 불일치 방지용, 렌더 중 계산 불가
     setStars(
       Array.from({ length: 60 }, (_, i) => ({
         id: i,
@@ -232,8 +238,14 @@ export default function HomePage() {
       // 로딩도 끝낸 상태라 에러 메시지를 띄우거나 모달을 다시 여는 등의 후처리가 필요 없다.
       const isAborted = error instanceof Error && error.name === "CanceledError";
       if (!isAborted) {
-        setHeroErrorMessage(getAuthErrorMessage(error));
         setIsHeroModalOpen(false);
+        // 비로그인 유저가 하루 무료 한도(1회)를 다 쓴 경우 - 일반 에러 문구 대신 로그인하면
+        // 하루 3회로 늘어난다는 걸 안내하는 모달로 자연스럽게 이어간다.
+        if (!isAuthenticated && isAiInterpretRateLimited(error)) {
+          openLoginModal({ triggerSource: "ai_limit" });
+        } else {
+          setHeroErrorMessage(getAuthErrorMessage(error));
+        }
       }
     } finally {
       setIsHeroLoading(false);

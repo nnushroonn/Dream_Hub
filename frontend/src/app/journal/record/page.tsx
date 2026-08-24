@@ -22,8 +22,11 @@ export default function JournalRecordPage() {
   const [initialDate, setInitialDate] = useState<string | undefined>(undefined);
 
   useEffect(() => {
+    // window.location은 정적 export 빌드(prerender) 시점엔 존재하지 않아 렌더 중에는
+    // 읽을 수 없다 - 마운트 이후 effect에서만 쿼리스트링을 파싱할 수 있다.
     const params = new URLSearchParams(window.location.search);
     const dateParam = params.get("date");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- window.location(외부 시스템) 파싱 결과에 반응
     if (dateParam) setInitialDate(dateParam);
   }, []);
 

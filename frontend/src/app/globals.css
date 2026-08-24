@@ -221,6 +221,12 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  /* 한글은 띄어쓰기 단위가 "단어"인데 기본 word-break는 한 글자만 다음 줄로 넘기는 식으로도
+     끊어버린다("매거진" -> "매거"/"진") - keep-all로 어절 단위 줄바꿈을 기본값으로 삼는다.
+     너무 긴 단일 토큰(URL 등 공백 없는 문자열)까지 keep-all이 막지는 않도록 overflow-wrap을
+     같이 둬서, 그런 경우에만 컨테이너 폭에서 강제로 줄바꿈되게(가로 스크롤 대신) 한다. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* 커뮤니티 상징 키워드 가로 필터 바처럼, 스크롤은 되지만 스크롤바는 안 보였으면 하는 곳에 쓴다. */

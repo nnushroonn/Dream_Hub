@@ -182,7 +182,10 @@ export default function CommunityWritePage() {
     // 들어온 비로그인 유저는, 페이지 이동 대신 아래 렌더 분기의 PreviewGateway로 안내한다.
     // 로그인에 성공해 isAuthenticated가 true로 바뀌면 이 effect가 다시 돌면서 자연스럽게 이어진다.
     if (!isAuthenticated) return;
+    // window.location은 정적 export 빌드(prerender) 시점엔 존재하지 않아 렌더 중에는
+    // 읽을 수 없다 - 마운트 이후 effect에서만 쿼리스트링을 파싱할 수 있다.
     const params = new URLSearchParams(window.location.search);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- window.location(외부 시스템) 파싱 결과에 반응
     setWriteType(params.get("type") === "dream" ? "dream" : "board");
     listDreams()
       .then(setSavedDreamEntries)
@@ -229,7 +232,10 @@ export default function CommunityWritePage() {
     setDreamContentType(target.entry_type === "emotion" ? "diary" : "dream");
     setShareDreamId(target.id);
     setShareDreamTitle(dreamDisplayTitle(target));
-    setDreamTags(target.tags);
+    // target.tags는 서버에서 온 원본 기록의 태그라 과거 AI 자동 태그 시절 "#"이 이미 붙은 채로
+    // 저장된 레거시 데이터가 섞여 있을 수 있다 - dreamTags/TagInput의 불변식("#" 없는 순수
+    // 텍스트만)을 지키려면 여기서도 위 suggestedDreamTags와 동일하게 벗겨서 담아야 한다.
+    setDreamTags(target.tags.map((tag) => tag.replace(/^#+/, "")));
   }, [myPrivateDreams]);
 
   // 정원 꽃 상세 모달의 "🌐 공유하기"(?contentType=flower&seedId=)로 넘어온 경우, 그 꽃을
@@ -536,7 +542,7 @@ export default function CommunityWritePage() {
           type="button"
           onClick={handleHeaderBack}
           aria-label="뒤로 가기"
-          className="shrink-0 text-slate-400 transition-colors hover:text-white"
+          className="-m-2.5 shrink-0 p-2.5 text-slate-400 transition-colors hover:text-white"
         >
           <ChevronLeft className="h-6 w-6" />
         </button>
@@ -852,7 +858,8 @@ export default function CommunityWritePage() {
                           onClick={() => {
                             setShareDreamId(entry.id);
                             setShareDreamTitle(dreamDisplayTitle(entry));
-                            setDreamTags(entry.tags);
+                            // 위 프리필 effect와 동일한 이유로 "#"을 벗겨서 담는다.
+                            setDreamTags(entry.tags.map((tag) => tag.replace(/^#+/, "")));
                           }}
                           className={`w-full rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors ${
                             shareDreamId === entry.id

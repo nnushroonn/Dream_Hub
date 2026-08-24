@@ -83,7 +83,10 @@ export default function CommunityPage() {
   const [tab, setTab] = useState<Tab>("dream");
 
   const [dreams, setDreams] = useState<DreamFeedEntry[]>([]);
-  const [isLoadingDreams, setIsLoadingDreams] = useState(true);
+  // "지금 dreams가 현재 dreamQuery의 결과인가"로 로딩 상태를 파생시킨다 - dreamQuery가
+  // 바뀔 때마다(참조가 매번 새로 만들어지므로) 자동으로 로딩 상태가 되고, fetch가 끝나면
+  // (성공/실패 상관없이) loadedDreamQuery가 dreamQuery를 따라잡아 자동으로 풀린다.
+  const [loadedDreamQuery, setLoadedDreamQuery] = useState<PostListQuery | null>(null);
   const [dreamTotalPages, setDreamTotalPages] = useState(1);
   // 자유 광장과 동일한 쿼리 구조(PostListQuery)를 그대로 쓴다 - 두 탭의 검색/정렬/태그 필터 UI를
   // 공통 컴포넌트(CommunitySearchBar/CommunitySortChips/CommunityTagFilterBar)로 통일하기 위함.
@@ -96,7 +99,9 @@ export default function CommunityPage() {
   const [isDeletingDream, setIsDeletingDream] = useState(false);
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
-  const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  // dreamQuery와 동일한 이유로, isLoadingPosts도 "loadedPostQuery가 postQuery를
+  // 따라잡았는가"로 파생시킨다.
+  const [loadedPostQuery, setLoadedPostQuery] = useState<PostListQuery | null>(null);
   const [postTotalPages, setPostTotalPages] = useState(1);
   // 검색/정렬/기간/페이지를 하나로 묶은 쿼리 상태 - 자유 광장 목록 fetch는 이 객체 하나에만 의존한다.
   const [postQuery, setPostQuery] = useState<PostListQuery>(DEFAULT_POST_QUERY);
@@ -122,9 +127,11 @@ export default function CommunityPage() {
   };
 
   useEffect(() => {
-    // 글쓰기 페이지에서 게시 후 돌아올 때 ?tab=board|dream으로 어느 탭에 있었는지 알려준다 -
-    // 없으면(첫 진입) 기존처럼 무의식 피드가 기본 탭이다.
+    // window.location은 정적 export 빌드(prerender) 시점엔 존재하지 않아 렌더 중에는
+    // 읽을 수 없다 - 글쓰기 페이지에서 게시 후 돌아올 때 ?tab=board|dream으로 어느 탭에
+    // 있었는지 알려준다(없으면 첫 진입, 기존처럼 무의식 피드가 기본 탭).
     const params = new URLSearchParams(window.location.search);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- window.location(외부 시스템) 파싱 결과에 반응
     if (params.get("tab") === "board") setTab("board");
 
     getTopCommunityTags({ source: "board" })
@@ -137,27 +144,41 @@ export default function CommunityPage() {
 
   // 쿼리 상태가 바뀔 때마다(최초 진입 포함) 서버에 다시 요청한다.
   useEffect(() => {
-    setIsLoadingPosts(true);
+    let ignore = false;
     getCommunityPosts(postQuery)
       .then((res) => {
+        if (ignore) return;
         setPosts(res.items);
         setPostTotalPages(res.total_pages);
       })
       .catch(() => {})
-      .finally(() => setIsLoadingPosts(false));
+      .finally(() => {
+        if (!ignore) setLoadedPostQuery(postQuery);
+      });
+    return () => {
+      ignore = true;
+    };
   }, [postQuery]);
+  const isLoadingPosts = loadedPostQuery !== postQuery;
 
   // 꿈 게시판도 자유 광장과 동일하게 쿼리 상태가 바뀔 때마다(최초 진입 포함) 서버에 다시 요청한다.
   useEffect(() => {
-    setIsLoadingDreams(true);
+    let ignore = false;
     getDreamFeed(dreamQuery)
       .then((res) => {
+        if (ignore) return;
         setDreams(res.items);
         setDreamTotalPages(res.total_pages);
       })
       .catch(() => {})
-      .finally(() => setIsLoadingDreams(false));
+      .finally(() => {
+        if (!ignore) setLoadedDreamQuery(dreamQuery);
+      });
+    return () => {
+      ignore = true;
+    };
   }, [dreamQuery]);
+  const isLoadingDreams = loadedDreamQuery !== dreamQuery;
 
   // 새 검색을 실행할 때마다 페이지를 1로 되돌린다 - 이전 페이지에 머문 채 결과셋만 바뀌면
   // "3페이지인데 글이 하나도 없다"처럼 혼란스러운 상태가 될 수 있다.

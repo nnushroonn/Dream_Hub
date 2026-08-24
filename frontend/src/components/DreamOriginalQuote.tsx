@@ -22,7 +22,7 @@ export default function DreamOriginalQuote({ content }: DreamOriginalQuoteProps)
         <button
           type="button"
           onClick={() => setIsExpanded((prev) => !prev)}
-          className="text-[11px] not-italic text-purple-300/70 transition-colors hover:text-purple-200"
+          className="-my-3.5 py-3.5 text-[11px] not-italic text-purple-300/70 transition-colors hover:text-purple-200"
         >
           {isExpanded ? "접기 ▲" : "더보기 ▼"}
         </button>

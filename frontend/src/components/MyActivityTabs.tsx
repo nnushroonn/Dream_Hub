@@ -37,10 +37,7 @@ export default function MyActivityTabs() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setIsLoading(false);
-      return;
-    }
+    if (!isAuthenticated) return;
     Promise.all([listDreams(), getMyPosts(), getMyLikedDreams()])
       .then(([dreams, posts, liked]) => {
         setSharedDreams(dreams.filter((entry) => entry.is_public));
@@ -50,6 +47,11 @@ export default function MyActivityTabs() {
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, [isAuthenticated]);
+
+  // 로그인 상태가 아니면 애초에 요청 자체를 안 보내므로, "로딩 중"은 로그인 상태에서만
+  // 의미가 있다 - 파생 값으로 계산하면 effect 안에서 별도로 isLoading을 false로 되돌릴
+  // 필요가 없다(로그아웃 후 재로그인 시 이전 fetch의 isLoading=false가 남아있던 문제도 함께 없앤다).
+  const showLoading = isAuthenticated && isLoading;
 
   const tabs: { key: HistoryTab; label: string; count: number }[] = [
     { key: "shared", label: "🔮 내가 공유한 꿈일기", count: sharedDreams.length },
@@ -86,7 +88,7 @@ export default function MyActivityTabs() {
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-            {isLoading ? (
+            {showLoading ? (
               Array.from({ length: 4 }, (_, index) => (
                 <div key={index} className="h-24 animate-pulse rounded-xl border border-white/[0.08] bg-white/[0.03]" />
               ))

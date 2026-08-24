@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
-import { getAuthErrorMessage } from "@/api/auth";
+import { getAuthErrorMessage, isAiInterpretRateLimited } from "@/api/auth";
 import {
   buildDreamOriginalContent,
   requestAiInterpretation,
@@ -117,7 +117,19 @@ export default function QuickInterpretModal({ onClose, variant = "modal" }: Quic
       setInterpretation(result);
     } catch (error) {
       const isAborted = error instanceof Error && error.name === "CanceledError";
-      if (!isAborted) setErrorMessage(getAuthErrorMessage(error));
+      if (!isAborted) {
+        // survey는 이미 위에서 채워져(nextSurvey) 로딩 화면으로 넘어가 있으므로, 에러가 나면
+        // 폼으로 되돌려야 한다 - 그러지 않으면 interpretation이 끝내 채워지지 않아 로딩
+        // 화면에 갇힌다(정밀 모드의 handlePreciseComplete는 원래도 이렇게 되돌리고 있었다).
+        setSurvey(null);
+        // 비로그인 유저가 하루 무료 한도(1회)를 다 쓴 경우 - 일반 에러 문구 대신 로그인하면
+        // 하루 3회로 늘어난다는 걸 안내하는 모달로 자연스럽게 이어간다.
+        if (!isAuthenticated && isAiInterpretRateLimited(error)) {
+          openLoginModal({ triggerSource: "ai_limit" });
+        } else {
+          setErrorMessage(getAuthErrorMessage(error));
+        }
+      }
     } finally {
       setIsLoading(false);
     }
@@ -140,8 +152,14 @@ export default function QuickInterpretModal({ onClose, variant = "modal" }: Quic
       });
       setInterpretation(result);
     } catch (error) {
-      setErrorMessage(getAuthErrorMessage(error));
       setSurvey(null);
+      // 비로그인 유저가 하루 무료 한도(1회)를 다 쓴 경우 - 일반 에러 문구 대신 로그인하면
+      // 하루 3회로 늘어난다는 걸 안내하는 모달로 자연스럽게 이어간다.
+      if (!isAuthenticated && isAiInterpretRateLimited(error)) {
+        openLoginModal({ triggerSource: "ai_limit" });
+      } else {
+        setErrorMessage(getAuthErrorMessage(error));
+      }
     } finally {
       setIsLoading(false);
     }

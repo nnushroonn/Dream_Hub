@@ -8,7 +8,8 @@ export type LoginModalTriggerSource =
   | "mypage"
   | "journal"
   | "save"
-  | "garden";
+  | "garden"
+  | "ai_limit";
 
 interface LoginModalState {
   isOpen: boolean;

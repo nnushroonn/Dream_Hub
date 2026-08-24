@@ -10,18 +10,15 @@ type VerifyStatus = "loading" | "success" | "error";
 function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // 토큰 유무는 URL에서 렌더 중 바로 알 수 있는 값이라, "토큰 없음" 케이스는 effect를
+  // 거칠 필요 없이 초기 상태로 바로 계산한다 - effect는 실제 비동기 API 호출(있는 경우)만 맡는다.
+  const token = searchParams.get("token");
 
-  const [status, setStatus] = useState<VerifyStatus>("loading");
-  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<VerifyStatus>(token ? "loading" : "error");
+  const [message, setMessage] = useState(token ? "" : "인증 토큰이 없습니다. 이메일의 링크를 다시 확인해 주세요.");
 
   useEffect(() => {
-    const token = searchParams.get("token");
-    if (!token) {
-      setStatus("error");
-      setMessage("인증 토큰이 없습니다. 이메일의 링크를 다시 확인해 주세요.");
-      return;
-    }
-
+    if (!token) return;
     verifyEmail(token)
       .then((res) => {
         setStatus("success");
@@ -33,7 +30,7 @@ function VerifyEmailContent() {
         setMessage(getAuthErrorMessage(err));
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [token]);
 
   return (
     <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 dark:bg-black">

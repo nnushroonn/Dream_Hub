@@ -31,9 +31,14 @@ export default function MonthlyDashboardPanel() {
   const openLoginModal = useLoginModalStore((state) => state.open);
   const entries = useSavedDreamsStore((state) => state.entries);
 
-  // 서버/클라이언트 렌더 결과가 달라지는 걸 피하려고 마운트 이후에만 오늘 날짜를 채운다.
+  // 서버/클라이언트 렌더 결과가 달라지는 걸 피하려고 마운트 이후에만 오늘 날짜를 채운다 -
+  // 정적 export라 빌드 시점에 한 번 굳어진 HTML이 방문자마다 재사용되므로, 렌더 중에 바로
+  // new Date()를 계산하면 그 빌드 시점 날짜가 하이드레이션 시점(방문자의 실제 "오늘")과
+  // 어긋난다. React가 공식적으로 권장하는 "마운트 후에만 채우기" 패턴이라 파생 상태로
+  // 대체할 수 없다.
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 하이드레이션 불일치 방지용, 렌더 중 계산 불가
     setToday(new Date());
   }, []);
 

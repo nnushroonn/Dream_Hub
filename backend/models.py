@@ -43,6 +43,17 @@ class NotificationTargetType(str, enum.Enum):
     GARDEN = "GARDEN"  # 무의식의 정원 - target_id는 이슬을 준 사람(actor)의 user_id
 
 
+class ReportTargetType(str, enum.Enum):
+    POST = "POST"  # 자유 광장 글(CommunityPost)
+    DREAM = "DREAM"  # 무의식 피드 꿈 기록(DreamEntry)
+
+
+class ReportStatus(str, enum.Enum):
+    PENDING = "PENDING"  # 관리자 미검토
+    RESOLVED = "RESOLVED"  # 검토 완료 - 콘텐츠를 삭제하는 등 조치함
+    DISMISSED = "DISMISSED"  # 검토 완료 - 조치 없이 기각(오신고 등)
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -63,6 +74,13 @@ class User(Base):
     # 커뮤니티 닉네임 호버 카드(무의식 은하 프로필)에 씨앗 비율/뱃지 스냅샷을 공개할지 여부.
     # 기본은 비공개 - 유저가 마이페이지에서 직접 켜야만 다른 유저에게 집계 데이터가 보인다.
     is_galaxy_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 관리자 모드 - 이 값이 true인 계정만 /admin 화면과 그 아래 관리자 전용 API에 접근할 수
+    # 있다. 가입 폼/일반 API로는 절대 켤 수 없고, DB에서 직접 켜야 한다(routers/auth.py의
+    # get_current_admin_user 참고).
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    # 관리자가 정지시킨 계정 - true면 로그인 자체가 거부되고(is_verified 검사와 같은 자리),
+    # 이미 로그인해 있던 세션도 다음 요청부터 get_current_user에서 즉시 막힌다.
+    is_suspended: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     # 9단계 우주 티어 레벨 시스템(leveling.py)의 누적 경험치 - 레벨/티어는 이 값 하나에서
     # 항상 파생 계산하고 별도로 저장하지 않는다. 실제 증감은 leveling.award_xp()를 통해서만
     # 일어난다(XpAward 원장과 함께 트랜잭션으로 갱신).
@@ -641,3 +659,30 @@ class Notification(Base):
     )
 
     actor: Mapped[Optional["User"]] = relationship(foreign_keys=[actor_id])
+
+
+class Report(Base):
+    """커뮤니티 "🚨 신고하기" 버튼이 만드는 신고 - Notification과 같은 방식으로 target_type +
+    target_id만으로 대상 글을 느슨하게 가리킨다(POST -> CommunityPost.id, DREAM ->
+    DreamEntry.id). 실제 하드 FK를 안 거는 이유도 동일(두 테이블을 동시에 걸 수 없음).
+    관리자 화면(/admin/reports)이 이 테이블을 검토 큐로 쓴다."""
+
+    __tablename__ = "reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    target_type: Mapped[ReportTargetType] = mapped_column(SAEnum(ReportTargetType, name="report_target_type"), nullable=False)
+    target_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # 신고자 - 탈퇴해도 신고 기록 자체(내용 검토 이력)는 남기고 이 값만 비운다.
+    reporter_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # 신고 사유 - 지금 프론트는 자유 입력 없이 버튼 하나로 바로 접수하므로 대부분 NULL이다.
+    # 나중에 사유 선택/직접입력 UI가 붙을 걸 대비해 필드만 미리 열어둔다.
+    reason: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    status: Mapped[ReportStatus] = mapped_column(
+        SAEnum(ReportStatus, name="report_status"), nullable=False, default=ReportStatus.PENDING, server_default=ReportStatus.PENDING.value
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    reporter: Mapped[Optional["User"]] = relationship(foreign_keys=[reporter_id])
+    resolved_by: Mapped[Optional["User"]] = relationship(foreign_keys=[resolved_by_id])

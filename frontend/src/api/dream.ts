@@ -755,6 +755,16 @@ export async function deleteDreamComment(dreamId: number, commentId: number): Pr
   await api.delete(`/api/community/dream-feed/${dreamId}/comments/${commentId}`);
 }
 
+// 커뮤니티 상세(꿈 게시판/자유 게시판)의 "🚨 신고하기" 버튼 - 관리자 화면(/admin/reports)의
+// 검토 큐로 들어간다. POST -> CommunityPost.id, DREAM -> DreamEntry.id.
+export async function reportContent(targetType: "POST" | "DREAM", targetId: number): Promise<{ message: string }> {
+  const { data } = await api.post<{ message: string }>("/api/community/report", {
+    target_type: targetType,
+    target_id: targetId,
+  });
+  return data;
+}
+
 export interface CalendarDay {
   date: string;
   emotion: string | null;

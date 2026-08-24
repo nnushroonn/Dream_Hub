@@ -70,8 +70,10 @@ export default function CommentSection({
   highlightCommentId = null,
 }: CommentSectionProps) {
   const [comments, setComments] = useState<CommunityComment[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
+  // "열려 있는데 아직 못 불러왔다"로 로딩 상태를 파생시킨다 - hasLoaded가 fetch 완료
+  // 시점(성공/실패 무관)에 항상 true로 바뀌므로 별도 isLoading state가 필요 없다.
+  const isLoading = isOpen && !hasLoaded;
   // 알림에서 들어왔을 때 딱 한 번만 스크롤+하이라이트하기 위한 가드 - highlightedId가 다시
   // null로 꺼진 뒤에도 댓글 목록이 갱신될 때마다 재실행되는 걸 막는다.
   const hasScrolledToHighlightRef = useRef(false);
@@ -98,14 +100,12 @@ export default function CommentSection({
   // 처음 펼쳐질 때 딱 한 번만 댓글 목록을 불러온다 - 닫았다 다시 열어도 재요청하지 않는다.
   useEffect(() => {
     if (!isOpen || hasLoaded) return;
-    setIsLoading(true);
     fetchComments(targetId)
       .then((result) => {
         setComments(result);
       })
       .catch(() => {})
       .finally(() => {
-        setIsLoading(false);
         setHasLoaded(true);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -123,13 +123,15 @@ export default function CommentSection({
   }, [hasLoaded, comments.length]);
 
   // 댓글이 로드되면 알림에서 지정한 댓글로 스크롤 이동 + 잠깐 하이라이트한다. 한 번 실행되면
-  // ref 가드가 다시 실행을 막아, 이후 새 댓글이 달려 목록이 갱신돼도 재스크롤되지 않는다.
+  // ref 가드가 다시 실행을 막아, 이후 새 댓글이 달려 목록이 갱신돼도 재스크롤되지 않는다 -
+  // document.getElementById로 실제 DOM 노드를 찾아 스크롤시키는 명령형 동작이라 파생 불가.
   useEffect(() => {
     if (!highlightCommentId || !hasLoaded || hasScrolledToHighlightRef.current) return;
     const el = document.getElementById(`comment-${highlightCommentId}`);
     if (!el) return;
     hasScrolledToHighlightRef.current = true;
     el.scrollIntoView({ behavior: "smooth", block: "center" });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- DOM 스크롤과 함께 1회성으로 실행되는 명령형 동작(ref로 재실행 방지)
     setHighlightedId(highlightCommentId);
     const timer = setTimeout(() => setHighlightedId(null), 2500);
     return () => clearTimeout(timer);

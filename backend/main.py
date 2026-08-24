@@ -11,6 +11,7 @@ import models  # noqa: F401 - Base.metadata에 테이블 정의를 등록하기 
 from csrf import CsrfProtectionMiddleware
 from database import Base, SessionLocal, engine, get_settings, redis_client
 from routers import (
+    admin,
     ai_interpretation,
     auth,
     community,
@@ -113,6 +114,7 @@ app.include_router(trends.router)
 app.include_router(user.router)
 app.include_router(notifications.router)
 app.include_router(garden.router)
+app.include_router(admin.router)
 
 
 @app.get("/")

@@ -31,13 +31,22 @@ logger = logging.getLogger(__name__)
 # --- AI 해몽 레이트리밋 - 실제 Claude API를 호출하는 비용이 드는 경로라, 로그인 브루트포스
 # 방어와 같은 Redis INCR+TTL 패턴을 그대로 재사용한다. dream-interpretation과
 # dream-interpretation-quick 두 엔드포인트가 같은 카운터를 공유한다(번갈아 호출해서 사실상
-# 한도를 두 배로 늘리는 걸 막기 위해) - "10분 동안 이 사용자/IP가 실제 Claude 호출을 몇 번
+# 한도를 두 배로 늘리는 걸 막기 위해) - "N분/N시간 동안 이 사용자/IP가 실제 Claude 호출을 몇 번
 # 했는가" 하나만 센다. 로그인 사용자는 user_id 기준(정상적인 하루 사용 패턴엔 넉넉하게),
 # 비로그인 미리보기는 IP 기준으로 더 빡빡하게 잡는다 - 회원가입 없이도 두드릴 수 있는
 # 경로라 남용 위험이 더 크다.
+#
+# 버스트 한도(10분)만으로는 10분 창을 계속 기다리기만 하면 하루 누적 호출 수를 사실상
+# 무제한으로 늘릴 수 있어, 같은 INCR+EXPIRE 패턴으로 창 길이만 하루(86400초)로 늘린 일일
+# 한도를 옆에 나란히 둔다 - 두 한도 중 하나라도 걸리면 막는다. 버스트/일일 모두 같은
+# user_id/IP 키 스킴을 공유하므로 두 엔드포인트가 카운터를 공유하는 성질도 그대로 이어진다.
 AI_INTERPRET_USER_LIMIT = 10
 AI_INTERPRET_ANON_LIMIT = 3
 AI_INTERPRET_WINDOW_SECONDS = 600  # 10분
+
+AI_INTERPRET_USER_DAILY_LIMIT = 3
+AI_INTERPRET_ANON_DAILY_LIMIT = 1
+AI_INTERPRET_DAILY_WINDOW_SECONDS = 86400  # 24시간
 
 
 def _ai_interpret_rate_limit_key(current_user: User | None, client_ip: str) -> tuple[str, int]:
@@ -46,14 +55,42 @@ def _ai_interpret_rate_limit_key(current_user: User | None, client_ip: str) -> t
     return f"ai:interpret:ip:{client_ip}", AI_INTERPRET_ANON_LIMIT
 
 
+def _ai_interpret_daily_rate_limit_key(current_user: User | None, client_ip: str) -> tuple[str, int]:
+    if current_user is not None:
+        return f"ai:interpret:daily:user:{current_user.id}", AI_INTERPRET_USER_DAILY_LIMIT
+    return f"ai:interpret:daily:ip:{client_ip}", AI_INTERPRET_ANON_DAILY_LIMIT
+
+
+def _daily_limit_exceeded(current_user: User | None) -> HTTPException:
+    """일일 한도 초과 전용 메시지 - 버스트 한도(_too_many_requests의 "잠시 후 다시
+    시도해 주세요")와 달리, 하루 예산을 다 썼다는 걸 명확히 알려준다. 비로그인은 로그인하면
+    한도가 늘어난다는 걸(1회 -> 3회) 함께 안내해, 프론트가 이 문구를 보고 로그인/회원가입
+    유도 UI(LoginModal의 ai_limit trigger)를 띄울 근거로 삼는다."""
+    if current_user is None:
+        detail = (
+            f"오늘 무료로 볼 수 있는 AI 해몽을 다 썼어요. 로그인하면 하루 "
+            f"{AI_INTERPRET_USER_DAILY_LIMIT}회까지 이용할 수 있어요."
+        )
+    else:
+        detail = f"오늘의 AI 해몽 횟수({AI_INTERPRET_USER_DAILY_LIMIT}회)를 모두 사용했어요. 내일 다시 만나요."
+    return HTTPException(status_code=429, detail=detail)
+
+
 def _enforce_ai_interpret_rate_limit(
     redis_client: redis_lib.Redis, current_user: User | None, request: Request
 ) -> None:
     client_ip = request.client.host if request.client else "unknown"
-    key, limit = _ai_interpret_rate_limit_key(current_user, client_ip)
-    if _rate_limit_exceeded(redis_client, key, limit):
+    burst_key, burst_limit = _ai_interpret_rate_limit_key(current_user, client_ip)
+    daily_key, daily_limit = _ai_interpret_daily_rate_limit_key(current_user, client_ip)
+    # 버스트/일일 중 어느 쪽이 걸렸는지에 따라 메시지를 구분한다 - 일일 한도는 "오늘은 여기까지"
+    # 라는 확정적 상태라 프론트가 로그인 유도 문구로 이어받을 수 있지만, 버스트는 잠시 후
+    # 다시 시도하면 그만이라 굳이 회원가입을 권할 이유가 없다.
+    if _rate_limit_exceeded(redis_client, burst_key, burst_limit):
         raise _too_many_requests()
-    _record_rate_limit_attempt(redis_client, key, AI_INTERPRET_WINDOW_SECONDS)
+    if _rate_limit_exceeded(redis_client, daily_key, daily_limit):
+        raise _daily_limit_exceeded(current_user)
+    _record_rate_limit_attempt(redis_client, burst_key, AI_INTERPRET_WINDOW_SECONDS)
+    _record_rate_limit_attempt(redis_client, daily_key, AI_INTERPRET_DAILY_WINDOW_SECONDS)
 
 # --- 선언부: 모델 / 응답 스키마 / 시스템 프롬프트 템플릿 --------------------
 

@@ -9,7 +9,7 @@ import logging
 
 import anthropic
 import redis
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,12 +17,33 @@ from sqlalchemy.orm import Session
 from database import get_db, get_redis, get_settings
 from models import DreamDictionaryCache, DreamStatus, DreamEntry, StandardKeyword
 from routers.ai_interpretation import EXPERT_MATRIX_BLOCK
+from routers.auth import _rate_limit_exceeded, _record_rate_limit_attempt, _too_many_requests
 from routers.trends import record_search_trend
 
 router = APIRouter(prefix="/api/dictionary", tags=["dictionary"])
 logger = logging.getLogger(__name__)
 
 MODEL = "claude-opus-4-8"
+
+# --- 꿈사전 일일 레이트리밋 - search/parse-query/scenarios/scenario-detail 4개 엔드포인트가
+# 모두 IP 기준 카운터 하나를 공유한다. AI 해몽의 두 엔드포인트가 카운터를 공유하는 것과 같은
+# 이유: 엔드포인트별로 따로 세면 하나를 소진해도 다른 엔드포인트로 갈아타 사실상 4배로 한도를
+# 우회할 수 있다. 인증이 없는 완전 공개 경로라 user_id가 아니라 IP를 기준으로 삼는다.
+#
+# 이 함수는 "캐시 미스로 실제 Claude를 호출하기 직전"에만 호출해야 한다 - _get_cached()가
+# 히트를 반환하는 경로에서는 절대 호출하지 않는다(인기 키워드 재검색이 무료인 기존 동작을
+# 해치지 않기 위함). parse-query는 애초에 DB 캐시 자체가 없어(모든 요청이 파싱 대상 문장이
+# 제각각이라 캐시 재사용 여지가 낮다) 항상 호출한다.
+DICTIONARY_DAILY_LIMIT = 10
+DICTIONARY_DAILY_WINDOW_SECONDS = 86400  # 24시간
+
+
+def _enforce_dictionary_daily_limit(redis_client: redis.Redis, request: Request) -> None:
+    client_ip = request.client.host if request.client else "unknown"
+    key = f"dict:daily:ip:{client_ip}"
+    if _rate_limit_exceeded(redis_client, key, DICTIONARY_DAILY_LIMIT):
+        raise _too_many_requests()
+    _record_rate_limit_attempt(redis_client, key, DICTIONARY_DAILY_WINDOW_SECONDS)
 
 RESPONSE_SCHEMA = {
     "type": "object",
@@ -252,12 +273,14 @@ SCENARIO_DETAIL_SCHEMA = {
     "additionalProperties": False,
 }
 
-SCENARIO_DETAIL_PROMPT_TEMPLATE = """당신은 한국 전통 꿈해몽과 현대 심리학에 모두 정통한 '꿈해몽 사전' 편찬자입니다.
-유저가 사전에서 '{keyword}' 항목을 펼쳐보다가, 그 안의 구체적인 시나리오 하나를 골라 더 깊은 풀이를
-요청했습니다.
-
-[검색 키워드] {keyword}
-[선택한 구체적 시나리오] {scenario_title}
+# 토큰 비용 절감을 위해 프롬프트를 두 블록으로 나눈다: STATIC은 어떤 키워드/시나리오가 오든
+# 항상 동일해 Claude 프롬프트 캐싱(cache_control: ephemeral) 대상이 되고, DATA_TEMPLATE만
+# keyword/scenario_title로 매 요청 새로 채워진다. (원래는 하나의 문자열에 keyword/scenario_title이
+# expert_matrix와 뒤섞여 있어 캐싱이 전혀 적용되지 않았다 - _request_entry의 STATIC/DATA
+# 분리와 동일한 패턴으로 맞춘다.)
+SCENARIO_DETAIL_SYSTEM_STATIC = """당신은 한국 전통 꿈해몽과 현대 심리학에 모두 정통한 '꿈해몽 사전' 편찬자입니다.
+유저가 사전에서 어떤 키워드 항목을 펼쳐보다가, 그 안의 구체적인 시나리오 하나를 골라 더 깊은 풀이를
+요청했습니다. 곧이어 [검색 키워드]와 [선택한 구체적 시나리오]가 주어집니다.
 
 {expert_matrix}
 
@@ -273,6 +296,9 @@ SCENARIO_DETAIL_PROMPT_TEMPLATE = """당신은 한국 전통 꿈해몽과 현대
 5. advice는 점술적 지시가 아니라, 이 꿈이 현실의 어떤 부분을 돌아보게 하는지에 대한 담백한 조언으로
    작성하세요.
 6. 엄격한 응답 포맷: 서론/결론 없이 반드시 지정된 JSON 스키마 구조로만 답변하세요."""
+
+SCENARIO_DETAIL_DATA_TEMPLATE = """[검색 키워드] {keyword}
+[선택한 구체적 시나리오] {scenario_title}"""
 
 SCENARIO_DETAIL_FALLBACK = {
     "mood": "neutral",
@@ -509,9 +535,17 @@ def _request_scenario_detail(keyword: str, scenario_title: str) -> dict | None:
         response = client.messages.create(
             model=MODEL,
             max_tokens=1024,
-            system=SCENARIO_DETAIL_PROMPT_TEMPLATE.format(
-                keyword=keyword, scenario_title=scenario_title, expert_matrix=EXPERT_MATRIX_BLOCK
-            ),
+            system=[
+                {
+                    "type": "text",
+                    "text": SCENARIO_DETAIL_SYSTEM_STATIC.format(expert_matrix=EXPERT_MATRIX_BLOCK),
+                    "cache_control": {"type": "ephemeral"},
+                },
+                {
+                    "type": "text",
+                    "text": SCENARIO_DETAIL_DATA_TEMPLATE.format(keyword=keyword, scenario_title=scenario_title),
+                },
+            ],
             output_config={"format": {"type": "json_schema", "schema": SCENARIO_DETAIL_SCHEMA}},
             messages=[{"role": "user", "content": "위 시나리오의 심층 해몽을 JSON으로 작성해 주세요."}],
         )
@@ -531,6 +565,7 @@ def _request_scenario_detail(keyword: str, scenario_title: str) -> dict | None:
 @router.post("/search", response_model=DictionaryEntry)
 def search_dictionary(
     payload: SearchRequest,
+    request: Request,
     db: Session = Depends(get_db),
     redis_client: redis.Redis = Depends(get_redis),
 ) -> dict:
@@ -541,6 +576,7 @@ def search_dictionary(
     cache_key = f"search:{_normalize_cache_input(keyword)}"
     entry = _get_cached(db, cache_key)
     if entry is None:
+        _enforce_dictionary_daily_limit(redis_client, request)
         entry = _request_entry(keyword)
         if entry is not None:
             _store_cache(db, cache_key, entry)
@@ -555,6 +591,7 @@ def search_dictionary(
 @router.post("/parse-query", response_model=QueryParseResponse)
 def parse_dictionary_query(
     payload: QueryParseRequest,
+    request: Request,
     db: Session = Depends(get_db),
     redis_client: redis.Redis = Depends(get_redis),
 ) -> dict:
@@ -564,11 +601,19 @@ def parse_dictionary_query(
     if payload.record:
         _record_search(db, query)
         record_search_trend(redis_client, query)
+    # parse-query는 DB 캐시가 없어(요청마다 문장이 제각각이라 재사용 여지가 낮다) 항상
+    # 실제 Claude 호출로 이어진다 - 그래서 다른 3개와 달리 캐시 미스 분기 없이 바로 체크한다.
+    _enforce_dictionary_daily_limit(redis_client, request)
     return _parse_query(query)
 
 
 @router.post("/scenarios", response_model=ScenarioListResponse)
-def get_dictionary_scenarios(payload: ScenarioListRequest, db: Session = Depends(get_db)) -> dict:
+def get_dictionary_scenarios(
+    payload: ScenarioListRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
+) -> dict:
     keyword = payload.keyword.strip()
     if not keyword:
         return {"keyword": "", "scenarios": []}
@@ -579,6 +624,7 @@ def get_dictionary_scenarios(payload: ScenarioListRequest, db: Session = Depends
     if cached is not None:
         return {"keyword": keyword, "scenarios": cached["scenarios"]}
 
+    _enforce_dictionary_daily_limit(redis_client, request)
     scenarios = _request_scenarios(keyword, context)
     if scenarios is not None:
         _store_cache(db, cache_key, {"scenarios": scenarios})
@@ -588,7 +634,12 @@ def get_dictionary_scenarios(payload: ScenarioListRequest, db: Session = Depends
 
 
 @router.post("/scenario-detail", response_model=ScenarioDetailResponse)
-def get_scenario_detail(payload: ScenarioDetailRequest, db: Session = Depends(get_db)) -> dict:
+def get_scenario_detail(
+    payload: ScenarioDetailRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
+) -> dict:
     keyword = payload.keyword.strip()
     scenario_title = payload.scenario_title.strip()
     if not keyword or not scenario_title:
@@ -597,6 +648,7 @@ def get_scenario_detail(payload: ScenarioDetailRequest, db: Session = Depends(ge
     cache_key = f"detail:{_normalize_cache_input(keyword)}|{_normalize_cache_input(scenario_title)}"
     detail = _get_cached(db, cache_key)
     if detail is None:
+        _enforce_dictionary_daily_limit(redis_client, request)
         detail = _request_scenario_detail(keyword, scenario_title)
         if detail is not None:
             _store_cache(db, cache_key, detail)

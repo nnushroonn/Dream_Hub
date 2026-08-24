@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Menu, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { logoutUser } from "@/api/auth";
@@ -34,9 +35,40 @@ export default function NavBar() {
   const dirtyMessage = useUnsavedChangesStore((state) => state.message);
   const setDirty = useUnsavedChangesStore((state) => state.setDirty);
 
+  // 데스크톱 메인 nav가 이제 폭이 모자라면 줄바꿈된다(아래 <nav> 참고) - 로그인 상태(오른쪽
+  // 클러스터가 커짐)의 1024~1280px처럼 흔한 폭에서 실제로 2줄이 되면 sticky 헤더 자체의
+  // 높이가 달라진다. journal/mypage의 sticky 사이드바·탭바가 이 헤더 바로 아래 위치를
+  // top-24/top-16 같은 고정값으로 잡아 두고 있었는데, 헤더가 가변 높이가 된 이상 그 값들이
+  // 더는 못 믿을 근거라 실제 렌더된 헤더 높이를 CSS 변수(--nav-height)로 노출해 그 화면들이
+  // 참조하게 한다(ResizeObserver로 줄바꿈/뷰포트 변화 양쪽 다 잡는다).
+  const headerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    const setVar = () => {
+      document.documentElement.style.setProperty("--nav-height", `${header.offsetHeight}px`);
+    };
+    setVar();
+    const observer = new ResizeObserver(setVar);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
+
   // 작성 중인 폼(꿈 기록소 등)이 있는 상태로 헤더 메뉴를 눌렀을 때, 실제 이동 전에
   // 붙잡아 둘 목적지를 잠깐 담아두는 상태 - 커스텀 이탈 방지 모달의 확인 대상이다.
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  // 모바일 전용 메뉴 아코디언 열림 상태 - md: 미만에서는 6개 항목을 가로 스크롤 pill 대신
+  // 햄버거 버튼으로 접어 둔다(모바일 반응형 감사 🔴 항목: 스크롤 힌트 없이 메뉴 절반이
+  // 화면 밖으로 잘려 발견 자체가 안 되는 문제).
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // 관리자 계정에게만 "관리자" 항목을 덧붙인다 - 실제 접근 제어는 항상 AdminGuard/백엔드
+  // get_current_admin_user가 다시 하므로, 이건 순수 진입점 노출 여부일 뿐이다. 모바일
+  // 드로어는 세로 목록이라 7번째 항목이 더 붙어도 넉넉하지만, 데스크톱 가로 스크롤
+  // pill row는 1280px처럼 흔한 폭에서도 기존 6개만으로 이미 꽉 차 있었다(실측: 755px
+  // 콘텐츠 vs 589px 가용폭) - 여기에 7번째를 얹으면 스크롤 힌트도 없이 화면 밖으로
+  // 완전히 밀려나 관리자 본인에게도 안 보이는 문제가 있었다. 그래서 데스크톱은 이
+  // 목록에 얹지 않고, 아래 로그아웃 옆 항상 보이는 영역에 별도 아이콘 버튼으로 둔다.
+  const mobileNavItems = user?.is_admin ? [...NAV_ITEMS, { href: "/admin", label: "관리자", icon: "🛠️" }] : NAV_ITEMS;
 
   // 어느 화면(홈/꿈 기록소/커뮤니티/마이페이지)으로 들어오든 NavBar는 항상 렌더링되므로,
   // 여기서 로그인한 유저의 실제 꿈 기록을 동기화해 두면 홈 캘린더와 꿈 기록소 캘린더가
@@ -87,10 +119,24 @@ export default function NavBar() {
       });
   }, [isAuthenticated, router, upsertSavedDream]);
 
+  // 라우트가 바뀌면(뒤로가기 포함) 열려 있던 모바일 메뉴를 항상 접어 둔다 - 링크 클릭 시
+  // 닫는 것만으로는 브라우저 뒤로가기로 넘어온 경우를 놓친다.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pathname(외부 라우터 상태) 변경에 반응
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
+
   const guardedNavigate = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (!isDirty || href === pathname) return;
     event.preventDefault();
     setPendingHref(href);
+  };
+
+  // 모바일 메뉴 안의 링크 전용 - 실제 이동 여부(guardedNavigate가 이탈 방지 모달로 가로챌
+  // 수도 있음)와 무관하게 메뉴부터 접어, 모달과 메뉴가 동시에 떠 있지 않게 한다.
+  const handleMobileNavClick = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    setIsMobileMenuOpen(false);
+    guardedNavigate(event, href);
   };
 
   // httpOnly 쿠키는 JS가 직접 못 지우므로, 로그아웃은 이제 반드시 서버에 Set-Cookie(만료된
@@ -136,32 +182,51 @@ export default function NavBar() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-indigo-900/50 bg-[#0b0518]/80 backdrop-blur">
+    <header ref={headerRef} className="sticky top-0 z-40 border-b border-indigo-900/50 bg-[#0b0518]/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-nowrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
-        <Link
-          href="/"
-          onClick={(event) => guardedNavigate(event, "/")}
-          className="shrink-0 whitespace-nowrap text-lg font-semibold tracking-wide text-indigo-50"
-        >
-          🌙 Dream Hub
-        </Link>
+        <div className="flex shrink-0 items-center gap-1">
+          {/* md: 미만에서는 6개 항목이 가로 스크롤 pill로만 존재해 스크롤 힌트 없이 절반이
+              화면 밖으로 잘리던 문제가 있었다 - 햄버거로 접어 아래 아코디언 패널에서 전부
+              보여준다(모바일 반응형 감사 🔴 항목). */}
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen((open) => !open)}
+            aria-label={isMobileMenuOpen ? "메뉴 닫기" : "메뉴 열기"}
+            aria-expanded={isMobileMenuOpen}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-indigo-200 transition-colors hover:bg-indigo-900/40 md:hidden"
+          >
+            {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+          <Link
+            href="/"
+            onClick={(event) => handleMobileNavClick(event, "/")}
+            className="shrink-0 whitespace-nowrap text-lg font-semibold tracking-wide text-indigo-50"
+          >
+            🌙 Dream Hub
+          </Link>
+        </div>
 
-        {/* 아이템이 6개로 늘어난 뒤로 좁은 화면에서 글자가 중간에 꺾이던 버그 - 각 링크가
-            줄어들지 않도록(shrink-0) 막고 텍스트도 절대 줄바꿈되지 않게(whitespace-nowrap)
-            고정한다. 그래도 폭이 모자라면 깨지는 대신 이 nav만 가로 스크롤된다. */}
-        <nav className="flex flex-nowrap items-center gap-0.5 overflow-x-auto no-scrollbar">
+        {/* md: 이상 데스크톱 전용. 로그인 상태(오른쪽 클러스터가 커짐)의 1024~1280px처럼
+            흔한 폭에서는 6개 항목이 실측상 100px대 이상 모자라 - 예전엔 이 nav만 가로
+            스크롤되게 했는데, 스크롤 힌트가 전혀 없어 "커뮤니티"/"마이페이지"가 화면 밖으로
+            밀려나도 발견할 방법이 없었다(관리자 아이콘 작업 중 재발견된 기존 버그). 패딩을
+            줄이고 아이콘을 빼 폭이 넉넉한 화면에서는 한 줄에 다 들어오게 하고, 그래도
+            모자란 폭에서는 (가려지는 대신) 항목째로 다음 줄로 자연스럽게 줄바꿈한다 -
+            숨겨진 항목이 하나도 없다는 게 항상 보장된다. 헤더가 그만큼 늘어난 높이는
+            NavBar 상단의 ResizeObserver가 --nav-height로 내보내 다른 화면의 sticky
+            요소들이 참조한다. */}
+        <nav className="hidden flex-wrap items-center gap-x-1 gap-y-1 md:flex">
           {NAV_ITEMS.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               onClick={(event) => guardedNavigate(event, item.href)}
-              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1.5 text-sm transition-colors ${
+              className={`whitespace-nowrap rounded-full px-2 py-1.5 text-sm transition-colors ${
                 pathname === item.href
                   ? "bg-indigo-500/20 text-indigo-100"
                   : "text-indigo-300/70 hover:text-indigo-100"
               }`}
             >
-              <span className="text-sm leading-none">{item.icon}</span>
               {item.label}
             </Link>
           ))}
@@ -172,19 +237,32 @@ export default function NavBar() {
           <button
             type="button"
             onClick={() => router.push("/interpret")}
-            className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-3 py-1.5 text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)] transition-transform hover:-translate-y-0.5 sm:flex"
+            className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-3 py-3 text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)] transition-transform hover:-translate-y-0.5 sm:flex"
           >
             🔮 AI 해몽
           </button>
 
           {isAuthenticated && user ? (
             <>
+              {/* 관리자 전용 진입점 - 위 md: 가로 스크롤 nav에는 안 넣는다(6개만으로도 이미
+                  흔한 폭에서 꽉 차 스크롤 힌트 없이 밀려나는 문제가 있었다). 여기 shrink-0
+                  영역은 항상 전부 보이므로 관리자 본인에게도 확실히 보인다. */}
+              {user.is_admin && (
+                <Link
+                  href="/admin"
+                  aria-label="관리자"
+                  title="관리자"
+                  className="hidden shrink-0 items-center justify-center rounded-full p-3 text-indigo-300/70 transition-colors hover:bg-indigo-900/40 hover:text-indigo-100 md:flex"
+                >
+                  🛠️
+                </Link>
+              )}
               <NotificationBell />
               <span className="hidden whitespace-nowrap text-indigo-300/70 sm:inline">{user.nickname}</span>
               <button
                 type="button"
                 onClick={handleLogout}
-                className="whitespace-nowrap rounded-full border border-indigo-800 px-3 py-1.5 text-indigo-200 transition-colors hover:bg-indigo-900/40"
+                className="whitespace-nowrap rounded-full border border-indigo-800 px-3 py-3 text-indigo-200 transition-colors hover:bg-indigo-900/40"
               >
                 로그아웃
               </button>
@@ -192,13 +270,43 @@ export default function NavBar() {
           ) : (
             <Link
               href="/login"
-              className="whitespace-nowrap rounded-full bg-indigo-500/90 px-3 py-1.5 text-white transition-colors hover:bg-indigo-400"
+              className="whitespace-nowrap rounded-full bg-indigo-500/90 px-3 py-3 text-white transition-colors hover:bg-indigo-400"
             >
               로그인
             </Link>
           )}
         </div>
       </div>
+
+      {isMobileMenuOpen && (
+        <nav className="border-t border-indigo-900/50 bg-[#0b0518] px-4 pb-3 md:hidden">
+          {mobileNavItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={(event) => handleMobileNavClick(event, item.href)}
+              className={`flex items-center gap-3 rounded-xl px-3 py-3 text-base transition-colors ${
+                pathname === item.href
+                  ? "bg-indigo-500/20 text-indigo-100"
+                  : "text-indigo-200/80 hover:bg-indigo-900/30 hover:text-indigo-100"
+              }`}
+            >
+              <span className="text-lg leading-none">{item.icon}</span>
+              {item.label}
+            </Link>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              router.push("/interpret");
+            }}
+            className="mt-1 flex w-full items-center gap-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-500 px-3 py-3 text-base text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]"
+          >
+            🔮 AI 해몽
+          </button>
+        </nav>
+      )}
 
       <UnsavedChangesGuardModal
         open={pendingHref !== null}

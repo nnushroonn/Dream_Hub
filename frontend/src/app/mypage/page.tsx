@@ -66,22 +66,24 @@ export default function MyPage() {
   // 별도 DreamSeed 테이블에 살고 있어 이 페이지에서 직접 내 씨앗 이력을 불러온다.
   const [mySeeds, setMySeeds] = useState<DreamSeedRecord[]>([]);
   useEffect(() => {
-    if (!isAuthenticated) {
-      setMySeeds([]);
-      return;
-    }
+    if (!isAuthenticated) return;
     getMySeeds()
       .then(setMySeeds)
       .catch(() => {});
   }, [isAuthenticated]);
 
+  // 로그아웃 이후에도 mySeeds에 이전 세션의 값이 남아있을 수 있어, 집계 시점에
+  // isAuthenticated로 한 번 더 걸러 로그아웃 상태에서는 항상 0으로 보이게 한다(effect
+  // 안에서 별도로 mySeeds를 []로 되돌릴 필요가 없다).
   const seedStats = useMemo(() => {
     const counts = new Map(SEED_TYPES.map((seed) => [seed, 0]));
-    for (const seed of mySeeds) {
-      counts.set(seed.seed_type, (counts.get(seed.seed_type) ?? 0) + 1);
+    if (isAuthenticated) {
+      for (const seed of mySeeds) {
+        counts.set(seed.seed_type, (counts.get(seed.seed_type) ?? 0) + 1);
+      }
     }
     return SEED_TYPES.map((seed) => ({ seed, count: counts.get(seed) ?? 0 }));
-  }, [mySeeds]);
+  }, [mySeeds, isAuthenticated]);
 
   const diaryStats = useMemo(() => {
     const diaryDates = allEntries.filter((entry) => entry.entry_type === "emotion").map((entry) => entry.dream_date);
@@ -206,9 +208,13 @@ export default function MyPage() {
         </div>
 
         {/* 대시보드/내 활동 탭 - 통계+캘린더와 아카이브 리스트를 한 화면에 다 쌓지 않고 나눠서,
-            스크롤 피로도를 줄인다. NavBar(sticky, 약 64px) 바로 아래에 이어 붙어 스크롤해도
-            항상 손 닿는 곳에 남아 있다. */}
-        <div className="sticky top-16 z-30 mt-8 flex gap-1.5 rounded-2xl border border-white/10 bg-slate-950/85 p-1.5 backdrop-blur-xl">
+            스크롤 피로도를 줄인다. NavBar 바로 아래에 이어 붙어 스크롤해도 항상 손 닿는
+            곳에 남아 있다 - 데스크톱 메인 nav가 폭에 따라 줄바꿈되며 헤더 높이가 달라질
+            수 있어, 고정 top-16 대신 NavBar가 실측해 내보내는 --nav-height를 그대로 쓴다. */}
+        <div
+          style={{ top: "var(--nav-height, 64px)" }}
+          className="sticky z-30 mt-8 flex gap-1.5 rounded-2xl border border-white/10 bg-slate-950/85 p-1.5 backdrop-blur-xl"
+        >
           <button
             type="button"
             onClick={() => setPageTab("dashboard")}

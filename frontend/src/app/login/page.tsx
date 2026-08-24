@@ -48,7 +48,13 @@ export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [nickname, setNickname] = useState("");
-  const [nicknameStatus, setNicknameStatus] = useState<NicknameStatus>("idle");
+  // 어떤 값에 대한 원격 확인이 끝났는지(value)와 그 결과만 상태로 들고, "idle"/"invalid"/
+  // "checking"은 전부 nickname/mode/이 결과에서 바로 계산되는 파생 값이라(아래 nicknameStatus
+  // 참고) 별도 state로 두지 않는다 - "checking"을 effect 안에서 직접 setState할 필요가 없어진다.
+  const [nicknameRemoteCheck, setNicknameRemoteCheck] = useState<{
+    value: string;
+    result: "idle" | "available" | "taken";
+  } | null>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -62,26 +68,33 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, router]);
 
-  // 닉네임 실시간 유효성 검사: 길이 검증 후, 잠시 타이핑이 멈추면(디바운스) 서버에 중복 여부를 묻는다.
+  const trimmedNickname = nickname.trim();
+  const nicknameNeedsRemoteCheck =
+    mode === "register" &&
+    trimmedNickname !== "" &&
+    trimmedNickname.length >= NICKNAME_MIN_LENGTH &&
+    trimmedNickname.length <= NICKNAME_MAX_LENGTH;
+
+  // 닉네임 실시간 유효성 검사: 길이 검증은 렌더 중 바로 판정하고(파생 상태), 실제로 서버에
+  // 물어야 하는 경우엔 "지금 입력값에 대한 결과가 이미 와 있는가"로 checking 여부까지 파생시킨다.
+  const nicknameStatus: NicknameStatus =
+    mode !== "register" || trimmedNickname === ""
+      ? "idle"
+      : trimmedNickname.length < NICKNAME_MIN_LENGTH || trimmedNickname.length > NICKNAME_MAX_LENGTH
+        ? "invalid"
+        : nicknameRemoteCheck?.value === trimmedNickname
+          ? nicknameRemoteCheck.result
+          : "checking";
+
   useEffect(() => {
-    if (mode !== "register") return;
-    const trimmed = nickname.trim();
-    if (!trimmed) {
-      setNicknameStatus("idle");
-      return;
-    }
-    if (trimmed.length < NICKNAME_MIN_LENGTH || trimmed.length > NICKNAME_MAX_LENGTH) {
-      setNicknameStatus("invalid");
-      return;
-    }
-    setNicknameStatus("checking");
+    if (!nicknameNeedsRemoteCheck) return;
     const timer = window.setTimeout(() => {
-      checkNicknameAvailability(trimmed)
-        .then((available) => setNicknameStatus(available ? "available" : "taken"))
-        .catch(() => setNicknameStatus("idle"));
+      checkNicknameAvailability(trimmedNickname)
+        .then((available) => setNicknameRemoteCheck({ value: trimmedNickname, result: available ? "available" : "taken" }))
+        .catch(() => setNicknameRemoteCheck({ value: trimmedNickname, result: "idle" }));
     }, NICKNAME_CHECK_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [nickname, mode]);
+  }, [nicknameNeedsRemoteCheck, trimmedNickname]);
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);

@@ -56,7 +56,7 @@ export default function AuraToggle() {
             type="button"
             onClick={() => handleSelect(option.value)}
             disabled={isSaving}
-            className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+            className={`rounded-full border px-3 py-3.5 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
               user.aura_preference === option.value
                 ? "border-violet-400/60 bg-violet-500/20 text-violet-200"
                 : "border-white/10 bg-white/5 text-slate-400 hover:border-violet-400/30 hover:text-slate-200"
