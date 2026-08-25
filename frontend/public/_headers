@@ -2,9 +2,17 @@
 # (이 프로젝트는 output: "export" 정적 배포라 next.config.mjs의 headers() 옵션 자체가
 # 지원되지 않는다 - Next.js 공식 문서에 static export의 미지원 기능으로 명시돼 있다.)
 #
-# CSP script-src에 'unsafe-inline'을 넣지 않고도 통과하도록, 유일했던 인라인 스크립트
-# (애드센스 NPA 플래그 초기화)를 public/adsense-npa-init.js 정적 파일로 옮겼다 - 외부
-# 스크립트(src=)는 'self'만으로 이미 허용된다.
+# 애드센스 NPA 플래그 초기화 인라인 스크립트는 public/adsense-npa-init.js 정적 파일로 옮겨
+# 'unsafe-inline' 없이 막을 수 있었지만(외부 스크립트는 'self'만으로 허용), App Router가
+# 정적 export에도 하이드레이션용 RSC 페이로드를 <script>self.__next_f.push(...)</script>
+# 인라인 스크립트로 반드시 심는다 - 이건 개발자가 작성한 게 아니라 프레임워크가 빌드 시
+# 자동으로 넣는 것이라 옮길 수가 없다. 'unsafe-inline'이 없으면 이 스크립트들이 전부
+# 차단되어 하이드레이션 자체가 실패하고(React 에러 #412), 그 결과 이 사이트의 모든
+# 클릭 인터랙션(로그인/회원가입 탭 전환 포함)이 죽어버린다 - 실제 배포에서 확인된 버그였다.
+# script-src에는 그래서 'unsafe-inline'을 둔다(정적 export + Cloudflare Pages _headers는
+# 요청마다 다른 nonce를 심을 서버가 없어 nonce 방식이 불가능하고, 페이지마다/콘텐츠마다
+# 매번 바뀌는 RSC 페이로드 해시를 미리 고정해 둘 수도 없다 - 이 구성에서는 사실상 유일한
+# 실용적 선택지다).
 #
 # 백엔드는 Render(https://dream-hub.onrender.com)에 배포됐다 - connect-src에 추가해 뒀다.
 # localhost:8000은 로컬에서 next build 산출물을 next start로 띄워 로컬 백엔드와 붙여볼 때를
@@ -20,4 +28,4 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' http://localhost:8000 https://dream-hub.onrender.com https://*.googlesyndication.com https://*.doubleclick.net; frame-src https://*.googlesyndication.com https://*.doubleclick.net https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' http://localhost:8000 https://dream-hub.onrender.com https://*.googlesyndication.com https://*.doubleclick.net; frame-src https://*.googlesyndication.com https://*.doubleclick.net https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
