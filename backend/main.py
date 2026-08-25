@@ -68,13 +68,6 @@ _allowed_origins = (
     else list(dict.fromkeys([settings.frontend_origin, "http://localhost:3000"]))
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 # 구글 OAuth state/nonce 저장에 필요 (Authlib starlette client) - 이 쿠키는 로그인
 # 왕복(수 초~수 분) 동안만 의미가 있으므로, access_token/csrf_token과 같은 기준으로
 # 프로덕션에서만 Secure를 강제하고, 기본 14일 만료 대신 왕복에 충분한 짧은 유효기간만 준다.
@@ -93,6 +86,21 @@ app.add_middleware(
     access_token_cookie_name=settings.access_token_cookie_name,
     csrf_cookie_name=settings.csrf_cookie_name,
     csrf_header_name=settings.csrf_header_name,
+)
+# CsrfProtectionMiddleware보다 반드시 나중에 등록해 그걸 감싸는 바깥쪽 레이어가 되게 한다
+# (스타레트는 나중에 등록한 미들웨어일수록 요청은 먼저, 응답은 나중에 거친다). CORS가 더
+# 안쪽에 있으면, CSRF 미들웨어가 실제 라우트까지 가지 않고 403을 바로 반환할 때 그 응답이
+# CORSMiddleware를 아예 거치지 않아 Access-Control-Allow-Origin이 안 붙는다 - 그러면
+# 브라우저가 서버가 보낸 진짜 403 대신 "CORS 정책에 의해 차단됨"이라는 불투명한 오류로
+# 감싸버려서, 프론트의 axios가 상태 코드를 읽지 못하고 "네트워크 연결 실패"처럼 완전히
+# 엉뚱한 에러 문구를 보여주게 된다(실제 배포 환경에서 CSRF 토큰이 없어진 요청을 흉내내
+# 재현·확인했다). 이 순서로 두면 CSRF가 막은 응답에도 CORS 헤더가 정상적으로 실린다.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 # 가장 마지막에 등록해 가장 바깥쪽 레이어가 되게 한다(스타레트는 나중에 등록한 미들웨어가
 # 요청 처리 순서상 가장 먼저 실행된다) - HTTPS 강제 리다이렉트가 CORS/세션/CSRF 처리보다

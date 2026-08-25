@@ -81,6 +81,12 @@ class UserResponse(BaseModel):
     # 프론트가 이 값 하나로 "관리자" 내비게이션 링크/​/admin 접근 여부를 결정한다 - 실제 권한
     # 검증은 항상 백엔드(get_current_admin_user)가 다시 하므로, 이건 순수 UI 분기용이다.
     is_admin: bool = False
+    # 더블 서브밋 CSRF 패턴의 헤더 값 - 프론트/백엔드가 서로 다른 등록 도메인(교차 사이트)이면
+    # document.cookie로는 백엔드 도메인의 csrf_token 쿠키를 애초에 읽을 수 없어(쿠키는 그걸
+    # 심은 도메인에서만 JS로 보인다 - HttpOnly 여부와 무관), 응답 바디로 직접 건네줘야 한다.
+    # /auth/login·/auth/me만 채운다(로그인 상태를 새로 확립/재확인하는 지점) - /api/user/*
+    # 프로필 수정 응답 등은 굳이 다시 실을 필요가 없어 None으로 둔다.
+    csrf_token: str | None = None
 
     model_config = {"from_attributes": True}
 

@@ -404,8 +404,10 @@ def login(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="정지된 계정입니다.")
 
     token = create_access_token(user.id)
-    _set_auth_cookies(response, token)
-    return UserResponse.model_validate(user)
+    csrf_token = _set_auth_cookies(response, token)
+    body = UserResponse.model_validate(user)
+    body.csrf_token = csrf_token
+    return body
 
 
 @router.post("/logout", response_model=MessageResponse)
@@ -418,12 +420,20 @@ def logout(response: Response):
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
+def get_me(request: Request, current_user: User = Depends(get_current_user)):
     """프론트가 로그인 상태를 확인하는 유일한 방법 - httpOnly 쿠키는 JS가 못 읽으므로,
     예전처럼 JWT를 클라이언트에서 직접 디코딩해 만료 여부를 판단할 수 없다. 앱이 로드될
     때마다(새로고침 포함) 이 엔드포인트를 호출해 실제로 유효한 세션인지 서버에 확인한다.
-    인증이 안 돼 있으면 get_current_user가 이미 401을 던진다."""
-    return UserResponse.model_validate(current_user)
+    인증이 안 돼 있으면 get_current_user가 이미 401을 던진다.
+
+    csrf_token도 함께 돌려준다 - 로그인 응답과 마찬가지로, 교차 사이트 환경에서는 프론트가
+    document.cookie로 이 값을 직접 읽을 수 없다(도메인이 다른 쿠키는 JS에 아예 안 보인다).
+    이미 심어져 있는 값을 새로 만들지 않고 그대로 읽어서 돌려준다 - 매 새로고침마다 값이
+    바뀌면 안 되고(기존 유효 세션의 값과 계속 같아야 다음 상태변경 요청이 통과한다), 이
+    요청 자체가 이미 그 쿠키를 들고 왔으므로 request.cookies에 그대로 있다."""
+    body = UserResponse.model_validate(current_user)
+    body.csrf_token = request.cookies.get(settings.csrf_cookie_name)
+    return body
 
 
 @router.post("/verify-email", response_model=MessageResponse)

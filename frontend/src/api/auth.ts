@@ -1,6 +1,6 @@
 import { isAxiosError } from "axios";
 
-import api from "./axios";
+import api, { setCsrfToken } from "./axios";
 
 export type AuraPreference = "good" | "lucid" | "calm";
 
@@ -15,6 +15,9 @@ export interface AuthUser {
   // true면 /admin 내비게이션 링크를 보여준다 - 실제 접근 권한은 항상 백엔드가 다시
   // 검증하므로(get_current_admin_user) 이 값은 순수 UI 분기용이다.
   is_admin?: boolean;
+  // 더블 서브밋 CSRF 헤더에 그대로 실어 보낼 값 - /auth/login·/auth/me 응답에만 채워진다
+  // (api/axios.ts의 setCsrfToken 참고). 그 외(프로필 수정 등) 응답은 항상 undefined.
+  csrf_token?: string | null;
 }
 
 export interface MessageResponse {
@@ -108,6 +111,9 @@ export async function getUserStats(): Promise<UserStats> {
 // 사용자 정보만 담겨 온다.
 export async function loginUser(email: string, password: string): Promise<AuthUser> {
   const { data } = await api.post<AuthUser>("/auth/login", { email, password });
+  // 응답 바디에 실려 온 csrf_token을 이후 상태 변경 요청의 X-CSRF-Token 헤더로 재사용한다
+  // (api/axios.ts 참고 - 교차 도메인이라 document.cookie로는 이 값을 직접 읽을 수 없다).
+  setCsrfToken(data.csrf_token ?? null);
   return data;
 }
 
@@ -115,6 +121,7 @@ export async function loginUser(email: string, password: string): Promise<AuthUs
 // 쿠키를 직접 삭제할 수 없으므로, "로그아웃"은 이제 반드시 이 API 호출을 거쳐야 한다.
 export async function logoutUser(): Promise<MessageResponse> {
   const { data } = await api.post<MessageResponse>("/auth/logout");
+  setCsrfToken(null);
   return data;
 }
 
@@ -124,6 +131,7 @@ export async function logoutUser(): Promise<MessageResponse> {
 // "비로그인"으로 처리한다.
 export async function getCurrentUser(): Promise<AuthUser> {
   const { data } = await api.get<AuthUser>("/auth/me");
+  setCsrfToken(data.csrf_token ?? null);
   return data;
 }
 
