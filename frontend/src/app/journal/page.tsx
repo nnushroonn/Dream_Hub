@@ -254,8 +254,11 @@ function dateBadgeParts(dateStr: string): { month: string; day: string } {
 function journeyStatus(entries: DreamEntryRecord[], hasSeed: boolean): "full" | "partial" | "none" {
   const dreamCount = entries.filter((entry) => entry.entry_type === "dream").length;
   const diaryCount = entries.filter((entry) => entry.entry_type === "emotion").length;
-  if (dreamCount > 0) return "full";
-  if (diaryCount > 0 || hasSeed) return "partial";
+  // "완료"는 감정일기+꿈일기가 둘 다 있어야 한다(성장 여정 전체 - growthStages와 같은 기준).
+  // 예전엔 꿈일기 하나만 있어도(감정일기 없이) "완료"로 잡혀서, 달력 점/최근 기록 아이콘이
+  // 상세 패널의 실제 진행 상태(씨앗 심기는 아직 안 됨)와 어긋나는 버그가 있었다.
+  if (dreamCount > 0 && diaryCount > 0) return "full";
+  if (dreamCount > 0 || diaryCount > 0 || hasSeed) return "partial";
   return "none";
 }
 
@@ -1356,9 +1359,13 @@ interface CalendarPanelProps {
   // 날짜의 씨앗을 찾고, 그 씨앗 id로 이 목록에서 실제 핀 꽃(이름)을 찾는다.
   gardenBlooms: GardenBloomEntry[];
   selectedDate: string | null;
-  // 데이터가 있는 날짜는 그 날짜를 펼쳐 보여주고(hasData=true), 아직 기록이 없는 날짜는 그
-  // 자리에서 바로 새 기록을 시작한다(hasData=false) - 실제 분기는 호출부(journal 본문)가 한다.
-  onPickDate: (date: string, hasData: boolean) => void;
+  // 어떤 날짜를 클릭하든(기록이 있든 없든) 일단 그 날짜를 선택 상태로 만들기만 한다 - 그
+  // 날짜에 실제로 기록이 있는지 없는지에 따라 무엇을 보여줄지는 호출부(journal 본문)가
+  // selectedDate만 보고 파생시킨다. 예전엔 여기서 곧바로 편집 모드로 진입시켰는데, 빈
+  // 날짜를 클릭하자마자 작성 화면이 뜨는 게 원치 않는 동작이라 없앴다 - 이제는 항상 먼저
+  // 선택 상태(빈 상태 화면 또는 기존 기록 보기)를 보여주고, 사용자가 명시적으로 버튼을
+  // 눌러야만 편집 모드로 넘어간다.
+  onPickDate: (date: string) => void;
   // lg: 미만에서 이 패널의 어느 하위 섹션(달력/최근 기록)이 활성 탭인지 - 패널 전체 표시
   // 여부와 그 안의 두 섹션 각각의 표시 여부를 정한다. lg: 이상에서는 참조되지 않는다(항상
   // 둘 다 펼쳐짐).
@@ -1508,6 +1515,10 @@ function CalendarPanel({
           const hasSeed = seedsByDate.has(dateStr);
           const isActive = selectedDate === dateStr;
           const isToday = dateStr === todayStr;
+          // 미래 날짜는 클릭 자체는 막지 않는다(선택하면 "아직 오지 않은 날짜예요" 안내가
+          // 뜬다) - 다만 다른 날짜들과 시각적으로 구분되게 흐리게 표시하고, 데이터가 있을 수
+          // 없는 날이라 진행 상태 점(dot)도 그리지 않는다.
+          const isFuture = dateStr > todayStr;
           const status = journeyStatus(group?.entries ?? [], hasSeed);
 
           // 점에 호버했을 때 뜨는 네이티브 툴팁 - 그 날 어디까지 진행했는지 요약한다.
@@ -1522,20 +1533,22 @@ function CalendarPanel({
             <button
               key={dateStr}
               type="button"
-              onClick={() => onPickDate(dateStr, Boolean(group))}
-              title={summaryParts.length > 0 ? summaryParts.join(" / ") : undefined}
+              onClick={() => onPickDate(dateStr)}
+              title={isFuture ? "아직 오지 않은 날짜예요" : summaryParts.length > 0 ? summaryParts.join(" / ") : undefined}
               className={`flex flex-col items-center gap-1 rounded-lg border py-1.5 text-xs transition-colors ${
-                isActive
-                  ? "border-purple-400/40 bg-purple-500/20 text-white"
-                  : isToday
-                    ? "border-purple-400/20 text-purple-300 hover:border-purple-400/40 hover:bg-white/5"
-                    : "border-white/5 text-slate-400 hover:border-white/15 hover:bg-white/5 hover:text-white"
+                isFuture
+                  ? "border-white/5 text-slate-600 hover:border-white/10 hover:bg-white/[0.03]"
+                  : isActive
+                    ? "border-purple-400/40 bg-purple-500/20 text-white"
+                    : isToday
+                      ? "border-purple-400/20 text-purple-300 hover:border-purple-400/40 hover:bg-white/5"
+                      : "border-white/5 text-slate-400 hover:border-white/15 hover:bg-white/5 hover:text-white"
               }`}
             >
               <span>{day}</span>
               <span className="flex h-1.5 items-center">
-                {status === "full" && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
-                {status === "partial" && <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />}
+                {!isFuture && status === "full" && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
+                {!isFuture && status === "partial" && <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />}
               </span>
             </button>
           );
@@ -1611,7 +1624,7 @@ function CalendarPanel({
                   <li key={item.key}>
                     <button
                       type="button"
-                      onClick={() => onPickDate(group.date, true)}
+                      onClick={() => onPickDate(group.date)}
                       className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
                         isActive ? "bg-purple-500/20 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
                       }`}
@@ -1890,24 +1903,42 @@ export default function DailyJournalPage() {
   const flowerGlowShadow = `0 0 20px 6px ${flowerAccent}80, 0 0 38px 14px ${flowerAccent}35`;
 
   // 성장 타임라인 4단계 상태 - 씨앗 심기(감정일기)/발아(수면, 자동)/개화(꿈일기)/꽃(AI 해몽).
-  // 이 앱은 꿈일기를 쓰는 즉시 AI 해몽까지 한 번에 만들어지므로, 실제로는 "개화"와 "꽃"이
-  // 항상 같은 순간에 완료된다 - 그래도 서사적으로는 두 노드를 분리해 보여준다. "발아"는
-  // 씨앗을 심었지만 아직 꿈으로 이어지지 않은 동안만 "자동 진행 중"으로 펄스가 돈다 - 단,
-  // 그건 오늘 밤에만 뜻이 통하는 상태다. 이미 지나간 과거 날짜라면 그 밤은 어차피 끝났으므로
-  // 발아 자체는 무조건 "완료"로 본다(꿈일기를 안 썼어도 밤은 지나갔다) - 과거 카드에서
-  // "지금 자는 중" 펄스가 그대로 떠 있는 게 문제였다.
-  const isViewingToday = selectedDate === todayDateInputValue();
+  // 각 단계는 그 자신의 조건뿐 아니라 앞선 단계까지 함께 갖춰야 "완료"다(누적형 여정) -
+  // 씨앗을 심지 않고는(감정일기 없이는) 발아도 개화도 있을 수 없다. 예전엔 개화/꽃이 오직
+  // dreamDone(꿈일기 존재)만 보고 판단해서, 감정일기 없이 꿈일기만 있는 날에도 "개화 완료"가
+  // 잘못 표시되는 버그가 있었다(씨앗 없이 핀 꽃). 이 앱은 꿈일기를 쓰는 즉시 AI 해몽까지
+  // 한 번에 만들어지므로 평소엔 "개화"와 "꽃"이 같은 순간에 완료되지만, 무의식 광장의
+  // "직접 쓰기"(AI 해몽 생략 가능)로 만들어진 꿈일기가 이 날짜에 걸리면 둘이 갈릴 수 있어
+  // "개화"는 꿈일기 원문 존재로, "꽃"은 그 중 AI 해몽이 실제로 붙어 있는지로 따로 본다.
+  // "발아"는 씨앗을 심었지만 아직 꿈으로 이어지지 않은 동안만 "자동 진행 중"으로 펄스가
+  // 돈다 - 단, 그건 오늘 밤에만 뜻이 통하는 상태다. 이미 지나간 과거 날짜라면 그 밤은
+  // 어차피 끝났으므로(씨앗은 심겨 있다는 전제 하에) 발아 자체는 무조건 "완료"로 본다(꿈일기를
+  // 안 썼어도 밤은 지나갔다) - 과거 카드에서 "지금 자는 중" 펄스가 그대로 떠 있는 게 문제였다.
+  const todayStr = todayDateInputValue();
+  const isViewingToday = selectedDate === todayStr;
+  // 과거/미래를 구분해야 한다 - 예전엔 "오늘이 아니면 무조건 지나간 밤"으로 취급해서
+  // (!isViewingToday만 봄) 아직 오지 않은 미래 날짜를 선택해도 씨앗 발아가 "완료"로 잘못
+  // 표시되는 버그가 있었다(미래의 밤은 아직 지나가지 않았다). 문자열 그대로 비교해도 안전한
+  // 이유: 두 값 모두 항상 YYYY-MM-DD 포맷이라 사전식 비교가 곧 날짜 순서 비교와 같다.
+  const isPastDate = selectedDate !== null && selectedDate < todayStr;
+  const isFutureDate = selectedDate !== null && selectedDate > todayStr;
   // 이전엔 useMemo로 감쌌지만, 매번 다시 계산해도 세 자리 삼항연산일 뿐이라 비용이 무시할
   // 수준이고(불안정한 참조 동일성이 필요한 자식도 없다 - 아래에서 항상 .seed/.sleep 등
   // 개별 문자열 값만 props로 꺼내 쓴다), React Compiler가 자체적으로 메모이제이션해 준다.
   const growthStages: { seed: GrowthNodeStatus; sleep: GrowthNodeStatus; bloom: GrowthNodeStatus; flower: GrowthNodeStatus } = (() => {
     const seedDone = diaryEntries.length > 0;
     const dreamDone = dreamEntries.length > 0;
+    const dreamInterpreted = dreamEntries.some((entry) => Boolean(entry.interpretation));
     return {
       seed: seedDone ? "done" : "pending",
-      sleep: dreamDone || !isViewingToday ? "done" : seedDone ? "in_progress" : "pending",
-      bloom: dreamDone ? "done" : "pending",
-      flower: dreamDone ? "done" : "pending",
+      // 발아는 (1) 꿈이 실제로 기록됐으면 그 자체가 잠들었다는 직접 증거라 씨앗 유무와
+      // 무관하게 완료, 아니면 (2) 씨앗이 있고(심겨 있고) 밤이 지났을 때만 완료. 씨앗도
+      // 꿈도 둘 다 없으면 아무것도 시작되지 않은 것이므로 대기 그대로 둔다.
+      sleep: dreamDone || (seedDone && isPastDate) ? "done" : seedDone ? "in_progress" : "pending",
+      // 개화(꿈일기 원문)와 꽃(AI 해몽) 둘 다 씨앗이 먼저 있어야 하고, 꽃은 추가로 실제
+      // 해몽이 붙어 있어야 한다(무의식 광장 "직접 쓰기"는 해몽 없이 저장될 수 있다).
+      bloom: seedDone && dreamDone ? "done" : "pending",
+      flower: seedDone && dreamDone && dreamInterpreted ? "done" : "pending",
     };
   })();
 
@@ -2335,6 +2366,10 @@ export default function DailyJournalPage() {
 
   const startNewEntry = (date?: string) => {
     const target = date ?? todayDateInputValue();
+    // 방어선 - 화면 어디에도 미래 날짜로 이 함수를 부르는 버튼을 안 남겼지만(선택된 날짜가
+    // 미래면 그 갈래 자체를 렌더링하지 않는다), 그래도 이 함수 하나가 편집 모드로 들어가는
+    // 유일한 통로라 여기서 한 번 더 막는다 - 아직 꾸지 않은 밤의 꿈은 기록할 수 없다.
+    if (target > todayDateInputValue()) return;
     setSelectedDate(target);
     setEditingEntry(null);
     setIsComposingNew(true);
@@ -2458,13 +2493,6 @@ export default function DailyJournalPage() {
     setSelectedDate(date);
     setIsComposingNew(false);
     setEditingEntry(null);
-  };
-
-  // 달력 패널에서 날짜를 고를 때 - 기록이 있는 날짜는 그 페이지를 펼치고, 아직 기록이
-  // 없는 날짜는 그 자리에서 바로 새 기록을 시작한다.
-  const handleCalendarPick = (date: string, hasData: boolean) => {
-    if (hasData) selectDate(date);
-    else startNewEntry(date);
   };
 
   // 카드 "⋯" 메뉴의 삭제하기 - 바로 지우지 않고 확인 모달을 거친다.
@@ -2945,7 +2973,7 @@ export default function DailyJournalPage() {
   // "더 남기기"로 자연스럽게 이어간다. 작성/수정 중에는 폼 자체에 저장 버튼이 있으니 숨긴다.
   const isComposing = isComposingNew || isEditingDiary || isEditingDream;
   const primaryCta =
-    isComposing || !selectedDate
+    isComposing || !selectedDate || isFutureDate
       ? null
       : diaryEntries.length === 0
         ? {
@@ -2978,8 +3006,9 @@ export default function DailyJournalPage() {
   // 선택한 날(isDreamForgotten)도 같은 이유로 null - 이미 명시적으로 포기 의사를 밝힌 날까지
   // "꿈을 기록해보세요"로 계속 재촉하지 않는다(door는 카드 안 버튼으로 여전히 열려 있다).
   const hasDreamInterpretation = dreamEntries.some((entry) => Boolean(entry.interpretation));
-  const nextStepGuide =
-    diaryEntries.length === 0
+  const nextStepGuide = isFutureDate
+    ? null
+    : diaryEntries.length === 0
       ? { label: "다음 할 일: 오늘의 감정을 기록해보세요 ↓", onClick: () => revealStageListAndScrollTo("diary") }
       : dreamEntries.length === 0
         ? isDreamForgotten
@@ -3128,6 +3157,23 @@ export default function DailyJournalPage() {
               <div>
                 <p className="text-center text-base text-slate-300">{formatJournalDate(selectedDate)}</p>
 
+                {/* 미래 날짜 - 빈 상태 화면(작성 버튼 포함)조차 보여주지 않는다. 아직 지나지
+                    않은 밤이라 애초에 기록할 대상 자체가 없으므로, 그 사실을 알려주는 안내만
+                    남기고 아래 성장 타임라인/CTA/오늘의 요약/4단계 자세히 보기는 전부 건너뛴다
+                    - startNewEntry에도 같은 방어선이 있지만, 그 버튼들 자체를 렌더링하지 않는
+                    게 첫 번째 방어선이다. */}
+                {isFutureDate && (
+                  <div className="mt-16 flex flex-col items-center gap-2 py-16 text-center">
+                    <span className="text-2xl">🌙</span>
+                    <p className="text-sm text-slate-400">아직 오지 않은 밤이에요</p>
+                    <p className="max-w-xs text-xs leading-relaxed text-slate-500">
+                      그날의 꿈은 아직 꾸지 않았어요. 날이 밝고 그 밤이 지나면 기록할 수 있어요.
+                    </p>
+                  </div>
+                )}
+
+                {!isFutureDate && (
+                <>
                 <div className="mt-8">
                   <GrowthTimeline
                     seedStatus={growthStages.seed}
@@ -3209,6 +3255,8 @@ export default function DailyJournalPage() {
                     </button>
                   </div>
                 )}
+                </>
+                )}
 
                 {/* 모바일 전용 대시보드 탭 스위처 - lg: 이상에서는 아래 세 섹션(오늘의 요약/
                     날짜 탐색/최근 기록)이 전부 펼쳐지므로 탭 자체가 필요 없다(lg:hidden).
@@ -3240,6 +3288,8 @@ export default function DailyJournalPage() {
                 {/* "오늘의 요약" 탭 콘텐츠 - lg: 미만에서는 위 탭이 "summary"일 때만 보이고,
                     lg: 이상에서는 탭 상태와 무관하게 항상 펼쳐진다(hidden lg:block 패턴). */}
                 <div className={mobileDashboardTab === "summary" ? "" : "hidden lg:block"}>
+                {!isFutureDate && (
+                <>
                 {/* 오늘의 요약 - 압축 타임라인 바로 아래. 아래로 스크롤하지 않고도 그날 전체를
                     한눈에 훑고, 각 줄을 눌러 해당 정거장으로 곧장 이동할 수 있게 한다(토글이
                     꺼져 있어도 이 카드의 "꽃 피었어요" 줄 등은 항상 유효하다 - onScrollToDream이
@@ -3593,6 +3643,8 @@ export default function DailyJournalPage() {
                     </motion.div>
                   )}
                 </AnimatePresence>
+                </>
+                )}
                 </div>
                 {/* "오늘의 요약" 탭 콘텐츠 끝 */}
               </div>
@@ -3610,7 +3662,7 @@ export default function DailyJournalPage() {
           seeds={seeds}
           gardenBlooms={gardenBlooms}
           selectedDate={selectedDate}
-          onPickDate={handleCalendarPick}
+          onPickDate={selectDate}
           mobileActiveTab={mobileDashboardTab}
         />
         </div>

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from database import get_db, get_redis
 from emotion_wordbook import emotion_category_for_emoji
 from flower_taxonomy import classify_flower
-from leveling import AuthorBadge, XpCategory, author_badge_for, award_xp
+from leveling import AuthorBadge, XpCategory, author_badge_for, award_xp, today_kst
 from models import (
     DreamEntry,
     DreamRecallStatus,
@@ -125,6 +125,16 @@ class DreamEntryInput(BaseModel):
     # 유저가 글쓰기 화면에서 직접 입력한 태그 - AI가 interpretation 안에 자동으로 붙여주던
     # 태그를 대신해, 커뮤니티 노출/필터링은 이제 이 필드만 쓴다.
     tags: list[str] = Field(default_factory=list)
+
+    @field_validator("dream_date")
+    @classmethod
+    def _reject_future_dream_date(cls, value: PyDate) -> PyDate:
+        # 프론트(캘린더 미래 날짜 클릭 차단)를 우회해 API를 직접 두드려도 막히도록 - 아직
+        # 지나지 않은 밤의 꿈은 존재할 수 없다. "오늘"은 KST 기준(leveling.today_kst와 동일
+        # 기준선)이라, "취침일 = 그 전날"인 정상적인 아침 기록(오늘 이전 날짜)은 항상 통과한다.
+        if value > today_kst():
+            raise ValueError("아직 오지 않은 날짜는 기록할 수 없습니다.")
+        return value
 
     @field_validator("tags")
     @classmethod
