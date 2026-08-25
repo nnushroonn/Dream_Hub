@@ -11,10 +11,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from database import Settings, _validate_secrets
+from routers import auth as auth_module
 from routers.auth import (
     FORGOT_PASSWORD_LIMIT,
     LOGIN_FAILURE_LIMIT,
     REGISTER_ATTEMPT_LIMIT,
+    _cookie_samesite,
+    _cookie_secure,
     _forgot_password_key,
     _login_failure_key,
     _rate_limit_exceeded,
@@ -186,3 +189,45 @@ def test_settings_environment_check_is_case_insensitive():
         assert False, "'PRODUCTION'(대문자)도 production으로 취급해야 한다"
     except RuntimeError:
         pass
+
+
+# --- 6. 프로덕션 크로스도메인 인증 쿠키(SameSite=None + Secure) ---
+# 프론트(Cloudflare Pages)와 백엔드(Render)가 서로 다른 등록 도메인이라 "lax"로는
+# AuthHydrator가 로드마다 보내는 GET /auth/me 같은 교차 사이트 fetch에 쿠키가 실리지
+# 않아, 구글 로그인 리다이렉트는 성공해도 로그인 상태가 반영되지 않는 버그가 있었다
+# (Lax는 최상위 내비게이션에만 쿠키를 허용한다). auth_module.settings는 lru_cache로
+# 캐시된 전역 싱글턴이라, 각 테스트가 environment를 바꾼 뒤 반드시 원래 값으로 되돌려
+# 다른 테스트에 영향을 주지 않게 한다.
+
+
+def test_cookie_samesite_is_none_in_production():
+    original = auth_module.settings.environment
+    try:
+        auth_module.settings.environment = "production"
+        assert _cookie_secure() is True
+        assert _cookie_samesite() == "none"
+    finally:
+        auth_module.settings.environment = original
+
+
+def test_cookie_samesite_is_lax_in_development():
+    original = auth_module.settings.environment
+    try:
+        auth_module.settings.environment = "development"
+        assert _cookie_secure() is False
+        assert _cookie_samesite() == "lax"
+    finally:
+        auth_module.settings.environment = original
+
+
+def test_cookie_samesite_none_always_paired_with_secure():
+    # SameSite=None인데 Secure가 아니면 브라우저가 쿠키 자체를 버린다 - 두 판정이 절대
+    # 어긋나면 안 된다(samesite="none" and not secure인 조합은 있어서는 안 된다).
+    for env in ("development", "production", "PRODUCTION", "staging"):
+        original = auth_module.settings.environment
+        try:
+            auth_module.settings.environment = env
+            if _cookie_samesite() == "none":
+                assert _cookie_secure() is True, f"env={env}: SameSite=None인데 Secure=False"
+        finally:
+            auth_module.settings.environment = original

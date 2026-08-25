@@ -109,6 +109,19 @@ def _cookie_secure() -> bool:
     return settings.environment.strip().lower() == "production"
 
 
+# SameSite - 프론트(Cloudflare Pages)와 백엔드(Render)가 서로 다른 등록 도메인(eTLD+1이
+# 다른 "교차 사이트")이라 "lax"로는 AuthHydrator가 로드마다 보내는 GET /auth/me 같은
+# 교차 사이트 fetch/XHR에 쿠키가 실리지 않는다(Lax는 최상위 내비게이션에만 쿠키를 허용
+# - 그래서 구글 OAuth 리다이렉트 자체는 성공하는데, 그 직후 로그인 상태 확인 요청에서는
+# 쿠키가 안 실려 로그아웃 상태로 보이는 버그가 실제로 있었다). production에서는 "none"이
+# 필수이고, SameSite=None은 Secure=True를 반드시 동반해야 브라우저가 버리지 않는데 위
+# _cookie_secure()가 이미 production에서 True를 주므로 별도 처리가 필요 없다. 로컬
+# 개발(http://localhost)은 SameSite=None 자체가 저장이 안 되므로 "lax"를 유지한다 -
+# 로컬은 프론트/백엔드가 포트만 다른 동일 사이트라 Lax로 충분하다.
+def _cookie_samesite() -> str:
+    return "none" if _cookie_secure() else "lax"
+
+
 def _set_auth_cookies(response: Response, token: str) -> str:
     """액세스 토큰(httpOnly - JS가 못 읽음) + CSRF 토큰(httpOnly 아님 - 프론트 JS가 읽어서
     변경 요청마다 헤더로 그대로 되돌려 보내는 더블 서브밋 쿠키 패턴) 두 개를 함께 심는다.
@@ -122,7 +135,7 @@ def _set_auth_cookies(response: Response, token: str) -> str:
         max_age=max_age,
         httponly=True,
         secure=secure,
-        samesite=settings.cookie_samesite,
+        samesite=_cookie_samesite(),
         path="/",
     )
     csrf_token = secrets.token_urlsafe(32)
@@ -132,7 +145,7 @@ def _set_auth_cookies(response: Response, token: str) -> str:
         max_age=max_age,
         httponly=False,
         secure=secure,
-        samesite=settings.cookie_samesite,
+        samesite=_cookie_samesite(),
         path="/",
     )
     return csrf_token
@@ -143,7 +156,7 @@ def _clear_auth_cookies(response: Response) -> None:
     # "다른 쿠키"로 취급해 실제로는 안 지워진다 - _set_auth_cookies와 반드시 같은 값을 쓴다.
     secure = _cookie_secure()
     for name in (settings.access_token_cookie_name, settings.csrf_cookie_name):
-        response.delete_cookie(key=name, path="/", secure=secure, samesite=settings.cookie_samesite)
+        response.delete_cookie(key=name, path="/", secure=secure, samesite=_cookie_samesite())
 
 
 # --- 요청 빈도 제한(rate limiting) - 이미 앱 전역에서 쓰는 Redis를 그대로 활용한다 ---

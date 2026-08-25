@@ -42,23 +42,6 @@ class Settings(BaseSettings):
     access_token_cookie_name: str = "access_token"
     csrf_cookie_name: str = "csrf_token"
     csrf_header_name: str = "X-CSRF-Token"
-    # SameSite 속성 - 프론트/백엔드가 같은 루트 도메인의 서로 다른 서브도메인을 쓴다는 전제
-    # (예: dreamhub.com / api.dreamhub.com)라면 "lax"로 충분하다: SameSite는 "같은 사이트인가
-    # (eTLD+1이 같은가)"만 보고 포트/서브도메인은 안 보므로, 서브도메인 간 요청은 여전히
-    # "동일 사이트"로 취급돼 Lax 쿠키가 정상적으로 실린다.
-    #
-    # ⚠️ 나중에 프론트/백엔드가 완전히 다른 등록 도메인(예: dreamhub.com과 dream-hub-api.io처럼
-    # eTLD+1 자체가 다름)으로 분리되면, 그 순간부터는 "교차 사이트" 요청이 되어 Lax로는 쿠키가
-    # 전혀 전달되지 않는다 - 그때는 아래 세 가지를 함께 바꿔야 한다:
-    #   1. 이 값을 "none"으로 변경 (SameSite=None은 Secure=True 필수 - 아래 secure 판정은
-    #      이미 production에서 True라 그대로 두면 된다).
-    #   2. main.py의 CORSMiddleware가 이미 allow_origins를 와일드카드가 아닌 명시적 origin
-    #      리스트로, allow_credentials=True로 쓰고 있는지 재확인(현재 이미 그렇게 돼 있다 -
-    #      SameSite=None 쿠키가 실제로 브라우저에 저장/전송되려면 이 조합이 필수다).
-    #   3. 쿠키에 Domain 속성을 새로 줄 필요는 없다(도메인이 아예 다르면 Domain 속성으로
-    #      공유 자체가 불가능하다 - 지금처럼 host-only로 두고, 프론트가 항상 백엔드의 실제
-    #      도메인으로 credentials 포함 요청을 보내는 구조는 변하지 않는다).
-    cookie_samesite: str = "lax"
 
     # 이메일 인증
     email_verification_token_expire_minutes: int = 60 * 24
