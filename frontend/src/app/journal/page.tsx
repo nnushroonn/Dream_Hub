@@ -432,9 +432,19 @@ function DiaryCarousel({ entries, onEdit, onDeleteRequest, onShare, focusEntryId
               key={entry.id}
               className={`w-full shrink-0 rounded-3xl p-6 text-left ${diaryTimeThemeClass(entry.created_at)}`}
             >
-              <div className="relative">
-                <div className="absolute right-0 top-0 flex items-center gap-1.5">
-                  <span className="rounded-full border border-amber-500/20 bg-amber-950/50 px-2.5 py-1 font-mono text-[11px] text-amber-400">
+              <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5">
+                {/* absolute+max-w-[60%] 고정값 대신 flex 형제 구조로 바꿨다 - 배지 실제
+                    너비(타임스탬프+"(1/2)"+더보기 버튼)를 전혀 감안하지 않던 예전 방식은
+                    좁은 화면에서 배지가 40%를 넘으면 제목 위로 그대로 겹쳤다. min-w-[9rem]는
+                    "제목이 이보다 더 좁아지진 않는다"는 하한선이다 - flex-wrap과 짝을 이뤄,
+                    이 카드가 "4단계 여정 자세히 보기" 지하철 노선도의 마커 칸 옆처럼 아주
+                    좁은 자리(실측 ~210px)에 놓일 때는 제목이 이 하한선 밑으로 눌리는 대신
+                    배지 쪽이 자기 줄로 통째로 내려간다(요청하신 "좁을 때는 배지를 아래
+                    줄로" 방식). 폭이 넉넉하면 평소처럼 같은 줄 오른쪽에 뜬다(ml-auto).
+                    line-clamp-3으로 아주 긴 제목이 카드를 한없이 늘리는 것도 막는다. */}
+                <h4 className="line-clamp-3 min-w-[9rem] flex-1 text-base font-semibold text-slate-100">{entry.title}</h4>
+                <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                  <span className="whitespace-nowrap rounded-full border border-amber-500/20 bg-amber-950/50 px-2.5 py-1 font-mono text-[11px] text-amber-400">
                     ☀️ {formatTimestamp(entry.created_at)}
                     {entries.length > 1 ? ` (${index + 1}/${entries.length})` : ""}
                   </span>
@@ -444,7 +454,6 @@ function DiaryCarousel({ entries, onEdit, onDeleteRequest, onShare, focusEntryId
                     onShare={entry.is_public ? undefined : () => onShare(entry)}
                   />
                 </div>
-                <h4 className="max-w-[60%] text-base font-semibold text-slate-100">{entry.title}</h4>
               </div>
 
               <div className="mt-2 flex items-center gap-2">
@@ -545,9 +554,14 @@ function DreamOriginalCarousel({ entries, activeIndex, onIndexChange, onEdit, on
         >
           {entries.map((entry, index) => (
             <div key={entry.id} className="w-full shrink-0 p-6 text-left">
-              <div className="relative">
-                <div className="absolute right-0 top-0 flex items-center gap-1.5">
-                  <span className="rounded-full border border-purple-500/20 bg-purple-950/60 px-2.5 py-1 font-mono text-[11px] text-purple-300">
+              <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5">
+                {/* DiaryCarousel과 같은 이유(및 같은 min-w-[9rem]+flex-wrap 하한선 방식)로
+                    absolute+max-w-[60%] 대신 flex 형제 구조를 쓴다 - 배지 실제 너비와
+                    무관하게 제목이 절대 겹치지 않고, 자리가 너무 좁으면(예: "4단계 여정
+                    자세히 보기"의 마커 칸 옆) 배지가 자기 줄로 내려간다. */}
+                <h4 className="line-clamp-3 min-w-[9rem] flex-1 text-base font-semibold text-purple-100">{entry.title}</h4>
+                <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                  <span className="whitespace-nowrap rounded-full border border-purple-500/20 bg-purple-950/60 px-2.5 py-1 font-mono text-[11px] text-purple-300">
                     🔮 {formatTimestamp(entry.created_at)}
                     {entries.length > 1 ? ` (${index + 1}/${entries.length})` : ""}
                   </span>
@@ -557,7 +571,6 @@ function DreamOriginalCarousel({ entries, activeIndex, onIndexChange, onEdit, on
                     onShare={entry.is_public ? undefined : () => onShare(entry)}
                   />
                 </div>
-                <h4 className="max-w-[60%] text-base font-semibold text-purple-100">{entry.title}</h4>
               </div>
 
               <div className="mt-2 flex items-center gap-1.5">
