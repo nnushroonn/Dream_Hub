@@ -5,10 +5,10 @@ import Link from "next/link";
 
 import { ConstellationDots, ConstellationMoodLegend } from "@/components/ConstellationCalendar";
 import MonthlyMoodChart from "@/components/MonthlyMoodChart";
+import PreviewGateway from "@/components/PreviewGateway";
 import { buildDayEntryMap } from "@/lib/constellationEntries";
 import { moodBucketForEmoji } from "@/lib/moodBucket";
 import { useAuthStore } from "@/store/useAuthStore";
-import { useLoginModalStore } from "@/store/useLoginModalStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 
 function daysInMonthOf(date: Date): number {
@@ -28,7 +28,6 @@ function monthLabelOf(date: Date): string {
 // entries/monthKey에서 파생해 계산이 서로 어긋나지 않는다. DreamCalendarWidget을 대체한다.
 export default function MonthlyDashboardPanel() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const openLoginModal = useLoginModalStore((state) => state.open);
   const entries = useSavedDreamsStore((state) => state.entries);
 
   // 서버/클라이언트 렌더 결과가 달라지는 걸 피하려고 마운트 이후에만 오늘 날짜를 채운다 -
@@ -66,57 +65,65 @@ export default function MonthlyDashboardPanel() {
     return counts;
   }, [entries, monthKey]);
 
-  return (
-    <section className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-6 py-6 backdrop-blur-md">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(129,90,255,0.12),transparent_60%)]" />
+  const dashboardGrid = (
+    <div className="relative grid grid-cols-1 gap-8 md:grid-cols-2">
+      <div className="text-center">
+        <h2 className="text-base font-semibold text-slate-100">🌌 나의 지난밤 꿈 별자리</h2>
+        <p className="mt-1 text-xs text-slate-500">{monthLabel}, 당신의 무의식이 그려낸 궤적</p>
 
-      <div className="relative grid grid-cols-1 gap-8 md:grid-cols-2">
-        <div className="text-center">
-          <h2 className="text-base font-semibold text-slate-100">🌌 나의 지난밤 꿈 별자리</h2>
-          <p className="mt-1 text-xs text-slate-500">{monthLabel}, 당신의 무의식이 그려낸 궤적</p>
+        {isAuthenticated && !hasAnyEntry && (
+          <p className="mt-4 text-xs text-slate-500">
+            아직 이번 달 기록이 없어요.{" "}
+            <Link href="/journal?openRecord=1" className="text-violet-300 underline-offset-2 hover:underline">
+              첫 꿈을 기록해 보세요
+            </Link>{" "}
+            ✨
+          </p>
+        )}
 
-          {isAuthenticated && !hasAnyEntry && (
-            <p className="mt-4 text-xs text-slate-500">
-              아직 이번 달 기록이 없어요.{" "}
-              <Link href="/journal?openRecord=1" className="text-violet-300 underline-offset-2 hover:underline">
-                첫 꿈을 기록해 보세요
-              </Link>{" "}
-              ✨
-            </p>
-          )}
-
-          <div className="mt-5 flex justify-center">
-            <ConstellationDots daysInMonth={daysInMonth} startWeekday={startWeekday} entries={entryMap} />
-          </div>
-
-          <div className="mt-4">
-            <ConstellationMoodLegend />
-          </div>
+        <div className="mt-5 flex justify-center">
+          <ConstellationDots daysInMonth={daysInMonth} startWeekday={startWeekday} entries={entryMap} />
         </div>
 
-        <div className="flex flex-col items-center justify-center border-t border-white/10 pt-8 md:border-t-0 md:border-l md:pt-0 md:pl-8">
-          <h2 className="text-base font-semibold text-slate-100">📊 {monthLabel} 꿈 통계 리포트</h2>
-          <p className="mt-1 text-xs text-slate-500">길몽·보통·악몽 비율로 보는 이번 달 무의식</p>
-          <div className="mt-5">
-            <MonthlyMoodChart good={moodCounts.good} neutral={moodCounts.neutral} nightmare={moodCounts.nightmare} />
-          </div>
+        <div className="mt-4">
+          <ConstellationMoodLegend />
         </div>
       </div>
 
-      {!isAuthenticated && (
-        <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/40 backdrop-blur-sm">
-          <div className="text-center">
-            <p className="text-sm text-slate-200">로그인 후 나만의 꿈 별자리를 모아보세요</p>
-            <button
-              type="button"
-              onClick={() => openLoginModal({ triggerSource: "calendar" })}
-              className="mt-4 rounded-full border border-violet-400/40 bg-white/5 px-5 py-2.5 text-sm text-violet-200 shadow-[0_0_20px_rgba(167,139,250,0.3)] transition-colors hover:border-violet-300/60 hover:text-white"
-            >
-              로그인하기
-            </button>
-          </div>
+      <div className="flex flex-col items-center justify-center border-t border-white/10 pt-8 md:border-t-0 md:border-l md:pt-0 md:pl-8">
+        <h2 className="text-base font-semibold text-slate-100">📊 {monthLabel} 꿈 통계 리포트</h2>
+        <p className="mt-1 text-xs text-slate-500">길몽·보통·악몽 비율로 보는 이번 달 무의식</p>
+        <div className="mt-5">
+          <MonthlyMoodChart good={moodCounts.good} neutral={moodCounts.neutral} nightmare={moodCounts.nightmare} />
         </div>
-      )}
+      </div>
+    </div>
+  );
+
+  // 비로그인 상태는 grid를 자체 오버레이로 덮지 않는다 - 모바일에서 두 열이 세로로 쌓이면
+  // 섹션 전체 높이가 들쭉날쭉해져서, inset-0로 중앙 정렬한 로그인 유도 카드가 캘린더와
+  // 차트 사이 애매한 위치에 걸린다(실사용자 스크린샷으로 확인된 버그). 대신 다른 잠금 콘텐츠에서
+  // 이미 쓰는 PreviewGateway로 교체 - 자체 min-h[60vh] 컨테이너 안에서 중앙 정렬하므로
+  // 콘텐츠 높이와 무관하게 카드 위치가 항상 안정적이다.
+  if (!isAuthenticated) {
+    return (
+      <section className="relative w-full">
+        <PreviewGateway
+          title="나만의 꿈 별자리를 확인해보세요"
+          subtitle="로그인하면 이번 달 기록을 별자리 캘린더와 길몽·보통·악몽 통계로 한눈에 볼 수 있어요."
+          ctaLabel="로그인하기"
+          triggerSource="calendar"
+        >
+          <div className="px-6 py-6">{dashboardGrid}</div>
+        </PreviewGateway>
+      </section>
+    );
+  }
+
+  return (
+    <section className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-6 py-6 backdrop-blur-md">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(129,90,255,0.12),transparent_60%)]" />
+      {dashboardGrid}
     </section>
   );
 }
