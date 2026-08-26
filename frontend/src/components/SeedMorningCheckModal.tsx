@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { getPendingSeedCheck, markDreamForgotten, type DreamSeedRecord } from "@/api/seeds";
 import { getSeedDefinition } from "@/lib/dreamSeeds";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useSeedMorningCheckStore } from "@/store/useSeedMorningCheckStore";
 
 // NavBar는 페이지마다 새로 마운트되는 컴포넌트라(공유 레이아웃이 아니라 각 page.tsx가 직접
 // <NavBar />를 그린다), 매 페이지 이동마다 아침 체크를 다시 띄우면 안 된다 - 오늘 하루
@@ -27,6 +28,7 @@ export default function SeedMorningCheckModal() {
   // 틈이 없어, 대신 모달 내용을 위로 문구 + 기억력 팁으로 갈아끼운 뒤 유저가 직접 닫게 한다.
   const [isForgotten, setIsForgotten] = useState(false);
   const [isSubmittingForget, setIsSubmittingForget] = useState(false);
+  const setSeedCheckOpen = useSeedMorningCheckStore((state) => state.setOpen);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -35,6 +37,12 @@ export default function SeedMorningCheckModal() {
       .then(setPendingSeed)
       .catch(() => {});
   }, [isAuthenticated]);
+
+  // 온보딩 투어(OnboardingTour.tsx)가 이 모달과 동시에 뜨지 않도록, 표시 여부만 그대로
+  // 전역 스토어에 미러링해 둔다 - 아래 판단 로직(pendingSeed/isForgotten)은 건드리지 않는다.
+  useEffect(() => {
+    setSeedCheckOpen(pendingSeed !== null);
+  }, [pendingSeed, setSeedCheckOpen]);
 
   const dismiss = () => {
     window.localStorage.setItem(DISMISSED_KEY, todayDateString());

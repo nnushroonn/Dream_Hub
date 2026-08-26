@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -9,12 +10,17 @@ import { logoutUser } from "@/api/auth";
 import { buildDreamOneLineSummary, createDream, listDreams } from "@/api/dream";
 import { consumePendingDreamResult, setPendingDreamResult } from "@/lib/pendingDreamResult";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useMobileNavStore } from "@/store/useMobileNavStore";
 import { useSavedDreamsStore } from "@/store/useSavedDreamsStore";
 import { useUnsavedChangesStore } from "@/store/useUnsavedChangesStore";
 import LoginModal from "./LoginModal";
 import NotificationBell from "./NotificationBell";
 import SeedMorningCheckModal from "./SeedMorningCheckModal";
 import UnsavedChangesGuardModal from "./UnsavedChangesGuardModal";
+
+// driver.js(투어 라이브러리)는 신규 가입자의 첫 홈 방문 때만 필요하다 - 초기 번들에 항상
+// 실리지 않도록 지연 로드한다. SSR 대상도 아니다(브라우저 DOM/matchMedia에만 의존).
+const OnboardingTour = dynamic(() => import("./OnboardingTour"), { ssr: false });
 
 const NAV_ITEMS = [
   { href: "/", label: "홈", icon: "🏠" },
@@ -24,6 +30,14 @@ const NAV_ITEMS = [
   { href: "/community", label: "커뮤니티", icon: "💬" },
   { href: "/mypage", label: "마이페이지", icon: "👤" },
 ];
+
+// 온보딩 투어(OnboardingTour.tsx)가 각 항목을 스포트라이트할 때 쓰는 안정적인 셀렉터 키 -
+// 문구가 바뀌어도(label) 셀렉터는 흔들리지 않게 href 기준으로 따로 둔다.
+const TOUR_KEY_BY_HREF: Record<string, string> = {
+  "/journal": "nav-journal",
+  "/dictionary": "nav-dictionary",
+  "/community": "nav-community",
+};
 
 export default function NavBar() {
   const pathname = usePathname();
@@ -59,8 +73,12 @@ export default function NavBar() {
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   // 모바일 전용 메뉴 아코디언 열림 상태 - md: 미만에서는 6개 항목을 가로 스크롤 pill 대신
   // 햄버거 버튼으로 접어 둔다(모바일 반응형 감사 🔴 항목: 스크롤 힌트 없이 메뉴 절반이
-  // 화면 밖으로 잘려 발견 자체가 안 되는 문제).
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // 화면 밖으로 잘려 발견 자체가 안 되는 문제). 온보딩 투어가 모바일에서 드로어 안의 항목을
+  // 스포트라이트하려면 이 상태를 컴포넌트 바깥(OnboardingTour)에서도 열고 닫을 수 있어야
+  // 해서 로컬 state 대신 스토어를 쓴다.
+  const isMobileMenuOpen = useMobileNavStore((state) => state.isOpen);
+  const closeMobileMenu = useMobileNavStore((state) => state.close);
+  const toggleMobileMenu = useMobileNavStore((state) => state.toggle);
   // 관리자 계정에게만 "관리자" 항목을 덧붙인다 - 실제 접근 제어는 항상 AdminGuard/백엔드
   // get_current_admin_user가 다시 하므로, 이건 순수 진입점 노출 여부일 뿐이다. 모바일
   // 드로어는 세로 목록이라 7번째 항목이 더 붙어도 넉넉하지만, 데스크톱 가로 스크롤
@@ -122,9 +140,8 @@ export default function NavBar() {
   // 라우트가 바뀌면(뒤로가기 포함) 열려 있던 모바일 메뉴를 항상 접어 둔다 - 링크 클릭 시
   // 닫는 것만으로는 브라우저 뒤로가기로 넘어온 경우를 놓친다.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pathname(외부 라우터 상태) 변경에 반응
-    setIsMobileMenuOpen(false);
-  }, [pathname]);
+    closeMobileMenu();
+  }, [pathname, closeMobileMenu]);
 
   const guardedNavigate = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (!isDirty || href === pathname) return;
@@ -135,7 +152,7 @@ export default function NavBar() {
   // 모바일 메뉴 안의 링크 전용 - 실제 이동 여부(guardedNavigate가 이탈 방지 모달로 가로챌
   // 수도 있음)와 무관하게 메뉴부터 접어, 모달과 메뉴가 동시에 떠 있지 않게 한다.
   const handleMobileNavClick = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    setIsMobileMenuOpen(false);
+    closeMobileMenu();
     guardedNavigate(event, href);
   };
 
@@ -190,9 +207,10 @@ export default function NavBar() {
               보여준다(모바일 반응형 감사 🔴 항목). */}
           <button
             type="button"
-            onClick={() => setIsMobileMenuOpen((open) => !open)}
+            onClick={toggleMobileMenu}
             aria-label={isMobileMenuOpen ? "메뉴 닫기" : "메뉴 열기"}
             aria-expanded={isMobileMenuOpen}
+            data-tour="nav-all-mobile"
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-indigo-200 transition-colors hover:bg-indigo-900/40 md:hidden"
           >
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -215,12 +233,13 @@ export default function NavBar() {
             숨겨진 항목이 하나도 없다는 게 항상 보장된다. 헤더가 그만큼 늘어난 높이는
             NavBar 상단의 ResizeObserver가 --nav-height로 내보내 다른 화면의 sticky
             요소들이 참조한다. */}
-        <nav className="hidden flex-wrap items-center gap-x-1 gap-y-1 md:flex">
+        <nav data-tour="nav-all-desktop" className="hidden flex-wrap items-center gap-x-1 gap-y-1 md:flex">
           {NAV_ITEMS.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               onClick={(event) => guardedNavigate(event, item.href)}
+              data-tour={TOUR_KEY_BY_HREF[item.href]}
               className={`whitespace-nowrap rounded-full px-2 py-1.5 text-sm transition-colors ${
                 pathname === item.href
                   ? "bg-indigo-500/20 text-indigo-100"
@@ -237,6 +256,7 @@ export default function NavBar() {
           <button
             type="button"
             onClick={() => router.push("/interpret")}
+            data-tour="nav-ai-interpret"
             className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 px-3 py-3 text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)] transition-transform hover:-translate-y-0.5 sm:flex"
           >
             🔮 AI 해몽
@@ -285,6 +305,7 @@ export default function NavBar() {
               key={item.href}
               href={item.href}
               onClick={(event) => handleMobileNavClick(event, item.href)}
+              data-tour={TOUR_KEY_BY_HREF[item.href]}
               className={`flex items-center gap-3 rounded-xl px-3 py-3 text-base transition-colors ${
                 pathname === item.href
                   ? "bg-indigo-500/20 text-indigo-100"
@@ -298,9 +319,10 @@ export default function NavBar() {
           <button
             type="button"
             onClick={() => {
-              setIsMobileMenuOpen(false);
+              closeMobileMenu();
               router.push("/interpret");
             }}
+            data-tour="nav-ai-interpret"
             className="mt-1 flex w-full items-center gap-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-500 px-3 py-3 text-base text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]"
           >
             🔮 AI 해몽
@@ -316,6 +338,7 @@ export default function NavBar() {
       />
       <LoginModal />
       <SeedMorningCheckModal />
+      <OnboardingTour />
     </header>
   );
 }

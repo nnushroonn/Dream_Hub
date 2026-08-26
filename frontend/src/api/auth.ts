@@ -15,6 +15,9 @@ export interface AuthUser {
   // true면 /admin 내비게이션 링크를 보여준다 - 실제 접근 권한은 항상 백엔드가 다시
   // 검증하므로(get_current_admin_user) 이 값은 순수 UI 분기용이다.
   is_admin?: boolean;
+  // 신규 가입 온보딩 투어를 이미 봤는지(끝까지 보거나 건너뛰기 포함) - false인 계정이 홈
+  // 화면에 진입하면 components/OnboardingTour.tsx가 자동으로 투어를 시작한다.
+  has_completed_onboarding: boolean;
   // 더블 서브밋 CSRF 헤더에 그대로 실어 보낼 값 - /auth/login·/auth/me 응답에만 채워진다
   // (api/axios.ts의 setCsrfToken 참고). 그 외(프로필 수정 등) 응답은 항상 undefined.
   csrf_token?: string | null;
@@ -64,6 +67,13 @@ export async function updateAuraPreference(auraPreference: AuraPreference): Prom
 // 커뮤니티 닉네임 호버 카드 공개 토글 - 켜는 순간부터만 다른 유저가 씨앗 비율/뱃지 집계를 볼 수 있다.
 export async function updateGalaxyVisibility(isGalaxyPublic: boolean): Promise<AuthUser> {
   const { data } = await api.patch<AuthUser>("/api/user/galaxy-visibility", { is_galaxy_public: isGalaxyPublic });
+  return data;
+}
+
+// 온보딩 투어를 끝까지 보거나 건너뛰었을 때 호출 - 계정 단위로 완료 처리해 다른 기기/
+// 브라우저로 접속해도 다시 뜨지 않게 한다.
+export async function completeOnboarding(): Promise<AuthUser> {
+  const { data } = await api.post<AuthUser>("/api/user/onboarding-complete");
   return data;
 }
 

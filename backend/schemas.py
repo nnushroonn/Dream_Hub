@@ -81,6 +81,9 @@ class UserResponse(BaseModel):
     # 프론트가 이 값 하나로 "관리자" 내비게이션 링크/​/admin 접근 여부를 결정한다 - 실제 권한
     # 검증은 항상 백엔드(get_current_admin_user)가 다시 하므로, 이건 순수 UI 분기용이다.
     is_admin: bool = False
+    # 신규 가입 온보딩 투어를 이미 봤는지(끝까지 보거나 건너뛰기 포함) - 프론트가 이 값 하나로
+    # 홈 화면 진입 시 투어를 자동으로 띄울지 판단한다(models.py의 User.has_completed_onboarding).
+    has_completed_onboarding: bool
     # 더블 서브밋 CSRF 패턴의 헤더 값 - 프론트/백엔드가 서로 다른 등록 도메인(교차 사이트)이면
     # document.cookie로는 백엔드 도메인의 csrf_token 쿠키를 애초에 읽을 수 없어(쿠키는 그걸
     # 심은 도메인에서만 JS로 보인다 - HttpOnly 여부와 무관), 응답 바디로 직접 건네줘야 한다.

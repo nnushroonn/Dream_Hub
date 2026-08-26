@@ -1,7 +1,10 @@
 "use client";
 
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { ClipboardList, Flower2, MoonStar, MousePointerClick, Search, Sparkles, Sprout } from "lucide-react";
+
+import { useOnboardingTourStore } from "@/store/useOnboardingTourStore";
 
 interface JournalHelpModalProps {
   onClose: () => void;
@@ -21,6 +24,9 @@ const JOURNEY_STEPS = [
 // 하단 닫기 버튼)을 그대로 재사용해 두 도움말의 톤을 통일했다. 내용 자체는 서로 다른
 // 화면을 설명하므로 컴포넌트를 공유하지 않고 별도로 둔다.
 export default function JournalHelpModal({ onClose }: JournalHelpModalProps) {
+  const router = useRouter();
+  const requestOnboardingTourStart = useOnboardingTourStore((state) => state.requestManualStart);
+
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-4 py-8 backdrop-blur-md" onClick={onClose}>
       <div
@@ -103,10 +109,24 @@ export default function JournalHelpModal({ onClose }: JournalHelpModalProps) {
           </div>
         </section>
 
+        {/* 신규 가입 온보딩 투어(홈 화면에서 진행) 재실행 진입점 - 기존 정적 도움말 내용은
+            그대로 두고, 처음 보는 화면이 낯선 유저를 위한 옵션만 하단에 자연스럽게 덧붙인다. */}
+        <button
+          type="button"
+          onClick={() => {
+            requestOnboardingTourStart();
+            onClose();
+            router.push("/");
+          }}
+          className="mt-6 w-full rounded-xl border border-emerald-400/25 bg-emerald-500/[0.06] py-2.5 text-sm text-emerald-200 transition-colors hover:bg-emerald-500/[0.12]"
+        >
+          🧭 처음이신가요? 서비스 전체 둘러보기
+        </button>
+
         <button
           type="button"
           onClick={onClose}
-          className="mt-6 w-full rounded-xl border border-slate-700 py-2.5 text-sm text-slate-300 transition-colors hover:bg-slate-800/40"
+          className="mt-3 w-full rounded-xl border border-slate-700 py-2.5 text-sm text-slate-300 transition-colors hover:bg-slate-800/40"
         >
           닫기
         </button>

@@ -52,7 +52,7 @@ interface GrowthJourneyIntroProps {
 // 상태나 오늘의 씨앗 여부에 따라 바꿔 넘겨준다.
 export default function GrowthJourneyIntro({ ctaLabel, onCtaClick }: GrowthJourneyIntroProps) {
   return (
-    <section className="relative mx-auto max-w-5xl px-6 py-10">
+    <section data-tour="growth-journey" className="relative mx-auto max-w-5xl px-6 py-10">
       <div className="mx-auto max-w-2xl text-center">
         <h2 className="text-2xl font-semibold text-white sm:text-3xl">감정에서 꽃이 피기까지</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">

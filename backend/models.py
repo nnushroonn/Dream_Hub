@@ -81,6 +81,12 @@ class User(Base):
     # 관리자가 정지시킨 계정 - true면 로그인 자체가 거부되고(is_verified 검사와 같은 자리),
     # 이미 로그인해 있던 세션도 다음 요청부터 get_current_user에서 즉시 막힌다.
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    # 신규 가입 온보딩 인터랙티브 투어를 끝까지 봤거나 건너뛰었는지 - 계정(DB) 단위로 저장해
+    # 기기/브라우저를 바꿔도 유지된다. 기본값은 True(이미 완료한 것으로 간주)이고, 회원가입
+    # 시점(routers/auth.py의 register/google_callback 신규 유저 분기)에서만 명시적으로
+    # False를 넣는다 - 그래야 이 컬럼을 추가하는 마이그레이션(ALTER TABLE ... DEFAULT TRUE)이
+    # 기존 가입자를 전부 자동으로 "완료" 처리하면서도, 이후 새로 가입하는 사람만 투어를 본다.
+    has_completed_onboarding: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
     # 9단계 우주 티어 레벨 시스템(leveling.py)의 누적 경험치 - 레벨/티어는 이 값 하나에서
     # 항상 파생 계산하고 별도로 저장하지 않는다. 실제 증감은 leveling.award_xp()를 통해서만
     # 일어난다(XpAward 원장과 함께 트랜잭션으로 갱신).

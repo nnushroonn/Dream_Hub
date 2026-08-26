@@ -81,6 +81,16 @@ def update_galaxy_visibility(
     return current_user
 
 
+@router.post("/onboarding-complete", response_model=UserResponse)
+def complete_onboarding(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    """신규 가입 온보딩 투어를 끝까지 봤거나 건너뛰었을 때 호출한다 - 별도 payload 없이
+    항상 완료로만 전환하는 1회성 액션이라 멱등하다(이미 True여도 다시 호출해도 무해함)."""
+    current_user.has_completed_onboarding = True
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
 # --- 레벨/업적 뱃지 --- 레벨/티어는 User.total_xp(leveling.py)에서 항상 파생 계산하고,
 # XP 자체는 award_xp()가 액션이 일어난 그 순간 이미 적립해 둔 값이라 여기서는 조회만 한다.
 # 업적 뱃지는 여전히 매 요청마다 실제 활동 데이터에서 다시 계산한다(저장된 값이 아님).

@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* 신규 사용자 온보딩 투어(components/OnboardingTour.tsx)가 쓰는 스포트라이트+말풍선
+   라이브러리의 기본 스타일 - 아래에서 앱의 보라색 글래스모피즘 톤으로 오버라이드한다. */
+@import "driver.js/dist/driver.css";
 
 :root {
   --background: #ffffff;
@@ -311,4 +314,82 @@ textarea:focus,
 select:focus {
   outline: none;
   box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.3);
+}
+
+/* 온보딩 투어(OnboardingTour.tsx) 팝오버 - driver.js 기본(흰 배경, 각진 버튼)을 LoginModal/
+   PreviewGateway가 쓰는 보라색 글래스모피즘 카드 톤으로 맞춘다. popoverClass:
+   "dreamhub-onboarding-popover"로 이 스코프 안에서만 적용된다. */
+.dreamhub-onboarding-popover {
+  background-color: rgba(15, 12, 30, 0.92) !important;
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: 1.25rem !important;
+  box-shadow: 0 0 40px rgba(168, 85, 247, 0.2);
+  max-width: 320px !important;
+  padding: 1.25rem !important;
+}
+.dreamhub-onboarding-popover .driver-popover-title {
+  color: #fff;
+  font-size: 1rem !important;
+  font-weight: 600;
+}
+.dreamhub-onboarding-popover .driver-popover-description {
+  color: rgba(203, 213, 225, 0.85);
+  font-size: 0.8125rem !important;
+  line-height: 1.6;
+  margin-top: 0.375rem;
+}
+.dreamhub-onboarding-popover .driver-popover-progress-text {
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 0.75rem !important;
+}
+.dreamhub-onboarding-popover .driver-popover-footer-btn {
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  color: #e2e8f0;
+  font-size: 0.75rem !important;
+  padding: 0.4rem 0.85rem !important;
+}
+.dreamhub-onboarding-popover .driver-popover-footer-btn:hover,
+.dreamhub-onboarding-popover .driver-popover-footer-btn:focus {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+.dreamhub-onboarding-popover .driver-popover-next-btn {
+  background: linear-gradient(to right, #9333ea, #4f46e5);
+  border-color: transparent;
+  color: #fff;
+}
+.dreamhub-onboarding-popover .driver-popover-next-btn:hover,
+.dreamhub-onboarding-popover .driver-popover-next-btn:focus {
+  background: linear-gradient(to right, #a855f7, #6366f1);
+}
+/* "건너뛰기" 텍스트로 바꿔치기하는 닫기 버튼(OnboardingTour.tsx의 onPopoverRender) - 기본은
+   "×" 한 글자 폭(32px)이라, 텍스트 라벨이 들어갈 자리를 넉넉히 넓힌다. */
+.dreamhub-onboarding-popover .driver-popover-close-btn {
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 0.75rem !important;
+  font-weight: 500;
+  height: auto;
+  padding: 0.3rem 0.6rem;
+  top: 0.75rem;
+  right: 0.75rem;
+  white-space: nowrap;
+  width: auto;
+}
+.dreamhub-onboarding-popover .driver-popover-close-btn:hover,
+.dreamhub-onboarding-popover .driver-popover-close-btn:focus {
+  color: #fff;
+}
+.dreamhub-onboarding-popover .driver-popover-arrow-side-left {
+  border-right-color: rgba(15, 12, 30, 0.92) !important;
+}
+.dreamhub-onboarding-popover .driver-popover-arrow-side-right {
+  border-left-color: rgba(15, 12, 30, 0.92) !important;
+}
+.dreamhub-onboarding-popover .driver-popover-arrow-side-top {
+  border-bottom-color: rgba(15, 12, 30, 0.92) !important;
+}
+.dreamhub-onboarding-popover .driver-popover-arrow-side-bottom {
+  border-top-color: rgba(15, 12, 30, 0.92) !important;
 }

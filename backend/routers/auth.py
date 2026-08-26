@@ -354,6 +354,7 @@ async def register(payload: UserCreate, request: Request, db: Session = Depends(
         nickname=payload.nickname,
         hashed_password=pwd_context.hash(payload.password),
         is_verified=False,
+        has_completed_onboarding=False,
     )
     db.add(user)
     db.commit()
@@ -562,6 +563,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
             nickname=_unique_persona_nickname(db),
             hashed_password=pwd_context.hash(secrets.token_urlsafe(32)),
             is_verified=True,
+            has_completed_onboarding=False,
         )
         db.add(user)
         db.commit()

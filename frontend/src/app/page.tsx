@@ -21,6 +21,7 @@ import DreamAnalyzerLoading from "@/components/DreamAnalyzerLoading";
 import DreamOriginalQuote from "@/components/DreamOriginalQuote";
 import EventBannerCarousel, { type CarouselSlide } from "@/components/EventBannerCarousel";
 import GrowthJourneyIntro from "@/components/GrowthJourneyIntro";
+import HelpButton from "@/components/HelpButton";
 import HomeBestShowcase from "@/components/HomeBestShowcase";
 import LiveTicker from "@/components/LiveTicker";
 import MonthlyDashboardPanel from "@/components/MonthlyDashboardPanel";
@@ -31,6 +32,7 @@ import { todayDateInputValue } from "@/lib/dreamDate";
 import { setPendingDreamResult } from "@/lib/pendingDreamResult";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useLoginModalStore } from "@/store/useLoginModalStore";
+import { useOnboardingTourStore } from "@/store/useOnboardingTourStore";
 
 const EXPLORER_COUNT_POLL_MS = 5000;
 const NIGHT_SKY_FADE_IN_MS = 1200;
@@ -84,6 +86,7 @@ export default function HomePage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const openLoginModal = useLoginModalStore((state) => state.open);
+  const requestOnboardingTourStart = useOnboardingTourStore((state) => state.requestManualStart);
 
   const [stars, setStars] = useState<Star[]>([]);
   const [moonPhase, setMoonPhase] = useState<MoonPhase | null>(null);
@@ -521,6 +524,17 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* 신규 가입 온보딩 투어(OnboardingTour.tsx)를 나중에 다시 보고 싶을 때의 진입점 -
+          저널/정원 페이지의 기존 "도움말" 버튼과 같은 컴포넌트를 재사용한다. 홈은 투어 자체가
+          펼쳐지는 화면이라 별도 정적 설명 모달 없이 버튼을 누르면 바로 투어가 시작된다. */}
+      <div className="mx-auto flex max-w-5xl justify-end px-6">
+        <HelpButton
+          onClick={requestOnboardingTourStart}
+          label="서비스 둘러보기"
+          firstVisitStorageKey="home_help_hint_shown_v1"
+        />
+      </div>
 
       {/* 감정에서 꽃이 피기까지 - Dream Hub의 핵심 컨셉(씨앗 심기 -> 새싹 -> 개화 -> 꽃)을
           처음 보는(또는 오랜만에 돌아온) 사용자에게 소개하는 정적 일러스트레이션. 아래
